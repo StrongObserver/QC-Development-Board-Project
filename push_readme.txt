@@ -79,3 +79,17 @@ The initial workspace import uses the same format:
 Its body records that it imports the Android and host-side SR workspaces,
 excludes local/generated files, and did not run a new build. Revert it only if
 the entire initial import must be removed.
+
+## 7. Managed-workspace Git command
+
+In this managed directory only, the top-level `.git` path is a read-only
+mount. The active repository metadata is therefore kept in the ignored
+`.qc-development-board.git/` directory. From the repository root, use:
+
+    git --git-dir=.qc-development-board.git --work-tree=. status
+    git --git-dir=.qc-development-board.git --work-tree=. log --oneline
+    git --git-dir=.qc-development-board.git --work-tree=. revert <commit-sha>
+    git --git-dir=.qc-development-board.git --work-tree=. push origin main
+
+A normal clone of the GitHub repository has a standard writable `.git`
+directory and should use ordinary `git` commands.
