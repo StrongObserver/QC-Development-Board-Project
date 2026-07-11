@@ -62,6 +62,8 @@ dependencies {
     implementation(libs.material)
     implementation(libs.opencv)
     implementation(libs.tensorflow.lite)
+    implementation(libs.tensorflow.lite.gpu.api)
+    implementation(libs.tensorflow.lite.gpu)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)

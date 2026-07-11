@@ -60,7 +60,26 @@ Before every push:
 4. Confirm the commit list with `git log --oneline origin/main..HEAD`.
 5. Push only the reviewed commits to `main`.
 
-## 5. Standard rollback procedure
+## 5. Push message convention
+
+`git push` itself does not have a separate message field. The push message is
+therefore the reviewed commit list plus a short operator note when reporting the
+push result.
+
+Use this reporting format after a push:
+
+    Pushed: origin main
+    Commits: <sha> <subject>
+    Verify: <same verification recorded in the commit body, or extra check>
+
+Rules:
+
+- Do not invent a new push-only summary that disagrees with the commit subject.
+- If one push contains multiple commits, list every pushed commit in order.
+- If the push is skipped or fails, state `Push: not run` or `Push: failed` with
+  the reason and do not imply the remote was updated.
+
+## 6. Standard rollback procedure
 
 To undo a pushed change without rewriting shared history:
 
@@ -70,7 +89,7 @@ To undo a pushed change without rewriting shared history:
 Do not force-push `main`. A force-push is allowed only after explicit owner
 approval and must be documented in the replacement commit body.
 
-## 6. This bootstrap commit
+## 7. This bootstrap commit
 
 The initial workspace import uses the same format:
 
