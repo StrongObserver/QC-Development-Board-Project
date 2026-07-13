@@ -3,6 +3,7 @@ package com.cyf.rb5visionlab
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
+import org.tensorflow.lite.DataType
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.gpu.GpuDelegate
 import java.nio.ByteBuffer
@@ -13,6 +14,12 @@ enum class SrBackend(val label: String) {
     CPU("CPU"),
     NNAPI("NNAPI"),
     GPU("GPU"),
+}
+
+/** Model precision variant used for D8 quantization baseline. */
+enum class SrModelVariant(val label: String, val assetName: String) {
+    FLOAT("FLOAT", "real_esrgan_general_x4v3.tflite"),
+    W8A8("W8A8", "real_esrgan_general_x4v3_w8a8.tflite"),
 }
 
 /** Input tensor memory layout used by the exported TFLite model. */
@@ -42,7 +49,7 @@ data class SrTiming(
  */
 class SuperResolver(
     context: Context,
-    modelAsset: String = "real_esrgan_general_x4v3.tflite",
+    val modelAsset: String = "real_esrgan_general_x4v3.tflite",
     val backend: SrBackend = SrBackend.CPU,
     private val inputSize: Int = 128,
     private val outputSize: Int = inputSize * 4,
@@ -50,6 +57,12 @@ class SuperResolver(
 ) {
     private val interpreter: Interpreter
     private var gpuDelegate: GpuDelegate? = null
+    private val inputType: DataType
+    private val outputType: DataType
+    private val inputScale: Float
+    private val inputZeroPoint: Int
+    private val outputScale: Float
+    private val outputZeroPoint: Int
 
     init {
         // Read the whole .tflite from assets into a direct ByteBuffer (works whether
@@ -72,6 +85,14 @@ class SuperResolver(
             }
         }
         interpreter = Interpreter(modelBuffer, options)
+        val inputQuant = interpreter.getInputTensor(0).quantizationParams()
+        val outputQuant = interpreter.getOutputTensor(0).quantizationParams()
+        inputType = interpreter.getInputTensor(0).dataType()
+        outputType = interpreter.getOutputTensor(0).dataType()
+        inputScale = inputQuant.scale
+        inputZeroPoint = inputQuant.zeroPoint
+        outputScale = outputQuant.scale
+        outputZeroPoint = outputQuant.zeroPoint
     }
 
     /**
@@ -85,10 +106,10 @@ class SuperResolver(
             input
         }
 
-        // --- preprocess: ARGB pixels -> float RGB /255 in the model's input layout ---
+        // --- preprocess: ARGB pixels -> RGB tensor in the model's input layout ---
         val tPre0 = System.nanoTime()
         val inputBuffer = ByteBuffer
-            .allocateDirect(inputSize * inputSize * 3 * FLOAT_BYTES)
+            .allocateDirect(inputSize * inputSize * 3 * bytesPerElement(inputType))
             .order(ByteOrder.nativeOrder())
         val pixels = IntArray(inputSize * inputSize)
         src.getPixels(pixels, 0, inputSize, 0, 0, inputSize, inputSize)
@@ -121,7 +142,7 @@ class SuperResolver(
         }
         inputBuffer.rewind()
         val outputBuffer = ByteBuffer
-            .allocateDirect(outputSize * outputSize * 3 * FLOAT_BYTES)
+            .allocateDirect(outputSize * outputSize * 3 * bytesPerElement(outputType))
             .order(ByteOrder.nativeOrder())
         val tPre1 = System.nanoTime()
 
@@ -129,14 +150,14 @@ class SuperResolver(
         interpreter.run(inputBuffer, outputBuffer)
         val tInf = System.nanoTime()
 
-        // --- postprocess: [1,H,W,3] float [0,1] -> ARGB bitmap ---
+        // --- postprocess: [1,H,W,3] float/uint8 -> ARGB bitmap ---
         outputBuffer.rewind()
         val outPixels = IntArray(outputSize * outputSize)
         for (y in 0 until outputSize) {
             for (x in 0 until outputSize) {
-                val r = (outputBuffer.float.coerceIn(0f, 1f) * 255f).toInt()
-                val g = (outputBuffer.float.coerceIn(0f, 1f) * 255f).toInt()
-                val b = (outputBuffer.float.coerceIn(0f, 1f) * 255f).toInt()
+                val r = (readUnitFloat(outputBuffer, outputType).coerceIn(0f, 1f) * 255f).toInt()
+                val g = (readUnitFloat(outputBuffer, outputType).coerceIn(0f, 1f) * 255f).toInt()
+                val b = (readUnitFloat(outputBuffer, outputType).coerceIn(0f, 1f) * 255f).toInt()
                 outPixels[y * outputSize + x] = Color.rgb(r, g, b)
             }
         }
@@ -158,22 +179,45 @@ class SuperResolver(
         gpuDelegate = null
     }
 
+    private fun putRgb(buffer: ByteBuffer, pixel: Int) {
+        putUnitFloat(buffer, Color.red(pixel) / 255.0f)
+        putUnitFloat(buffer, Color.green(pixel) / 255.0f)
+        putUnitFloat(buffer, Color.blue(pixel) / 255.0f)
+    }
+
+    private fun putChannel(buffer: ByteBuffer, pixel: Int, channel: Int) {
+        val value = when (channel) {
+            0 -> Color.red(pixel)
+            1 -> Color.green(pixel)
+            else -> Color.blue(pixel)
+        }
+        putUnitFloat(buffer, value / 255.0f)
+    }
+
+    private fun putUnitFloat(buffer: ByteBuffer, value: Float) {
+        when (inputType) {
+            DataType.FLOAT32 -> buffer.putFloat(value)
+            DataType.UINT8 -> {
+                val quantized = ((value / inputScale) + inputZeroPoint).toInt().coerceIn(0, 255)
+                buffer.put(quantized.toByte())
+            }
+            else -> error("Unsupported SR input tensor type: $inputType")
+        }
+    }
+
+    private fun readUnitFloat(buffer: ByteBuffer, type: DataType): Float = when (type) {
+        DataType.FLOAT32 -> buffer.float
+        DataType.UINT8 -> ((buffer.get().toInt() and 0xFF) - outputZeroPoint) * outputScale
+        else -> error("Unsupported SR output tensor type: $type")
+    }
+
     companion object {
         private const val FLOAT_BYTES = 4
 
-        private fun putRgb(buffer: ByteBuffer, pixel: Int) {
-            buffer.putFloat(Color.red(pixel) / 255.0f)
-            buffer.putFloat(Color.green(pixel) / 255.0f)
-            buffer.putFloat(Color.blue(pixel) / 255.0f)
-        }
-
-        private fun putChannel(buffer: ByteBuffer, pixel: Int, channel: Int) {
-            val value = when (channel) {
-                0 -> Color.red(pixel)
-                1 -> Color.green(pixel)
-                else -> Color.blue(pixel)
-            }
-            buffer.putFloat(value / 255.0f)
+        private fun bytesPerElement(type: DataType): Int = when (type) {
+            DataType.FLOAT32 -> FLOAT_BYTES
+            DataType.UINT8 -> 1
+            else -> error("Unsupported SR tensor type: $type")
         }
     }
 }

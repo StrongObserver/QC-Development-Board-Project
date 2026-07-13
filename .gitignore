@@ -18,3 +18,11 @@
 
 # OS-generated files
 .DS_Store
+
+# Generated experiment artifacts kept locally unless explicitly selected
+RB5_SR_lab/results/
+project_assets/
+RB5_SR_lab/export_assets/real_esrgan_general_x4v3-tflite-w8a8/
+RB5_SR_lab/export_assets/real_esrgan_general_x4v3-qnn-dlc-w8a8/
+RB5_SR_lab/export_assets/real_esrgan_general_x4v3_256-local/
+RB5_SR_lab/inputs/offline_eval_sources/

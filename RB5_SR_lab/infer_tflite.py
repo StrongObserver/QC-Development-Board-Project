@@ -45,11 +45,23 @@ def run_tflite(model_path, img_bgr):
         x = rgb.transpose(2, 0, 1)[None, ...]
     else:  # NHCW, produced by one local ONNX->TFLite path
         x = rgb.transpose(0, 2, 1)[None, ...]
+    if inp["dtype"] != np.float32:
+        scale, zero_point = inp["quantization"]
+        if scale == 0:
+            raise ValueError(f"quantized input has invalid scale: {inp}")
+        x = np.round(x / scale + zero_point)
+        x = np.clip(x, np.iinfo(inp["dtype"]).min, np.iinfo(inp["dtype"]).max).astype(inp["dtype"])
     it.set_tensor(inp["index"], x)
     t0 = time.time()
     it.invoke()
     dt = time.time() - t0
-    y = it.get_tensor(out["index"])[0]
+    y = it.get_tensor(out["index"])
+    if out["dtype"] != np.float32:
+        scale, zero_point = out["quantization"]
+        if scale == 0:
+            raise ValueError(f"quantized output has invalid scale: {out}")
+        y = (y.astype(np.float32) - zero_point) * scale
+    y = y[0]
     if y.shape[0] == 3:
         y = y.transpose(1, 2, 0)
     y_bgr = cv2.cvtColor((np.clip(y, 0, 1) * 255).round().astype(np.uint8), cv2.COLOR_RGB2BGR)

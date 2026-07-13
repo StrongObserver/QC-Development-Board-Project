@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.ContentValues
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.os.Bundle
 import android.os.Environment
@@ -48,17 +49,26 @@ class MainActivity : AppCompatActivity() {
     }
 
     private lateinit var cameraExecutor: ExecutorService
+    private lateinit var srExecutor: ExecutorService
     private lateinit var statusTextView: TextView
     private lateinit var nativeMessage: String
     private var frameCount = 0
     private var resolver: SuperResolver? = null
+    private var offlineResolver: SuperResolver? = null
     @Volatile private var srBackend = SrBackend.CPU
+    @Volatile private var srModelVariant = SrModelVariant.FLOAT
     @Volatile private var liveSr = false
+    @Volatile private var offlineEvalActive = false
     private lateinit var srResultView: ImageView
     private val srSampleLock = Any()
     private var latestSrSample: SrSample? = null
     private var highResResolver: SuperResolver? = null
     @Volatile private var pendingHighResSample = false
+
+    private data class OfflineEvalAsset(
+        val label: String,
+        val assetName: String,
+    )
 
     private data class SrSample(
         val backend: SrBackend,
@@ -97,6 +107,7 @@ class MainActivity : AppCompatActivity() {
         statusTextView.text = nativeMessage
 
         cameraExecutor = Executors.newSingleThreadExecutor()
+        srExecutor = Executors.newSingleThreadExecutor()
         setupSuperResolution()
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             startCamera()
@@ -114,23 +125,39 @@ class MainActivity : AppCompatActivity() {
     private fun setupSuperResolution() {
         val srButton = findViewById<Button>(R.id.sr_button)
         val saveSampleButton = findViewById<Button>(R.id.save_sample_button)
+        val offlineEvalButton = findViewById<Button>(R.id.offline_eval_button)
         srResultView = findViewById(R.id.sr_result)
         val previewView = findViewById<PreviewView>(R.id.previewView)
         srButton.text = startButtonText()
+        offlineEvalButton.text = offlineButtonText()
         saveSampleButton.setOnClickListener { saveLatestSrSample() }
         saveSampleButton.setOnLongClickListener {
             requestHighResSrSample()
+            true
+        }
+        offlineEvalButton.setOnClickListener { runOfflineEvalSamples() }
+        offlineEvalButton.setOnLongClickListener {
+            if (liveSr) {
+                statusTextView.text = "Stop live SR before switching model precision."
+                return@setOnLongClickListener true
+            }
+            cycleSrModelVariant()
+            srButton.text = startButtonText()
+            offlineEvalButton.text = offlineButtonText()
+            statusTextView.text = "SR model switched to ${srModelVariant.label}. Tap offline eval to run fixed samples."
             true
         }
         // Toggle live super-resolution on the camera's center ROI.
         srButton.setOnClickListener {
             liveSr = !liveSr
             if (liveSr) {
+                offlineEvalActive = false
                 previewView.visibility = View.GONE
                 srResultView.visibility = View.VISIBLE
                 srButton.text = "停止实时超分"
                 statusTextView.text = "Live ROI SR starting with ${srBackend.label} backend..."
             } else {
+                offlineEvalActive = false
                 srResultView.visibility = View.GONE
                 previewView.visibility = View.VISIBLE
                 srButton.text = startButtonText()
@@ -148,7 +175,23 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun startButtonText(): String = "实时超分 ROI (${srBackend.label})"
+    private fun startButtonText(): String = "实时超分 ROI (${srBackend.label}/${srModelVariant.label})"
+
+    private fun offlineButtonText(): String = "离线评测样张 (${srModelVariant.label})"
+
+    private fun cycleSrModelVariant() {
+        srModelVariant = when (srModelVariant) {
+            SrModelVariant.FLOAT -> SrModelVariant.W8A8
+            SrModelVariant.W8A8 -> SrModelVariant.FLOAT
+        }
+        val oldResolver = resolver
+        val oldOfflineResolver = offlineResolver
+        resolver = null
+        offlineResolver = null
+        cameraExecutor.execute { oldResolver?.close() }
+        srExecutor.execute { oldOfflineResolver?.close() }
+        Log.d("RB5_SR", "SR model switched to ${srModelVariant.label}")
+    }
 
     private fun cycleSrBackend() {
         srBackend = when (srBackend) {
@@ -157,11 +200,94 @@ class MainActivity : AppCompatActivity() {
             SrBackend.GPU -> SrBackend.CPU
         }
         val oldResolver = resolver
+        val oldOfflineResolver = offlineResolver
         resolver = null
+        offlineResolver = null
         cameraExecutor.execute {
             oldResolver?.close()
         }
+        srExecutor.execute {
+            oldOfflineResolver?.close()
+        }
         Log.d("RB5_SR", "SR backend switched to ${srBackend.label}")
+    }
+
+    private fun runOfflineEvalSamples() {
+        if (liveSr) {
+            statusTextView.text = "Stop live SR before running offline eval samples."
+            Toast.makeText(this, "请先停止实时超分", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val previewView = findViewById<PreviewView>(R.id.previewView)
+        offlineEvalActive = true
+        previewView.visibility = View.GONE
+        srResultView.visibility = View.VISIBLE
+        statusTextView.text = "Offline SR eval running with ${srBackend.label}/${srModelVariant.label}..."
+        val assetsToRun = listOf(
+            OfflineEvalAsset("OFFLINE_TEXT_EDGE", "offline_text_edge_128.png"),
+            OfflineEvalAsset("OFFLINE_LOWLIGHT_NOISE", "offline_lowlight_noise_128.png"),
+        )
+        srExecutor.execute {
+            try {
+                if (offlineResolver?.backend != srBackend || offlineResolver?.modelAsset != srModelVariant.assetName) {
+                    offlineResolver?.close()
+                    offlineResolver = null
+                }
+                if (offlineResolver == null) {
+                    offlineResolver = SuperResolver(this, modelAsset = srModelVariant.assetName, backend = srBackend)
+                }
+                val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+                val savedPaths = mutableListOf<String>()
+                var lastOutput: Bitmap? = null
+                var lastStatus = ""
+                for (asset in assetsToRun) {
+                    val t0 = System.nanoTime()
+                    val source = assets.open(asset.assetName).use { input ->
+                        BitmapFactory.decodeStream(input)
+                    } ?: error("Cannot decode ${asset.assetName}")
+                    val modelInput = if (source.width == 128 && source.height == 128) {
+                        source.copy(Bitmap.Config.ARGB_8888, false)
+                    } else {
+                        Bitmap.createScaledBitmap(source, 128, 128, true)
+                    }
+                    val loadMs = (System.nanoTime() - t0) / 1_000_000
+                    val (out, timing) = offlineResolver!!.enhance(modelInput)
+                    val baseline = Bitmap.createScaledBitmap(modelInput, 512, 512, true)
+                    val e2eMs = loadMs + timing.totalMs
+                    val sample = SrSample(
+                        backend = srBackend,
+                        label = asset.label,
+                        input = modelInput,
+                        baseline = baseline,
+                        sr = out,
+                        inferenceMs = timing.inferenceMs,
+                        e2eMs = e2eMs,
+                    )
+                    synchronized(srSampleLock) { latestSrSample = sample }
+                    savedPaths += savePngToPictures(modelInput, "${asset.label}_${timestamp}_${srBackend.label}_${srModelVariant.label}_input_128.png")
+                    savedPaths += savePngToPictures(baseline, "${asset.label}_${timestamp}_${srBackend.label}_${srModelVariant.label}_baseline_resize_512.png")
+                    savedPaths += savePngToPictures(out, "${asset.label}_${timestamp}_${srBackend.label}_${srModelVariant.label}_sr_512.png")
+                    lastOutput = out
+                    lastStatus =
+                        "${asset.label} (${srBackend.label}/${srModelVariant.label}) load ${loadMs} ms | pre ${timing.preprocessMs} ms | " +
+                            "inf ${timing.inferenceMs} ms | post ${timing.postprocessMs} ms | e2e ~${e2eMs} ms"
+                    Log.d("RB5_SR", "offline eval ${asset.label} backend=${srBackend.label} model=${srModelVariant.label} load=$loadMs pre=${timing.preprocessMs} inf=${timing.inferenceMs} post=${timing.postprocessMs} e2e=${e2eMs}ms saved=${savedPaths.takeLast(3).joinToString()}")
+                }
+                runOnUiThread {
+                    offlineEvalActive = false
+                    lastOutput?.let { srResultView.setImageBitmap(it) }
+                    statusTextView.text = "Offline SR eval saved\n$lastStatus\n" + savedPaths.joinToString("\n")
+                    Toast.makeText(this, "离线评测样张已保存", Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Throwable) {
+                Log.e("RB5_SR", "offline eval failed", e)
+                runOnUiThread {
+                    offlineEvalActive = false
+                    statusTextView.text = "Offline eval failed: ${e.message}"
+                    Toast.makeText(this, "离线评测失败", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     /**
@@ -173,11 +299,11 @@ class MainActivity : AppCompatActivity() {
     private fun runLiveSr(imageProxy: ImageProxy) {
         val srTag = "RB5_SR"
         try {
-            if (resolver?.backend != srBackend) {
+            if (resolver?.backend != srBackend || resolver?.modelAsset != srModelVariant.assetName) {
                 resolver?.close()
                 resolver = null
             }
-            if (resolver == null) resolver = SuperResolver(this, backend = srBackend)
+            if (resolver == null) resolver = SuperResolver(this, modelAsset = srModelVariant.assetName, backend = srBackend)
             val tCap0 = System.nanoTime()
             val full = imageProxy.toBitmap()
             val side = 128
@@ -211,7 +337,7 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 srResultView.setImageBitmap(out)
                 statusTextView.text =
-                    "Live ROI SR (TFLite ${srBackend.label})\n" +
+                    "Live ROI SR (TFLite ${srBackend.label}/${srModelVariant.label})\n" +
                         "frame ${full.width}x${full.height} | ROI ${cropSide}->128\n" +
                         "capture+crop ${captureMs} ms | preprocess ${t.preprocessMs} ms\n" +
                         "inference ${t.inferenceMs} ms | postprocess ${t.postprocessMs} ms\n" +
@@ -392,7 +518,7 @@ class MainActivity : AppCompatActivity() {
                                 runHighResSrSample(imageProxy)
                             } else if (liveSr) {
                                 runLiveSr(imageProxy)
-                            } else if (frameCount == 1 || frameCount % 30 == 0) {
+                            } else if (!offlineEvalActive && (frameCount == 1 || frameCount % 30 == 0)) {
                                 val yPlane = imageProxy.planes[0]
                                 val yBuffer = yPlane.buffer
                                 val yData = ByteArray(yBuffer.remaining())
@@ -438,11 +564,14 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         liveSr = false
+        offlineEvalActive = false
         // Close the interpreter on the same single-thread executor so it cannot run
         // concurrently with an in-flight enhance() (closing during run() can crash).
         // Submitting before shutdown() queues it after any pending SR task (FIFO).
         cameraExecutor.execute { resolver?.close() }
         cameraExecutor.execute { highResResolver?.close() }
+        srExecutor.execute { offlineResolver?.close() }
         cameraExecutor.shutdown()
+        srExecutor.shutdown()
     }
 }

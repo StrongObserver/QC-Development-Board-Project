@@ -39,6 +39,7 @@ log; detailed milestones belong in the project context document.
   1. Implement important, demonstrable milestones first.
   2. Keep optional/low-value ideas for later or discard them.
   3. Learning matters, but a working, measurable demo comes first.
+  4. Time is extremely tight: prefer reusing/adapting proven open-source or compliant internal references over writing fresh implementations from scratch.
 
 ## Main Paths
 
@@ -69,7 +70,7 @@ Base camera/native chain:
 Android Kotlin app
 -> JNI / C++
 -> CameraX Preview
--> ImageAnalysis 640x480 YUV_420_888
+-> ImageAnalysis YUV_420_888 (initially 640x480; current analyzer may use highest available resolution)
 -> Y plane byte[] into C++
 -> native OpenCV cv::Mat
 -> cv::mean brightness result shown/logged
@@ -78,11 +79,30 @@ Android Kotlin app
 Current SR demo chain:
 ```
 CameraX frame
--> center 128x128 ROI
--> TFLite Real-ESRGAN float CPU inference
--> 512x512 enhanced result on screen
+-> Bitmap conversion
+-> center ROI cropped with legacy-640-FOV rule, then resized to model input
+-> TFLite Real-ESRGAN float inference (CPU / NNAPI / GPU selectable for 128->512)
+-> enhanced result on screen
 -> per-stage timing in UI / Logcat
+-> optional sample saving: input / bicubic baseline / SR output
 ```
+
+High-quality still-sample chain:
+```
+highest available CameraX analysis frame (RB5 observed 4000x3000)
+-> legacy-FOV center crop -> 256x256 model input
+-> 256->1024 Real-ESRGAN TFLite CPU inference
+-> save input / bicubic baseline / SR PNGs
+```
+
+Key measured baselines so far:
+- 128->512 Android TFLite CPU: inference ~579-610ms, e2e ~592-623ms.
+- 128->512 Android TFLite NNAPI: no meaningful gain, close to CPU.
+- 128->512 Android TFLite GPU delegate: inference ~126-148ms, e2e ~139-161ms (~4x faster than CPU).
+- 128->512 W8A8 TFLite baseline: static Qualcomm AI Hub Models asset is integrated; model size ~1.31MB vs float ~4.88MB.
+  Host CPU/XNNPACK shows ~1.6-1.9x speedup on fixed cases; RB5 app CPU W8A8 low-light offline sample reported inference ~361ms.
+- AI Hub QCS8550 profile for the 128 float model: 5.9ms, 74 ops on NPU, 0 CPU fallback.
+- 256->1024 high-res still samples are useful for visual evidence, but not yet a real-time target.
 
 ## Important Commands
 
@@ -116,19 +136,55 @@ Windows notes:
 旧的 "5-frame capture/brightness" 计划已废弃：策略要等“增强能力”先有，故改为模型优先。
 完整阶段 A–F 见 `RB5 Gen2_AI上下文.md` 的“下一步计划”，此处只记主线状态。
 
-- [done] A1 — PC float inference 跑通。standalone `SRVGGNetCompact` 加载
-  `realesr-general-x4v3.pth`，128x128 LR -> 512x512 (×4)，CPU ~0.5s/帧；视觉上明显比
-  bicubic 锐。PSNR/SSIM 反而略低属 GAN-SR 感知-失真权衡，印证“别只看 PSNR”。
-- [done] A2 — 浮点 TFLite 导出 + 双重一致性验证通过。I/O：输入
-  `image[1,128,128,3]` f32 NHWC RGB /255；输出 `upscaled_image[1,512,512,3]` f32 [0,1]。
-  QCS8550 真机跑分：**5.9ms，74 算子全落 NPU（0 CPU 回退）**，峰值内存 3–7MB。
-- [done] B3 — 浮点 TFLite 在 Android【CPU】上对 assets 静态图跑通、增强图上屏。
-  依赖 `org.tensorflow:tensorflow-lite:2.16.1`；RB5(QCS8550) 实测 **592–751ms**。
-- [done] B5 — 分段计时已加：capture / preprocess / inference / postprocess / e2e。
-- [done] C6 — CameraX 当前帧中心 128x128 ROI 实时超分上屏。RB5(QCS8550) CPU：
-  inference ~600ms、e2e ~620ms（~1.6fps，CPU baseline，发卡属正常）。**第一验收已达成。**
-- [next] 优化 / 第二验收：优先 D7（TFLite 换 NNAPI/GPU delegate 提速 + 后端对比）或
-  E10（QNN/NPU——A2 已证明该模型 NPU 仅 5.9ms）；B4（预处理下沉 native）、D8（w8a8 量化）随后。
+- [done] A1/A2 — PC PyTorch inference and AI Hub float TFLite export verified. TFLite I/O is
+  `image[1,128,128,3]` f32 NHWC RGB /255 -> `upscaled_image[1,512,512,3]` f32 [0,1].
+- [done] B3/B5/C6 — Android app runs Real-ESRGAN on assets/camera ROI, shows SR output, and logs
+  capture / preprocess / inference / postprocess / e2e timing. **First acceptance gate is done.**
+- [done] D7 — Android TFLite backend comparison is done: CPU baseline, NNAPI no gain, GPU delegate ~4x faster.
+- [done] D75 — High-resolution CameraX input and legacy-FOV ROI fix are done for 256->1024 still samples.
+- [done] D8 first-pass W8A8 baseline — static Qualcomm AI Hub Models W8A8 TFLite asset integrated, host/RB5 CPU
+  evidence generated. Next gap: configure AI Hub token or internal environment to get QCS8550 QNN/NPU W8A8 profile.
+
+## Evaluation Baseline Policy
+
+The project currently has working demos but lacks a stable definition of "good enough". Before the next optimization,
+create a small evaluation baseline instead of adding features blindly:
+
+- Fixed inputs: keep a tiny, representative image/ROI set covering text/edges/texture/face-or-object/low-light if available.
+- Comparisons: always save or compute input, bicubic baseline, float SR, and candidate SR output on the same input.
+- Performance metrics: record model size, preprocess/inference/postprocess/e2e latency, backend, resolution, device, and cold/warm status.
+- Quality metrics: use PSNR/SSIM only as distortion references; for GAN SR they may disagree with visual quality. Add crop-level visual judgment
+  for artifacts such as oversharpening, ringing, texture hallucination, color shift, and text deformation.
+- Pass/fail gates: define scenario-specific boundaries. For example, a faster backend is not acceptable if it introduces obvious color/geometry
+  corruption; a sharper result is not acceptable if text becomes less readable; a larger input is not useful if latency/memory makes the demo unusable.
+- Evidence discipline: preserve only the smallest useful set of PNGs/logs/tables; do not commit large generated assets unless explicitly requested.
+- Current baseline script: `RB5_SR_lab/eval_baseline.py`. Run it with the local eval venv when available:
+  `RB5_SR_lab/.venv-eval/Scripts/python.exe RB5_SR_lab/eval_baseline.py`. It writes
+  `RB5_SR_lab/results/eval_baseline/baseline_metrics.csv`,
+  `RB5_SR_lab/results/eval_baseline/acceptance_review_template.csv`, and side-by-side contact sheets under
+  `RB5_SR_lab/results/eval_baseline/contact_sheets/`.
+- Current visual review status: host TFLite-vs-PyTorch consistency cases pass; D7 CPU/GPU camera ROI cases are conditional demo evidence;
+  D75 256 still sample currently fails quality acceptance because the SR output does not match the bicubic/input geometry/orientation;
+  offline text/edge and low-light/noise cases now exist as fixed RB5 app asset inputs and are conditional until human review fills final decisions.
+
+## Reuse-First Problem Solving
+
+This project is effect-first, not originality-first. When blocked or when a feature looks non-trivial, first look for a working reference:
+
+1. Search GitHub / official samples / existing local scripts for similar SR, TFLite, QNN, AIMET, CameraX, or Android imaging pipelines.
+2. If the README looks relevant to the current blocker, clone the project to a scratch location outside tracked source and inspect the actual code path before reimplementing.
+3. Reuse, adapt, or rewrite from proven references when it is faster and explainable. Avoid only black-box stitching that cannot be debugged or described in interviews.
+4. If public material is insufficient and the user can access company-internal compliant resources, ask the user to query internal AI. Provide a focused prompt asking for document links, repo paths, key files/functions, commands, pitfalls, and minimal snippets.
+
+Internal-AI prompt template:
+```text
+我在做 RB5 Gen2 / QCS8550 / Android 端侧 AI 画质增强项目，当前卡点是：【一句话描述卡点】。
+请优先搜索公司内部开放且合规可参考的技术文档、代码仓库、sample、历史项目或最佳实践，重点找：
+1. 与 Android CameraX / TFLite / QNN / QAIRT / AIMET / NNAPI / GPU delegate / 超分 / 画质评测 / 端侧 AI pipeline 相关的资料；
+2. 能直接说明工程架构、关键 API、命令、性能数据、踩坑和适用边界的内容；
+3. 可复用或可借鉴的最小代码路径，而不是只给概念介绍。
+请按以下格式返回：最相关的 3-5 个资料或仓库；每个资料最值得看的文件/章节/函数；可直接借鉴的命令/API/代码片段；已知坑点和不适合照搬的地方；如果没有强相关资料，请明确说没有，并给最接近替代方向。
+```
 
 When a result is visually useful for interviews, remind the user to save
 screenshots, before/after images, short videos, profiling tables, or logs.
