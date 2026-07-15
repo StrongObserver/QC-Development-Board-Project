@@ -24,5 +24,11 @@ RB5_SR_lab/results/
 project_assets/
 RB5_SR_lab/export_assets/real_esrgan_general_x4v3-tflite-w8a8/
 RB5_SR_lab/export_assets/real_esrgan_general_x4v3-qnn-dlc-w8a8/
+RB5_SR_lab/export_assets/real_esrgan_general_x4v3-qnn-w8a8-qcs8550-20260715/
 RB5_SR_lab/export_assets/real_esrgan_general_x4v3_256-local/
 RB5_SR_lab/inputs/offline_eval_sources/
+RB5_SR_lab/qnn_local_run/input.raw
+RB5_SR_lab/qnn_local_run/input_list.txt
+RB5_SR_lab/qnn_local_run/input_ref.png
+RB5_SR_lab/qnn_local_run/*.log
+RB5_SR_lab/qnn_local_run/pulled_output*/

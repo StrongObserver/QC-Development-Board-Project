@@ -6,6 +6,9 @@ log; detailed milestones belong in the project context document.
 
 ## First Read
 
+0. RB5 Gen2 loop entrypoint. Read this first when the user asks to continue the
+   RB5 project, then follow the listed priority order and latest run handoff:
+   `C:\Users\Admin\Desktop\QC-Development-Board-Project\PROJECT_ENTRYPOINTS.md`
 1. Project background, resume target, roadmap, and milestone history. This file
    is read-only unless the user explicitly asks to maintain it; if editing, obey
    its own maintenance rules first:
