@@ -2,9 +2,13 @@
 
 Updated: 2026-07-18
 
-## Decision
+## Decision Scope
 
-Do not install or enable LPIPS / DISTS / pyiqa in the current loop.
+Current scope: `implementation_gate`.
+
+Do not install or enable LPIPS / DISTS / pyiqa in the current mainline loop.
+This is not a dead end. Perceptual metrics remain a valid diagnostic
+exploration lane when their trigger conditions are met.
 
 Keep the current metric policy:
 
@@ -39,7 +43,7 @@ DISTS_pytorch: no
 pyiqa: no
 ```
 
-## Why Not Now
+## Why Not In The Mainline Now
 
 LPIPS/DISTS are useful, but current project decisions are not blocked on them:
 
@@ -52,8 +56,9 @@ the main uncertainty.
 ```
 
 Installing new perceptual metric packages can add dependency/download risk and
-may slow the loop. The current best step is to complete human visual review
-first, then use LPIPS/DISTS only on disputed cases if needed.
+may slow the mainline loop. The correct interpretation is not "never add these
+metrics"; it is "add them as a bounded diagnostic experiment when they answer a
+specific dispute."
 
 ## Trigger To Add LPIPS / DISTS Later
 

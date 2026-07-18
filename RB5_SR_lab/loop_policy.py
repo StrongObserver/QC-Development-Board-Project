@@ -41,6 +41,23 @@ TASK_PRIORITY = [
     },
 ]
 
+HARNESS_LOOP_SCOPE_POLICY = {
+    "rule": "Negative evidence must include scope. A stable baseline is a checkpoint, not a ceiling.",
+    "scopes": {
+        "claim_gate": "Do not make this claim yet; gather stronger evidence or narrow the claim.",
+        "mainline_gate": "Do not put this in the default path yet; bounded exploration is still allowed.",
+        "implementation_gate": "Do not implement the large change in the current loop; use a smaller probe or trigger.",
+        "dead_end": "Stop this route only when direct evidence proves it cannot work or violates a hard constraint.",
+    },
+    "exploration_lanes": [
+        "showcase_lane",
+        "exploration_lane",
+        "quality_lane",
+        "performance_lane",
+        "product_lane",
+    ],
+}
+
 
 METRIC_ROLE_POLICY = {
     "hard_gate": [
@@ -264,12 +281,14 @@ def environment_blocked_payload(
         "input_set": input_set,
         "status": "environment_blocked",
         "stop_reason": "preflight_failed",
+        "decision_scope": "implementation_gate",
         "next_priority_task": next_task,
         "requires_human_review": False,
         "blocked_by": blocked_by,
-        "notes": notes,
+        "notes": notes + " This blocks the current run only; it is not a project dead end.",
         "case_count_warning": "",
         "task_priority": TASK_PRIORITY,
+        "harness_loop_scope_policy": HARNESS_LOOP_SCOPE_POLICY,
         "hard_gate_rules": hard_gate_rules(expected_count),
         "metric_role_policy": METRIC_ROLE_POLICY,
         "knowledge_base_rules": KNOWLEDGE_BASE_RULES,
@@ -302,7 +321,7 @@ def decide_loop_state(rows: list[dict[str, str]], repeat_count: int, input_set: 
             next_priority_task="fix_qnn_runner_or_output_validity",
             requires_human_review=False,
             blocked_by=";".join(sorted({row.get("failure_code", "") for row in rows if row.get("auto_loop_decision") == "fail"})),
-            notes="Do not continue to quality or performance claims until hard gates pass.",
+            notes="Claim gate: do not make quality or performance claims until hard gates pass. This is not a dead end for the broader project.",
         )
 
     if input_set == "full":
@@ -313,7 +332,7 @@ def decide_loop_state(rows: list[dict[str, str]], repeat_count: int, input_set: 
                 next_priority_task="human_review_full_contact_sheet_then_qnn_delegate_app_evidence",
                 requires_human_review=True,
                 blocked_by="",
-                notes="Full benchmark completed with conditional cases; review the contact sheet, then continue QNN Delegate app evidence if no visual blocker is found.",
+                notes="Claim gate: full benchmark completed with conditional cases; review the contact sheet, then continue QNN Delegate app evidence or bounded quality exploration if no visual blocker is found.",
             )
         return LoopState(
             status="ready_for_path_b_integration",
@@ -321,7 +340,7 @@ def decide_loop_state(rows: list[dict[str, str]], repeat_count: int, input_set: 
             next_priority_task="qnn_delegate_app_stabilization_and_evidence",
             requires_human_review=True,
             blocked_by="",
-            notes="Full benchmark hard gates passed; review the full contact sheet, then continue QNN Delegate app stabilization and evidence collection.",
+            notes="Full benchmark hard gates passed; review the full contact sheet, then continue QNN Delegate app stabilization and keep bounded exploration lanes open.",
         )
 
     if repeat_count < 3:
@@ -331,7 +350,7 @@ def decide_loop_state(rows: list[dict[str, str]], repeat_count: int, input_set: 
             next_priority_task="qnn_w8a8_repeat_smoke_p50_p95",
             requires_human_review=counts["conditional"] > 0,
             blocked_by="",
-            notes="Single smoke proves the runner path; repeated smoke is needed before stable p50/p95 claims.",
+            notes="Single smoke proves the runner path; repeated smoke is needed before stable p50/p95 claims. This is a claim gate, not an exploration stop.",
         )
 
     if counts["conditional"] > 0:
@@ -341,7 +360,7 @@ def decide_loop_state(rows: list[dict[str, str]], repeat_count: int, input_set: 
             next_priority_task="qnn_w8a8_full_24_case_benchmark",
             requires_human_review=True,
             blocked_by="",
-            notes="Conditional cases should be reviewed, but they do not block the main QNN path unless human review marks fail.",
+            notes="Conditional cases should be reviewed, but they do not block the main QNN path unless human review marks fail. They may open a bounded quality exploration lane.",
         )
 
     return LoopState(
@@ -350,7 +369,7 @@ def decide_loop_state(rows: list[dict[str, str]], repeat_count: int, input_set: 
         next_priority_task="qnn_w8a8_full_24_case_benchmark",
         requires_human_review=False,
         blocked_by="",
-        notes="Runner hard gates passed across repeated smoke; move to the fixed 24-case benchmark before app integration.",
+        notes="Runner hard gates passed across repeated smoke; move to the fixed 24-case benchmark before app integration and preserve exploration lanes separately.",
     )
 
 
@@ -389,7 +408,7 @@ def make_loop_state_payload(
             next_priority_task="fix_benchmark_input_or_runner_case_selection",
             requires_human_review=False,
             blocked_by="CASE_COUNT_MISMATCH",
-            notes="Smoke case count is wrong; do not compare this run against the fixed protocol.",
+            notes="Implementation gate: case count is wrong; do not compare this run against the fixed protocol. Fix the run, but do not treat the project route as blocked.",
         )
     return {
         "run_id": run_id,
@@ -400,8 +419,10 @@ def make_loop_state_payload(
         "requires_human_review": state.requires_human_review,
         "blocked_by": state.blocked_by,
         "notes": state.notes,
+        "decision_scope": decision_scope_for_state(state),
         "case_count_warning": case_count_warning,
         "task_priority": TASK_PRIORITY,
+        "harness_loop_scope_policy": HARNESS_LOOP_SCOPE_POLICY,
         "hard_gate_rules": hard_gate_rules(expected_count),
         "metric_role_policy": METRIC_ROLE_POLICY,
         "knowledge_base_rules": KNOWLEDGE_BASE_RULES,
@@ -433,3 +454,11 @@ def knowledge_base_triggers(rows: list[dict[str, str]], state: LoopState) -> lis
     if any(row.get("auto_loop_decision") in {"conditional", "fail"} for row in rows):
         triggers.append("quality_failure_or_conditional")
     return triggers
+
+
+def decision_scope_for_state(state: LoopState) -> str:
+    if state.stop_reason in {"hard_gate_failed", "case_count_mismatch", "preflight_failed"}:
+        return "implementation_gate"
+    if "conditional" in state.stop_reason:
+        return "claim_gate"
+    return "ready_for_next_lane"

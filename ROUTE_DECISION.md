@@ -27,7 +27,7 @@ Current roles:
 | Deployment milestone | Real-ESRGAN W8A8 + QNN TFLite Delegate / HTP | Keep as the proven QNN/HTP app milestone and optional perceptual enhancement path |
 | Live ROI workhorse candidate | QuickSRNetSmall W8A8 | Keep as the strongest current live ROI candidate after P5/P6 timing and resource probes |
 | Current top optimization target | App postprocess/output path | Data-path optimization already cut frame conversion; postprocess is now the largest live stage |
-| Not current default | Automatic Real-ESRGAN vs QuickSRNet live routing | Do not enable; measured switch cost is not free and power/thermal evidence is still missing |
+| Not current default | Automatic Real-ESRGAN vs QuickSRNet live routing | Mainline gate only: do not enable by default yet; bounded routing experiments remain allowed with hypothesis, metric, budget, rollback, and baseline |
 
 ## Why
 
@@ -92,7 +92,7 @@ model switch time
 first-frame jank after switching
 ```
 
-Still missing before product-style claims or automatic routing:
+Still missing before product-style claims or default automatic routing:
 
 ```text
 power or current over 5-10 minute sustained runs
@@ -108,7 +108,7 @@ route failure risk on non-cherry-picked scenes
 4. Keep the 1280x960 live ROI data-path optimization as the current app milestone.
 5. Treat QuickSRNetSmall as the likely default live ROI workhorse candidate, pending human visual review and sustained power/thermal checks.
 6. Keep Real-ESRGAN as QNN/HTP deployment milestone, perceptual/post-capture enhancement candidate, and comparison baseline.
-7. Do not implement automatic live model switching unless a later product need justifies the 369ms switch path and routing risk.
+7. Do not implement automatic live model switching as the default path unless a later product need justifies the 369ms switch path and routing risk. A bounded experiment is still allowed.
 
 ## Updated Data-Path Result
 
@@ -192,8 +192,9 @@ p50/p95. If more live ROI speed is needed, investigate in this order:
 3. Consider YUV ROI conversion only for the ROI instead of full-frame `Bitmap`.
 4. Keep high-resolution still-sample capture as a separate path if it is still needed.
 
-Do not start AHardwareBuffer, DMA-BUF, or true zero-copy work until the simpler
-ROI/data-path options are exhausted.
+Do not start AHardwareBuffer, DMA-BUF, or true zero-copy work in the mainline
+until the simpler ROI/data-path options are exhausted. This is an
+implementation gate, not a ban on future data-path exploration.
 
 ## Postprocess Optimization Result
 
@@ -258,7 +259,8 @@ structure-sensitive cases pass human visual review
 showcase evidence is cleaned and minimal
 ```
 
-It is still not an automatic routing strategy.
+It is still not a default automatic routing strategy. Future routing experiments
+must be isolated and measured against the stable baseline.
 
 ## Real-ESRGAN Role
 
@@ -279,7 +281,8 @@ scene.
 - Do not claim QuickSRNet is globally better only because PSNR is higher.
 - Do not claim Real-ESRGAN is worse only because PSNR is lower.
 - Do not optimize the 3ms QNN inference before addressing the 41ms frame conversion.
-- Do not enable automatic dual-model live routing based only on three favorable cases.
+- Do not enable automatic dual-model live routing as the default path based only on three favorable cases.
+- Do not treat "not default yet" as "never explore".
 - Do not treat model switching as free; the measured Real-ESRGAN -> QuickSRNet switch path is about 369ms.
 - Do not claim dual residency is harmless from one short probe; QNN/runtime memory stays sticky after `close()`.
 

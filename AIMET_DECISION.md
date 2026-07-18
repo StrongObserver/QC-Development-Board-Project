@@ -2,14 +2,17 @@
 
 Updated: 2026-07-18
 
-## Decision
+## Decision Scope
 
-Do not start AIMET CLE / Bias Correction / AdaRound in the current loop.
+Current scope: `implementation_gate`.
+
+Do not start AIMET CLE / Bias Correction / AdaRound in the current mainline
+loop. This is not a permanent rejection of AIMET.
 
 Status:
 
 ```text
-AIMET: no-go for now
+AIMET: deferred_with_trigger
 ```
 
 ## Why
@@ -29,8 +32,9 @@ The route has moved toward QuickSRNetSmall for live ROI and Real-ESRGAN as
 QNN/HTP milestone / optional perceptual enhancement.
 ```
 
-Starting AIMET now would add toolchain cost without being the highest-value next
-step.
+Starting AIMET now would add toolchain cost without being the highest-value
+mainline step. AIMET remains a valid quality exploration lane if a real
+W8A8-vs-float degradation appears.
 
 ## Trigger To Reconsider
 

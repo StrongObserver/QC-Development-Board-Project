@@ -35,6 +35,7 @@ The current loop policy is implemented in:
 ```text
 C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\loop_policy.py
 C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\run_qnn_smoke_benchmark.py
+C:\Users\Admin\Desktop\QC-Development-Board-Project\HARNESS_LOOP_ENGINEERING.md
 ```
 
 Important meanings:
@@ -47,6 +48,13 @@ Important meanings:
   visual quality or performance claims.
 - If a low-light/natural-texture case is marked `conditional`, do not derail the
   main QNN path unless human review marks it as `fail`.
+- Negative evidence is not a command to stop exploring. Before writing `no-go`,
+  `blocked`, or `do not`, classify the scope using
+  `HARNESS_LOOP_ENGINEERING.md`: claim gate, mainline gate, implementation gate,
+  or true dead end. Only a true dead end stops a route.
+- A stable commit is a recoverable checkpoint, not a ceiling. After preserving a
+  known-good path, keep bounded exploration lanes open when they serve the
+  project goal.
 - The current mainline has already moved through:
   single smoke -> repeated smoke p50/p95 -> full 24-case benchmark -> Path B
   Android app QNN Delegate evidence. Do not restart old bring-up tasks unless the

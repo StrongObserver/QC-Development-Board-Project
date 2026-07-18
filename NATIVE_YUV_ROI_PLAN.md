@@ -2,9 +2,12 @@
 
 Updated: 2026-07-18
 
-## Decision
+## Decision Scope
 
-Do not start AHardwareBuffer, DMA-BUF, or true zero-copy work yet.
+Current scope: `implementation_gate`.
+
+Do not start AHardwareBuffer, DMA-BUF, or true zero-copy work in the current
+mainline loop. This is not a ban on deeper data-path exploration.
 
 The next realistic data-path optimization is:
 
@@ -153,6 +156,7 @@ At least 2-3ms e2e p50 improvement without rotation/color/crop regression.
 
 ## Current Recommendation
 
-Do not implement this immediately unless another round of live ROI optimization
-is needed. The current P5 live path is already around 20-25ms e2e, and showcase
-work plus commit hygiene have higher near-term value.
+Do not implement this immediately in the mainline unless another round of live
+ROI optimization is needed. Keep it as a bounded `performance_lane` exploration:
+start with a Kotlin-only YUV ROI correctness probe, then move to native only if
+the probe shows measurable upside and no color/rotation/crop regression.

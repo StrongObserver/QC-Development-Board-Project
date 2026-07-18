@@ -76,6 +76,8 @@ def main() -> None:
         notes="dry run",
     )
     assert env["status"] == "environment_blocked"
+    assert env["decision_scope"] == "implementation_gate"
+    assert "harness_loop_scope_policy" in env
     assert env["knowledge_base_triggered"] == []
     assert_strict_json(env)
 
@@ -83,17 +85,22 @@ def main() -> None:
     hard_fail_rows[0]["raw_output_bytes"] = "1"
     hard_fail = make_loop_state_payload(run_id="hard", output_dir=out, rows=hard_fail_rows, repeat_count=3)
     assert hard_fail["status"] == "blocked"
+    assert hard_fail["decision_scope"] == "implementation_gate"
+    assert "not a dead end" in hard_fail["notes"]
     assert "qnn_or_android_integration_failure" in hard_fail["knowledge_base_triggered"]
+    assert "harness_loop_scope_policy" in hard_fail
     assert_strict_json(hard_fail)
 
     single = make_loop_state_payload(run_id="single", output_dir=out, rows=six_rows(), repeat_count=1)
     assert single["status"] == "ready_for_repeated_smoke"
     assert single["next_priority_task"] == "qnn_w8a8_repeat_smoke_p50_p95"
+    assert single["decision_scope"] == "ready_for_next_lane"
     assert single["knowledge_base_triggered"] == []
     assert_strict_json(single)
 
     conditional = make_loop_state_payload(run_id="cond", output_dir=out, rows=six_rows("0.1"), repeat_count=3)
     assert conditional["status"] == "ready_with_quality_boundary"
+    assert conditional["decision_scope"] == "claim_gate"
     assert "quality_failure_or_conditional" in conditional["knowledge_base_triggered"]
     assert conditional["requires_human_review"] is True
     assert_strict_json(conditional)
@@ -101,6 +108,7 @@ def main() -> None:
     count_bad = make_loop_state_payload(run_id="count", output_dir=out, rows=six_rows()[:5], repeat_count=3)
     assert count_bad["status"] == "blocked"
     assert count_bad["stop_reason"] == "case_count_mismatch"
+    assert count_bad["decision_scope"] == "implementation_gate"
     assert_strict_json(count_bad)
 
     full_ok = make_loop_state_payload(run_id="full", output_dir=out, rows=full_rows(), repeat_count=1, input_set="full")
@@ -108,6 +116,7 @@ def main() -> None:
     assert full_ok["hard_gate_rules"]["expected_cases"] == 24
     assert full_ok["status"] == "ready_for_path_b_integration"
     assert full_ok["next_priority_task"] == "qnn_delegate_app_stabilization_and_evidence"
+    assert full_ok["decision_scope"] == "ready_for_next_lane"
     assert full_ok["requires_human_review"] is True
     assert_strict_json(full_ok)
 
@@ -120,6 +129,7 @@ def main() -> None:
     )
     assert full_conditional["status"] == "full_benchmark_completed_with_quality_boundary"
     assert full_conditional["next_priority_task"] == "human_review_full_contact_sheet_then_qnn_delegate_app_evidence"
+    assert full_conditional["decision_scope"] == "claim_gate"
     assert "quality_failure_or_conditional" in full_conditional["knowledge_base_triggered"]
     assert_strict_json(full_conditional)
 

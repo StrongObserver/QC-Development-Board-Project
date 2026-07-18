@@ -5,8 +5,9 @@ Updated: 2026-07-18
 This roadmap starts from the current route decision:
 
 ```text
-Do not default to automatic dual-model live routing.
+Do not default to automatic dual-model live routing yet.
 Prioritize data-path optimization and disciplined model-candidate validation.
+Keep bounded exploration lanes open after preserving a stable baseline.
 ```
 
 ## P5: QuickSRNet Live ROI Validation - Done
@@ -75,8 +76,9 @@ Measure:
 Boundary:
 
 ```text
-The table now exists. It supports a conservative route: do not implement
-automatic switching by default because switching has a visible cold path.
+The table now exists. It supports a scoped route: do not implement automatic
+switching by default because switching has a visible cold path. This is not a
+dead end for future routing experiments.
 ```
 
 Result:
@@ -141,7 +143,8 @@ Current preference:
 
 ```text
 B or C are now the practical choices.
-D is still not justified for the default live path.
+D is still not justified for the default live path, but can be revisited as a
+bounded experiment with a clear hypothesis and rollback.
 ```
 
 ## P5: Postprocess And Sample-Copy Optimization - Done

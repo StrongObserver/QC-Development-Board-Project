@@ -2,9 +2,13 @@
 
 Updated: 2026-07-18
 
-## Decision
+## Decision Scope
 
-Do not change the Android app default live SR model in this loop.
+Current scope: `mainline_gate`.
+
+Do not change the Android app default live SR model in this loop. This is not a
+reason to stop model exploration; it only protects the user-facing default until
+real-camera evidence exists.
 
 Keep the current behavior:
 
@@ -56,5 +60,7 @@ adb shell am start -n com.cyf.rb5visionlab/.MainActivity --ez start_live_sr true
 
 ## Boundary
 
-Do not implement automatic scene routing. Do not hide Real-ESRGAN from the app
+Do not implement automatic scene routing as the default path yet. A bounded
+routing experiment is still allowed later if it defines a hypothesis, success
+metric, budget, rollback, and baseline. Do not hide Real-ESRGAN from the app
 because it is still useful for comparison and perceptual enhancement evidence.

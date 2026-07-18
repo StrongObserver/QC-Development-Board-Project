@@ -38,3 +38,6 @@ full power/perf-watt characterization
 automatic dual-model routing product readiness
 QuickSRNet globally better than Real-ESRGAN
 ```
+
+Do not interpret these boundaries as the final ambition of the project. They
+only define what is currently evidenced enough to claim.

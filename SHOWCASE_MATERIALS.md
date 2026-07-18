@@ -7,6 +7,15 @@ Updated: 2026-07-18
 Use only this small set for the current showcase. Do not collect lots of
 near-duplicate screenshots.
 
+Boundary:
+
+```text
+This showcase package is the current stable evidence set, not the ceiling for
+future exploration. It should preserve what works while leaving room for
+bounded experiments such as real-camera validation, YUV ROI, perceptual metrics,
+or AIMET if their triggers appear.
+```
+
 ## 1. QNN Delegate App Milestone
 
 Evidence:

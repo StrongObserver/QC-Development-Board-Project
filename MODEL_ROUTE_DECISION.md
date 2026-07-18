@@ -12,7 +12,8 @@ Real-ESRGAN W8A8 for QNN/HTP deployment milestone, comparison baseline, and
 optional post-capture/offline perceptual enhancement.
 ```
 
-Do not make automatic dual-model live routing the default path.
+Do not make automatic dual-model live routing the default path yet. This is a
+mainline gate, not a permanent rejection of routing experiments.
 
 ## Why C, Not D
 
@@ -28,7 +29,8 @@ QNN/runtime memory remains sticky after close()
 
 This means dynamic live switching can create visible cold-path jank and resource
 complexity. A single live workhorse plus an optional enhancement path is more
-defensible.
+defensible for the current mainline. A future routing experiment is still valid
+if it has a clear hypothesis, success metric, budget, rollback, and baseline.
 
 ## Why QuickSRNet For Live ROI
 
@@ -85,5 +87,6 @@ review, because it changes the user-facing demo behavior.
 ```text
 Default engineering story: QuickSRNet live ROI + Real-ESRGAN optional/post-capture.
 Default app implementation for now: keep model selection explicit through existing UI/intent controls.
-Do not add automatic scene routing yet.
+Do not add automatic scene routing to the default path yet. Keep bounded
+experiments open.
 ```

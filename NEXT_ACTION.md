@@ -15,7 +15,9 @@ The current RB5 app evidence shows fixed sample success and repeated live ROI ti
 Next priority:
 
 ```text
-Update the route decision and proceed to sustained validation/showcase: QuickSRNetSmall is the likely live ROI workhorse candidate, Real-ESRGAN remains the QNN/HTP milestone and perceptual/post-capture baseline, and automatic live dual-model switching is still not justified.
+Before continuing P9/P10, audit and harden the Harness/Loop policy so negative
+or conditional evidence is not misread as a reason to stop exploration. Stable
+baselines should be preserved with Git, but they are checkpoints, not ceilings.
 ```
 
 ## Verified Evidence
@@ -228,6 +230,15 @@ Decision rule:
 
 ```text
 QuickSRNetSmall is now integrated into the Android app fixed-sample path and validated in live ROI. Resource probing shows automatic live switching is not free: Real-ESRGAN -> QuickSRNet measured about 369ms. Treat QuickSRNetSmall as the likely live ROI workhorse candidate, not as an automatic routing layer.
+```
+
+Harness rule:
+
+```text
+`not default yet`, `deferred`, `conditional`, and `no-go for current mainline`
+must not be interpreted as `never explore`. Use HARNESS_LOOP_ENGINEERING.md to
+classify scope: claim_gate, mainline_gate, implementation_gate, or true
+dead_end. Only a true dead_end stops a route.
 ```
 
 ## Next Engineering Choices
