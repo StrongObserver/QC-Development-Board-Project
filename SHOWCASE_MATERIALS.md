@@ -160,19 +160,27 @@ This is short-run stability, not full power/perf-watt proof.
 
 ## Human Review Still Needed
 
-Before using contact sheets in a polished final presentation, fill:
+Human visual review status is now recorded in:
 
 ```text
 VISUAL_REVIEW_QUEUE.md
 ```
 
-Only four images need manual review:
+Current labels:
 
 ```text
-fixed_sample_contact_sheet.png
-app_vs_qnn_net_run_contact_sheet.png
-QuickSRNet vs Real-ESRGAN full host contact_sheet.png
-three-case app strategy contact_sheet.png
+QNN Delegate fixed sample: pass
+App delegate vs qnn-net-run: pass
+QuickSRNet vs Real-ESRGAN full host set: conditional
+Three structure-sensitive app cases: conditional
+```
+
+Showcase rule:
+
+```text
+Use the first two as direct QNN/HTP app milestone evidence.
+Use the last two as model-tradeoff evidence with caveats, not as a global
+QuickSRNet-wins claim.
 ```
 
 ## Suggested Slide / Resume Order
