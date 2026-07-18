@@ -1,0 +1,18 @@
+metric_id,role,metric_type,reference_requirement,compute_cost,current_status,use_for,do_not_use_for,notes
+output_exists,hard_gate,validity,none,low,active,runner validity,visual quality,Missing output blocks the loop
+output_size,hard_gate,validity,none,low,active,runner validity,visual quality,Expected 512x512 for current v1
+output_nonblank,hard_gate,validity,none,low,active,runner validity,visual quality,Use stddev/nonzero checks only to catch corrupt output
+profile_fields_present,hard_gate,performance,none,low,active,QNN runner validity,quality,Required profile fields must exist for QNN runs
+psnr,supporting_evidence,distortion_full_reference,HR/reference,low,active,sanity and regression,final GAN SR quality,Can punish perceptual SR that looks sharper
+ssim,supporting_evidence,structure_full_reference,HR/reference,low,active,sanity and regression,final GAN SR quality,Better than PSNR alone but still not enough
+ms_ssim,supporting_evidence,structure_full_reference,HR/reference,medium,planned,full-reference structure comparison,hard gate before calibration,Useful later if implemented through pyiqa/piq
+mean_abs_diff,supporting_evidence,difference,reference_or_baseline,low,active,change magnitude,quality pass/fail,Shows how much output changed
+sharpness_laplacian,supporting_evidence,no_reference_proxy,none,low,active,detect sharpness changes,quality pass/fail,Can reward noise/oversharpening
+lpips,diagnostic,perceptual_full_reference,HR/reference,high,planned,artifact investigation and metric-human alignment,hard gate before calibration,Useful for perceptual distance but costs more
+dists,diagnostic,perceptual_full_reference,HR/reference,high,planned,metric research on IQA datasets,hard gate before calibration,Mentioned in visual algorithm evaluation doc
+vsi_fsim_vif,diagnostic,feature_full_reference,HR/reference,medium,planned,metric research on IQA datasets,hard gate before calibration,Use only if implementation is stable
+niqe_musiq_topiq,diagnostic,no_reference_iqa,none,medium_high,planned,no-reference real-photo quality checks,SR pass/fail without calibration,Needs authentic IQA calibration
+ringing,diagnostic,artifact,edge_or_texture_roi,medium,planned,oversharpening/halo investigation,global hard gate before ROI calibration,Needs stable ROI definition
+visual_noise,diagnostic,noise,flat_or_noise_roi,medium,planned,low-light/noise investigation,global hard gate before ROI calibration,Needs stable ROI definition
+mllm_quality_label,diagnostic,assistant_review,contact_sheet_or_images,high,planned,assist human review after label accumulation,automatic pass/fail,Must preserve uncertain/manual-review state
+human_review,visual_veto,manual,contact_sheet,medium,active,final quality decision,runner validity,Use structured template and failure taxonomy

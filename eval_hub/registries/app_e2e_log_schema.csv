@@ -1,0 +1,30 @@
+field,required,type,example,why_needed
+run_id,yes,string,20260718_103000_app_qnn_w8a8_full_rb5,Connects app logs to a result folder
+timestamp,yes,string,2026-07-18 10:30 +0800,Reproducibility and sorting
+device,yes,string,RB5 Gen2 QCS8550,Device identity
+android_version,yes,string,Android 13,Runtime environment
+app_commit,yes,string,c7c2de8-dirty,Source traceability
+model_name,yes,string,Real-ESRGAN general x4v3,Model identity
+model_variant,yes,string,qnn_context_binary_w8a8,Model/backend variant
+backend,yes,string,QNN app native,Backend identity
+input_source,yes,string,camera_roi_128 or manifest case_id,Input identity
+input_size,yes,string,128x128,Input shape
+output_size,yes,string,512x512,Output shape
+preprocess_ms,yes,float,4.2,Pipeline latency split
+inference_ms,yes,float,13.8,Pipeline latency split
+postprocess_ms,yes,float,2.9,Pipeline latency split
+e2e_ms,yes,float,26.5,End-to-end app latency
+steady_state_window,yes,string,frames 20-120,Separates warmup from steady state
+p50_e2e_ms,no,float,27.1,Stable latency summary
+p95_e2e_ms,no,float,34.8,Tail latency summary
+memory_mb,no,float,312.5,Resource evidence
+cpu_percent,no,float,28.0,Resource evidence
+gpu_percent,no,float,0.0,Resource evidence when available
+npu_or_dsp_note,no,string,HTP active from QNN profile if available,Acceleration evidence
+power_w,no,float,3.8,Power/perf-watt evidence
+skin_temp_c,no,float,42.1,Thermal evidence
+thermal_status,no,string,nominal/throttling,Sustained-run boundary
+fallback_code,no,string,none or qnn_load_failed,Fallback/debug evidence
+failure_code,no,string,none or GEOMETRY_MISMATCH,Shared taxonomy hook
+human_decision,no,string,pass/conditional/fail,Visual review hook
+notes,no,string,not app e2e if qnn-net-run,Boundary notes
