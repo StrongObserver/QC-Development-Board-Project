@@ -1,13 +1,16 @@
-"""Run RB5_SR_Benchmark_v1 smoke cases with local RB5 QNN context binary.
+"""Run RB5_SR_Benchmark_v1 cases with local RB5 QNN context binary.
 
 This script stages QAIRT qnn-net-run under /data/local/tmp/qnn_sr, runs the
-six smoke cases from RB5_SR_Benchmark_v1, converts QNN raw outputs to PNG, and
+selected cases from RB5_SR_Benchmark_v1, converts QNN raw outputs to PNG, and
 creates metrics plus contact sheets for quick human review.
 """
 
 from __future__ import annotations
 
+import argparse
 import csv
+import json
+import math
 import shutil
 import subprocess
 import time
@@ -17,6 +20,8 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+
+from loop_policy import environment_blocked_payload, make_loop_state_payload
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -39,7 +44,7 @@ OUTPUT_ZERO_POINT = 25
 
 
 @dataclass(frozen=True)
-class SmokeCase:
+class BenchmarkCase:
     case_id: str
     category: str
     dataset: str
@@ -47,7 +52,7 @@ class SmokeCase:
     lr_128: Path
     bicubic_512: Path
     hr_512: Path
-    why_in_smoke: str
+    selection_note: str
 
 
 def run(cmd: list[str], *, cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -63,29 +68,48 @@ def require_file(path: Path) -> None:
         raise FileNotFoundError(path)
 
 
-def load_smoke_cases() -> list[SmokeCase]:
+def load_cases(input_set: str) -> list[BenchmarkCase]:
     manifest: dict[str, dict[str, str]] = {}
     with (BENCHMARK_ROOT / "manifest.csv").open("r", encoding="utf-8-sig", newline="") as f:
         for row in csv.DictReader(f):
             manifest[row["case_id"]] = row
 
-    cases: list[SmokeCase] = []
-    with (BENCHMARK_ROOT / "qa" / "smoke_subset.csv").open("r", encoding="utf-8-sig", newline="") as f:
-        for row in csv.DictReader(f):
-            m = manifest[row["case_id"]]
+    cases: list[BenchmarkCase] = []
+    if input_set == "smoke":
+        with (BENCHMARK_ROOT / "qa" / "smoke_subset.csv").open("r", encoding="utf-8-sig", newline="") as f:
+            for row in csv.DictReader(f):
+                m = manifest[row["case_id"]]
+                cases.append(
+                    BenchmarkCase(
+                        case_id=row["case_id"],
+                        category=row["category"],
+                        dataset=row["dataset"],
+                        source_id=row["source_id"],
+                        lr_128=Path(m["lr_128"]),
+                        bicubic_512=Path(m["bicubic_512"]),
+                        hr_512=Path(m["hr_512"]),
+                        selection_note=row["why_in_smoke"],
+                    )
+                )
+        return cases
+
+    if input_set == "full":
+        for row in manifest.values():
             cases.append(
-                SmokeCase(
+                BenchmarkCase(
                     case_id=row["case_id"],
                     category=row["category"],
                     dataset=row["dataset"],
                     source_id=row["source_id"],
-                    lr_128=Path(m["lr_128"]),
-                    bicubic_512=Path(m["bicubic_512"]),
-                    hr_512=Path(m["hr_512"]),
-                    why_in_smoke=row["why_in_smoke"],
+                    lr_128=Path(row["lr_128"]),
+                    bicubic_512=Path(row["bicubic_512"]),
+                    hr_512=Path(row["hr_512"]),
+                    selection_note=row.get("selection_reason", ""),
                 )
             )
-    return cases
+        return cases
+
+    raise ValueError(f"unsupported input_set: {input_set}")
 
 
 def image_to_raw_rgb(path: Path, raw_path: Path) -> None:
@@ -107,6 +131,10 @@ def qnn_raw_to_bgr(raw_path: Path) -> np.ndarray:
     rgb_f32 = np.clip((y.astype(np.float32) - OUTPUT_ZERO_POINT) * OUTPUT_SCALE, 0.0, 1.0)
     rgb_u8 = (rgb_f32 * 255.0 + 0.5).astype(np.uint8)
     return cv2.cvtColor(rgb_u8, cv2.COLOR_RGB2BGR)
+
+
+def image_stddev(image: np.ndarray) -> float:
+    return float(np.std(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)))
 
 
 def psnr(reference: np.ndarray, candidate: np.ndarray) -> float:
@@ -131,6 +159,36 @@ def ssim(reference: np.ndarray, candidate: np.ndarray) -> float:
 
 def sharpness(image: np.ndarray) -> float:
     return float(cv2.Laplacian(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), cv2.CV_64F).var())
+
+
+def percentile(values: list[float], q: float) -> float:
+    if not values:
+        return float("nan")
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    pos = (len(ordered) - 1) * q
+    lower = int(pos)
+    upper = min(lower + 1, len(ordered) - 1)
+    weight = pos - lower
+    return ordered[lower] * (1.0 - weight) + ordered[upper] * weight
+
+
+def summarize_values(values: list[float]) -> tuple[str, str, str]:
+    if not values:
+        return "", "", ""
+    return (
+        f"{float(np.mean(values)):.1f}",
+        f"{percentile(values, 0.50):.1f}",
+        f"{percentile(values, 0.95):.1f}",
+    )
+
+
+def numeric_profile_value(profile: dict[str, str], key: str) -> float:
+    try:
+        return float(profile.get(key, ""))
+    except ValueError:
+        return float("nan")
 
 
 def parse_profile(profile_csv: Path) -> dict[str, str]:
@@ -200,7 +258,9 @@ def write_contact_sheet(rows: list[dict[str, str]], out_path: Path) -> None:
             continue
         thumb = cv2.resize(sheet, (880, 236), interpolation=cv2.INTER_AREA)
         header = np.full((34, 880, 3), 245, dtype=np.uint8)
-        text = f"{row['case_id']} | {row['category']} | QNN {row['netrun_execute_us']} us | PSNR {row['psnr_qnn_vs_hr']}"
+        netrun_us = row.get("netrun_execute_p50_us", row.get("netrun_execute_us", ""))
+        decision = row.get("auto_loop_decision", "")
+        text = f"{row['case_id']} | {row['category']} | {decision} | QNN p50 {netrun_us} us | PSNR {row['psnr_qnn_vs_hr']}"
         cv2.putText(header, text[:115], (8, 23), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (20, 20, 20), 1, cv2.LINE_AA)
         panels.append(np.vstack([header, thumb]))
     cv2.imwrite(str(out_path), np.vstack(panels))
@@ -225,20 +285,239 @@ def write_csv(path: Path, rows: list[dict[str, str]]) -> None:
         writer.writerows(rows)
 
 
-def write_summary(out_root: Path, run_id: str, rows: list[dict[str, str]], by_category: Path) -> None:
-    summary_lines = [
-        "# RB5 QNN W8A8 Smoke Summary",
+def json_safe(value):
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    if isinstance(value, dict):
+        return {key: json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [json_safe(item) for item in value]
+    return value
+
+
+def git_revision(repo_root: Path) -> str:
+    try:
+        head = subprocess.check_output(
+            ["git", "-C", str(repo_root), "rev-parse", "--short", "HEAD"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        status = subprocess.check_output(
+            ["git", "-C", str(repo_root), "status", "--short"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        return head + ("-dirty" if status else "")
+    except Exception:
+        return ""
+
+
+def input_csv_label(input_set: str) -> str:
+    return "qa/smoke_subset.csv" if input_set == "smoke" else "manifest.csv"
+
+
+def run_scope_label(input_set: str) -> str:
+    return "smoke" if input_set == "smoke" else "full 24-case"
+
+
+def make_run_log(
+    out_root: Path,
+    run_id: str,
+    rows: list[dict[str, str]],
+    loop_state: dict[str, object],
+    input_set: str,
+) -> dict[str, str]:
+    netrun_key = "netrun_execute_p50_us" if int(loop_state["repeat_count"]) > 1 else "netrun_execute_us"
+    accel_key = "qnn_accelerator_execute_p50_us" if int(loop_state["repeat_count"]) > 1 else "qnn_accelerator_execute_us"
+    netrun_values = [float(row[netrun_key]) / 1000.0 for row in rows if row.get(netrun_key)]
+    accel_values = [float(row[accel_key]) / 1000.0 for row in rows if row.get(accel_key)]
+    return {
+        "run_id": run_id,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M +0800"),
+        "operator": "",
+        "device": "RB5 Gen2 QCS8550",
+        "android_version": "Android 13",
+        "app_or_script_commit": git_revision(REPO_ROOT),
+        "model_name": "Real-ESRGAN general x4v3",
+        "model_variant": "qnn_context_binary_w8a8",
+        "backend": "QNN qnn-net-run HTP",
+        "quantization": "w8a8",
+        "input_set": input_csv_label(input_set),
+        "output_dir": str(out_root),
+        "num_cases": str(len(rows)),
+        "main_variable": f"local RB5 QNN W8A8 {run_scope_label(input_set)} timing and validity",
+        "frozen_variables": f"Real-ESRGAN general x4v3 W8A8 QNN context; {input_csv_label(input_set)}; 128x128 RGB uint8 input; 512x512 output; qnn-net-run retrieve_context path",
+        "avg_latency_ms": f"netrun={float(np.mean(netrun_values)):.2f}; qnn_accel={float(np.mean(accel_values)):.2f}" if netrun_values and accel_values else "",
+        "p50_latency_ms": f"netrun={percentile(netrun_values, 0.50):.2f}; qnn_accel={percentile(accel_values, 0.50):.2f}" if netrun_values and accel_values else "",
+        "p95_latency_ms": f"netrun={percentile(netrun_values, 0.95):.2f}; qnn_accel={percentile(accel_values, 0.95):.2f}" if netrun_values and accel_values else "",
+        "metric_summary": "Hard gates and auto loop decisions are in metrics.csv and loop_state.json; visual review remains final for quality.",
+        "pass_count": str(loop_state["auto_decision_counts"]["pass"]),
+        "conditional_count": str(loop_state["auto_decision_counts"]["conditional"]),
+        "fail_count": str(loop_state["auto_decision_counts"]["fail"]),
+        "blocked_by": str(loop_state["blocked_by"]),
+        "notes": f"status={loop_state['status']}; stop_reason={loop_state['stop_reason']}; next={loop_state['next_priority_task']}",
+    }
+
+
+def make_blocked_run_log(out_root: Path, run_id: str, loop_state: dict[str, object], input_set: str) -> dict[str, str]:
+    return {
+        "run_id": run_id,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M +0800"),
+        "operator": "",
+        "device": "RB5 Gen2 QCS8550",
+        "android_version": "Android 13",
+        "app_or_script_commit": git_revision(REPO_ROOT),
+        "model_name": "Real-ESRGAN general x4v3",
+        "model_variant": "qnn_context_binary_w8a8",
+        "backend": "QNN qnn-net-run HTP",
+        "quantization": "w8a8",
+        "input_set": input_csv_label(input_set),
+        "output_dir": str(out_root),
+        "num_cases": "0",
+        "main_variable": f"environment preflight for local RB5 QNN W8A8 {run_scope_label(input_set)}",
+        "frozen_variables": f"same QNN context, QAIRT root, device serial, and {input_csv_label(input_set)} protocol",
+        "avg_latency_ms": "",
+        "p50_latency_ms": "",
+        "p95_latency_ms": "",
+        "metric_summary": "Preflight failed before benchmark execution.",
+        "pass_count": "0",
+        "conditional_count": "0",
+        "fail_count": "0",
+        "blocked_by": str(loop_state["blocked_by"]),
+        "notes": f"status={loop_state['status']}; stop_reason={loop_state['stop_reason']}; next={loop_state['next_priority_task']}",
+    }
+
+
+def write_blocked_closeout(
+    out_root: Path,
+    run_id: str,
+    loop_state: dict[str, object],
+    preflight_stdout: str,
+    input_set: str,
+) -> None:
+    (out_root / "preflight_stdout.txt").write_text(preflight_stdout, encoding="utf-8")
+    (out_root / "loop_state.json").write_text(
+        json.dumps(json_safe(loop_state), ensure_ascii=False, indent=2, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
+    write_csv(out_root / "run_log.csv", [make_blocked_run_log(out_root, run_id, loop_state, input_set)])
+
+    summary = [
+        f"# RB5 QNN W8A8 {run_scope_label(input_set).title()} Summary",
         "",
         f"- run_id: {run_id}",
+        f"- input_set: {input_csv_label(input_set)}",
+        "- cases: 0",
+        f"- loop_status: {loop_state['status']}",
+        f"- stop_reason: {loop_state['stop_reason']}",
+        f"- blocked_by: {loop_state['blocked_by']}",
+        f"- next_priority_task: {loop_state['next_priority_task']}",
+        "",
+        "## What Happened",
+        "",
+        "Benchmark execution did not start because preflight failed.",
+        "This is an environment/tooling blocker, not a model-quality or QNN-output result.",
+        "",
+        "## Evidence",
+        "",
+        f"- preflight stdout: `{out_root / 'preflight_stdout.txt'}`",
+        f"- loop state: `{out_root / 'loop_state.json'}`",
+        f"- run log: `{out_root / 'run_log.csv'}`",
+        "",
+        "## Boundary",
+        "",
+        "Do not use this run for latency, quality, or QNN correctness claims.",
+    ]
+    (out_root / "SUMMARY.md").write_text("\n".join(summary) + "\n", encoding="utf-8")
+
+    next_action = [
+        "# Next Action",
+        "",
+        "## 当前结论",
+        "",
+        f"本轮 QNN {run_scope_label(input_set)} benchmark 没有真正开始，预检阶段失败。该问题属于环境/设备连接阻塞，不是模型质量问题，也不是 QNN runner 输出错误。",
+        "",
+        "## 当前阻塞",
+        "",
+        str(loop_state["blocked_by"]),
+        "",
+        "## 下一步最高优先级任务",
+        "",
+        f"下一步优先做：【{loop_state['next_priority_task']}】",
+        "",
+        "## 为什么是这个任务",
+        "",
+        str(loop_state["notes"]),
+        "",
+        "## 下轮 AI 开始前必须先读",
+        "",
+        "```text",
+        r"C:\Users\Admin\Desktop\QC-Development-Board-Project\PROJECT_ENTRYPOINTS.md",
+        str(out_root / "SUMMARY.md"),
+        str(out_root / "run_log.csv"),
+        str(out_root / "loop_state.json"),
+        str(out_root / "preflight_stdout.txt"),
+        "```",
+        "",
+        "## 不要做什么",
+        "",
+        "- 不要把这个 run 当成性能或画质证据。",
+        "- 不要触发画质知识库；当前还没有模型输出。",
+        "- 不要跳到 Path B app 接入；先恢复 ADB/RB5 连接。",
+        "",
+        "## 需要用户人工判断的点",
+        "",
+        "需要用户确认 RB5 是否已连接并允许 ADB 访问。Windows 侧先运行 `adb devices`，必须能看到 `ff5d3ab4 device`。",
+    ]
+    (out_root / "NEXT_ACTION.md").write_text("\n".join(next_action) + "\n", encoding="utf-8")
+
+
+def preflight_check() -> tuple[bool, str, str]:
+    messages: list[str] = []
+    for path in [QAIRT_ROOT, CONTEXT_BINARY, QNN_LOCAL_RUN / "run_on_device.sh"]:
+        if not path.exists():
+            messages.append(f"MISSING_PATH: {path}")
+    devices = run(["adb", "devices"], check=False)
+    messages.append("$ adb devices")
+    messages.append(devices.stdout.strip())
+    expected = f"{DEVICE_SERIAL}\tdevice"
+    if expected not in devices.stdout:
+        messages.append(f"DEVICE_NOT_FOUND: expected `{expected}`")
+    if any(line.startswith(("MISSING_PATH:", "DEVICE_NOT_FOUND:")) for line in messages):
+        return False, "ADB_OR_REQUIRED_FILE_PREFLIGHT_FAILED", "\n".join(messages) + "\n"
+    return True, "", "\n".join(messages) + "\n"
+
+
+def write_summary(
+    out_root: Path,
+    run_id: str,
+    rows: list[dict[str, str]],
+    by_category: Path,
+    loop_state: dict[str, object],
+    input_set: str,
+) -> None:
+    summary_lines = [
+        f"# RB5 QNN W8A8 {run_scope_label(input_set).title()} Summary",
+        "",
+        f"- run_id: {run_id}",
+        f"- input_set: {input_csv_label(input_set)}",
         f"- cases: {len(rows)}",
+        f"- repeat_count: {loop_state['repeat_count']}",
         "- device: RB5 Gen2 / QCS8550 / Android 13",
         "- runtime: QAIRT qnn-net-run 2.45.0.260326154327",
         "- context: real_esrgan_general_x4v3 QNN context binary W8A8",
         "- important: ADSP_LIBRARY_PATH is intentionally unset in run_on_device.sh",
+        f"- loop_status: {loop_state['status']}",
+        f"- stop_reason: {loop_state['stop_reason']}",
+        f"- next_priority_task: {loop_state['next_priority_task']}",
+        f"- main_variable: local RB5 QNN W8A8 {run_scope_label(input_set)} timing and validity",
+        f"- frozen_variables: {input_csv_label(input_set)}, QNN context binary, QAIRT runner path, input/output tensor shape, and review protocol",
         "",
         "## Outputs",
         "",
         f"- metrics: `{out_root / 'metrics.csv'}`",
+        f"- run log: `{out_root / 'run_log.csv'}`",
+        f"- loop state: `{out_root / 'loop_state.json'}`",
         f"- contact sheet: `{out_root / 'contact_sheet.png'}`",
         f"- human review guide: `{out_root / 'HUMAN_REVIEW_GUIDE.md'}`",
         f"- next action: `{out_root / 'NEXT_ACTION.md'}`",
@@ -246,38 +525,64 @@ def write_summary(out_root: Path, run_id: str, rows: list[dict[str, str]], by_ca
         "",
         "## Quick Result Table",
         "",
-        "| case | category | NetRun us | QNN accel us | PSNR QNN-HR | PSNR delta vs bicubic |",
-        "| --- | --- | ---: | ---: | ---: | ---: |",
+        "| case | category | decision | NetRun p50 us | QNN accel p50 us | PSNR QNN-HR | PSNR delta vs bicubic |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: |",
     ]
     for row in rows:
         summary_lines.append(
-            f"| {row['case_id']} | {row['category']} | {row['netrun_execute_us']} | "
-            f"{row['qnn_accelerator_execute_us']} | {row['psnr_qnn_vs_hr']} | "
+            f"| {row['case_id']} | {row['category']} | {row['auto_loop_decision']} | "
+            f"{row.get('netrun_execute_p50_us', row.get('netrun_execute_us', ''))} | "
+            f"{row.get('qnn_accelerator_execute_p50_us', row.get('qnn_accelerator_execute_us', ''))} | "
+            f"{row['psnr_qnn_vs_hr']} | "
             f"{row['psnr_delta_qnn_minus_bicubic']} |"
         )
     summary_lines.extend(
         [
             "",
+            "## Loop Boundary",
+            "",
+            f"- current status: `{loop_state['status']}`",
+            f"- stop reason: `{loop_state['stop_reason']}`",
+            f"- next priority task: `{loop_state['next_priority_task']}`",
+            f"- human review required: `{str(loop_state['requires_human_review']).lower()}`",
+            f"- notes: {loop_state['notes']}",
+            "- metric policy: hard gates validate runner/output; PSNR/SSIM/sharpness are supporting evidence; contact sheet review owns quality.",
+            "",
             "## Boundary",
             "",
-            "This is local RB5 `qnn-net-run` smoke evidence, not Android app end-to-end timing.",
+            f"This is local RB5 `qnn-net-run` {run_scope_label(input_set)} evidence, not Android app end-to-end timing.",
             "For performance claims, run repeated inputs and report p50/p95 separately.",
         ]
     )
     (out_root / "SUMMARY.md").write_text("\n".join(summary_lines) + "\n", encoding="utf-8")
 
 
-def write_human_review_guide(out_root: Path, rows: list[dict[str, str]]) -> None:
-    avg_netrun = average_number(rows, "netrun_execute_us") / 1000.0
-    avg_accel = average_number(rows, "qnn_accelerator_execute_us") / 1000.0
+def write_human_review_guide(
+    out_root: Path,
+    rows: list[dict[str, str]],
+    loop_state: dict[str, object],
+    input_set: str,
+) -> None:
+    netrun_key = "netrun_execute_p50_us" if int(loop_state["repeat_count"]) > 1 else "netrun_execute_us"
+    accel_key = "qnn_accelerator_execute_p50_us" if int(loop_state["repeat_count"]) > 1 else "qnn_accelerator_execute_us"
+    avg_netrun = average_number(rows, netrun_key) / 1000.0
+    avg_accel = average_number(rows, accel_key) / 1000.0
     guide = [
         "# 人工 Review 指南",
         "",
-        "这次结果用于验证：本地 RB5 能否通过 `qnn-net-run` 跑通 Real-ESRGAN W8A8 QNN context binary，并在 6 个 smoke case 上产出可看的超分结果。",
+        f"这次结果用于验证：本地 RB5 能否通过 `qnn-net-run` 跑通 Real-ESRGAN W8A8 QNN context binary，并在 `{input_csv_label(input_set)}` 的 {len(rows)} 个 case 上产出可看的超分结果。",
+        "",
+        "## Loop 状态",
+        "",
+        f"- 当前状态：`{loop_state['status']}`",
+        f"- 停止原因：`{loop_state['stop_reason']}`",
+        f"- 下一步优先任务：`{loop_state['next_priority_task']}`",
+        f"- 是否需要人工看图：`{str(loop_state['requires_human_review']).lower()}`",
+        f"- 说明：{loop_state['notes']}",
         "",
         "## 已经通过的点",
         "",
-        "- 6 个 smoke case 都已经在本地 RB5 上通过 `qnn-net-run` 执行成功。",
+        f"- {len(rows)} 个 {run_scope_label(input_set)} case 都已经在本地 RB5 上通过 `qnn-net-run` 执行成功。",
         "- 每个 case 都生成了 512x512 的 QNN 输出图。",
         "- 优先查看 `contact_sheet.png`，确认是否有空图、旋转、镜像、裁剪错位。",
         "- 输出风格应与 Real-ESRGAN / W8A8 一致：通常比 bicubic 更锐，但低光自然纹理可能出现 conditional 情况。",
@@ -320,33 +625,41 @@ def write_human_review_guide(out_root: Path, rows: list[dict[str, str]]) -> None
         "",
         "## 当前建议",
         "",
-        "如果 contact sheet 未见阻断问题，可以进入下一步：多次运行统计稳定 p50/p95，或开始 Path B native runner / Android app 接入。用户当前口播模板的最新要求优先于这里的建议。",
+        "如果 contact sheet 未见阻断问题，按 `loop_state.json` 里的 `next_priority_task` 继续。用户当前口播模板的最新要求优先于这里的建议。",
     ]
     (out_root / "HUMAN_REVIEW_GUIDE.md").write_text("\n".join(guide) + "\n", encoding="utf-8")
 
 
-def write_next_action(out_root: Path, run_id: str, rows: list[dict[str, str]]) -> None:
-    avg_netrun = average_number(rows, "netrun_execute_us") / 1000.0
-    avg_accel = average_number(rows, "qnn_accelerator_execute_us") / 1000.0
+def write_next_action(
+    out_root: Path,
+    run_id: str,
+    rows: list[dict[str, str]],
+    loop_state: dict[str, object],
+    input_set: str,
+) -> None:
+    netrun_key = "netrun_execute_p50_us" if int(loop_state["repeat_count"]) > 1 else "netrun_execute_us"
+    accel_key = "qnn_accelerator_execute_p50_us" if int(loop_state["repeat_count"]) > 1 else "qnn_accelerator_execute_us"
+    avg_netrun = average_number(rows, netrun_key) / 1000.0
+    avg_accel = average_number(rows, accel_key) / 1000.0
     next_action = [
         "# Next Action",
         "",
         "## 当前结论",
         "",
-        f"本轮 `{run_id}` 已完成本地 RB5 QNN W8A8 smoke benchmark。6 个 smoke case 均通过 `qnn-net-run --retrieve_context` 生成 512x512 QNN 输出；本轮平均 NetRun execute 约 "
+        f"本轮 `{run_id}` 已完成本地 RB5 QNN W8A8 {run_scope_label(input_set)} benchmark。{len(rows)} 个 case 均通过 `qnn-net-run --retrieve_context` 生成 512x512 QNN 输出；本轮平均 NetRun execute 约 "
         f"{avg_netrun:.2f} ms，平均 QNN accelerator execute 约 {avg_accel:.2f} ms。",
         "",
         "## 当前阻塞",
         "",
-        "无阻塞。",
+        "无阻塞。" if not loop_state["blocked_by"] else str(loop_state["blocked_by"]),
         "",
         "## 下一步最高优先级任务",
         "",
-        "下一步优先做：【根据用户当前口播模板选择：多次运行统计 p50/p95，或进入 Path B native runner / Android app 接入】",
+        f"下一步优先做：【{loop_state['next_priority_task']}】",
         "",
         "## 为什么是这个任务",
         "",
-        "本轮已经证明 Path A 本地 QNN smoke 可跑通。下一步要么把性能数据从单次 smoke 升级为稳定 p50/p95，要么把已验证的 QNN context binary 接到更接近产品形态的 native/app 路径。",
+        str(loop_state["notes"]),
         "",
         "## 下轮 AI 开始前必须先读",
         "",
@@ -357,6 +670,8 @@ def write_next_action(out_root: Path, run_id: str, rows: list[dict[str, str]]) -
         str(out_root / "SUMMARY.md"),
         str(out_root / "HUMAN_REVIEW_GUIDE.md"),
         str(out_root / "metrics.csv"),
+        str(out_root / "run_log.csv"),
+        str(out_root / "loop_state.json"),
         str(out_root / "contact_sheet.png"),
         "```",
         "",
@@ -369,7 +684,7 @@ def write_next_action(out_root: Path, run_id: str, rows: list[dict[str, str]]) -
         "",
         "## 需要用户人工判断的点",
         "",
-        "需要用户优先查看 `contact_sheet.png`。如果发现某个 case 视觉失败，应先定位问题来源，再决定是否继续性能统计或 Path B。",
+        "需要用户优先查看 `contact_sheet.png`。" if loop_state["requires_human_review"] else "暂不需要用户人工判断。",
     ]
     (out_root / "NEXT_ACTION.md").write_text("\n".join(next_action) + "\n", encoding="utf-8")
 
@@ -396,23 +711,56 @@ def stage_common_files() -> None:
     adb("shell", f"chmod 755 {DEVICE_DIR}/qnn-net-run {DEVICE_DIR}/qnn-profile-viewer {DEVICE_DIR}/run_on_device.sh")
 
 
-def main() -> None:
-    for path in [QAIRT_ROOT, CONTEXT_BINARY, QNN_LOCAL_RUN / "run_on_device.sh"]:
-        require_file(path)
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--input-set",
+        choices=["smoke", "full"],
+        default="smoke",
+        help="Use qa/smoke_subset.csv or the full manifest.csv.",
+    )
+    parser.add_argument("--repeats", type=int, default=1, help="Run each selected case this many times for p50/p95 timing.")
+    parser.add_argument("--run-id", default="", help="Optional result folder name.")
+    return parser.parse_args()
 
-    run_id = datetime.now().strftime("%Y%m%d_%H%M%S_qnn_w8a8_smoke_rb5")
+
+def main() -> None:
+    args = parse_args()
+    if args.repeats < 1:
+        raise ValueError("--repeats must be >= 1")
+
+    run_suffix = "qnn_w8a8_smoke_rb5" if args.input_set == "smoke" else "qnn_w8a8_full_rb5"
+    run_id = args.run_id or datetime.now().strftime(f"%Y%m%d_%H%M%S_{run_suffix}")
     out_root = BENCHMARK_ROOT / "results" / run_id
     by_category = out_root / "by_category"
     raw_inputs = out_root / "raw_inputs"
     out_root.mkdir(parents=True, exist_ok=True)
     raw_inputs.mkdir(parents=True, exist_ok=True)
 
+    preflight_ok, blocked_by, preflight_stdout = preflight_check()
+    if not preflight_ok:
+        loop_state = environment_blocked_payload(
+            run_id=run_id,
+            output_dir=out_root,
+            repeat_count=args.repeats,
+            blocked_by=blocked_by,
+            notes="Preflight failed before running qnn-net-run. Fix ADB device connection or required local paths, then rerun the same command.",
+            input_set=args.input_set,
+        )
+        write_blocked_closeout(out_root, run_id, loop_state, preflight_stdout, args.input_set)
+        print(f"[blocked] wrote {out_root}")
+        return
+
+    for path in [QAIRT_ROOT, CONTEXT_BINARY, QNN_LOCAL_RUN / "run_on_device.sh"]:
+        require_file(path)
+
     print(f"[stage] {DEVICE_DIR}")
     stage_common_files()
 
+    cases = load_cases(args.input_set)
     rows: list[dict[str, str]] = []
-    for index, case in enumerate(load_smoke_cases(), start=1):
-        print(f"[{index}/6] {case.case_id}")
+    for index, case in enumerate(cases, start=1):
+        print(f"[{index}/{len(cases)}] {case.case_id}")
         case_dir = by_category / case.category / case.case_id
         case_dir.mkdir(parents=True, exist_ok=True)
         local_raw = raw_inputs / f"{case.case_id}.raw"
@@ -421,21 +769,39 @@ def main() -> None:
         (raw_inputs / "input_list.txt").write_text("input.raw\n", encoding="ascii")
         adb("push", str(raw_inputs / "input_list.txt"), f"{DEVICE_DIR}/input_list.txt")
 
-        t0 = time.perf_counter()
-        completed = adb("shell", f"{DEVICE_DIR}/run_on_device.sh", check=False)
-        wall_ms = (time.perf_counter() - t0) * 1000.0
-        (case_dir / "qnn_net_run_stdout.txt").write_text(completed.stdout, encoding="utf-8")
-        if completed.returncode != 0:
-            raise RuntimeError(f"qnn-net-run failed for {case.case_id}:\n{completed.stdout}")
+        repeat_profiles: list[dict[str, str]] = []
+        repeat_wall_ms: list[float] = []
+        qnn_bgr: np.ndarray | None = None
+        raw_out_size = 0
 
-        pull_dir = case_dir / "pulled_output"
-        if pull_dir.exists():
-            shutil.rmtree(pull_dir)
-        pull_dir.mkdir(parents=True)
-        adb("pull", f"{DEVICE_DIR}/output", str(pull_dir))
-        raw_out = pull_dir / "output" / "Result_0" / "upscaled_image_native.raw"
-        require_file(raw_out)
-        qnn_bgr = qnn_raw_to_bgr(raw_out)
+        for repeat_index in range(1, args.repeats + 1):
+            print(f"  repeat {repeat_index}/{args.repeats}")
+            t0 = time.perf_counter()
+            completed = adb("shell", f"{DEVICE_DIR}/run_on_device.sh", check=False)
+            wall_ms = (time.perf_counter() - t0) * 1000.0
+            repeat_wall_ms.append(wall_ms)
+            stdout_path = case_dir / (
+                "qnn_net_run_stdout.txt" if args.repeats == 1 else f"qnn_net_run_stdout_r{repeat_index:02d}.txt"
+            )
+            stdout_path.write_text(completed.stdout, encoding="utf-8")
+            if completed.returncode != 0:
+                raise RuntimeError(f"qnn-net-run failed for {case.case_id} repeat {repeat_index}:\n{completed.stdout}")
+
+            current_pull_dir = case_dir / (
+                "pulled_output" if args.repeats == 1 else f"pulled_output_r{repeat_index:02d}"
+            )
+            if current_pull_dir.exists():
+                shutil.rmtree(current_pull_dir)
+            current_pull_dir.mkdir(parents=True)
+            adb("pull", f"{DEVICE_DIR}/output", str(current_pull_dir))
+            raw_out = current_pull_dir / "output" / "Result_0" / "upscaled_image_native.raw"
+            require_file(raw_out)
+            raw_out_size = raw_out.stat().st_size
+            qnn_bgr = qnn_raw_to_bgr(raw_out)
+            repeat_profiles.append(parse_profile(current_pull_dir / "output" / "profile_viewer.csv"))
+
+        if qnn_bgr is None:
+            raise RuntimeError(f"no QNN output generated for {case.case_id}")
 
         lr = cv2.imread(str(case.lr_128), cv2.IMREAD_COLOR)
         bicubic = cv2.imread(str(case.bicubic_512), cv2.IMREAD_COLOR)
@@ -449,14 +815,43 @@ def main() -> None:
         cv2.imwrite(str(case_dir / "hr_512.png"), hr)
         write_case_sheet(case_dir / "case_contact_sheet.png", lr, bicubic, qnn_bgr, hr)
 
-        profile = parse_profile(pull_dir / "output" / "profile_viewer.csv")
+        profile = repeat_profiles[-1]
+        netrun_values = [numeric_profile_value(p, "netrun_execute_us") for p in repeat_profiles]
+        qnn_values = [numeric_profile_value(p, "qnn_execute_us") for p in repeat_profiles]
+        accel_values = [numeric_profile_value(p, "qnn_accelerator_execute_us") for p in repeat_profiles]
+        rpc_values = [numeric_profile_value(p, "rpc_execute_us") for p in repeat_profiles]
+        netrun_avg, netrun_p50, netrun_p95 = summarize_values(netrun_values)
+        qnn_avg, qnn_p50, qnn_p95 = summarize_values(qnn_values)
+        accel_avg, accel_p50, accel_p95 = summarize_values(accel_values)
+        rpc_avg, rpc_p50, rpc_p95 = summarize_values(rpc_values)
+        wall_avg, wall_p50, wall_p95 = summarize_values(repeat_wall_ms)
         rows.append({
             "case_id": case.case_id,
             "category": case.category,
             "dataset": case.dataset,
             "source_id": case.source_id,
-            "wall_ms": f"{wall_ms:.1f}",
+            "main_variable": f"local RB5 QNN W8A8 {run_scope_label(args.input_set)} timing and validity",
+            "frozen_variables": f"{input_csv_label(args.input_set)}; Real-ESRGAN W8A8 QNN context; 128 input; 512 output; qnn-net-run retrieve_context",
+            "repeat_count": str(args.repeats),
+            "wall_ms": wall_avg,
+            "wall_p50_ms": wall_p50,
+            "wall_p95_ms": wall_p95,
             **profile,
+            "netrun_execute_avg_us": netrun_avg,
+            "netrun_execute_p50_us": netrun_p50,
+            "netrun_execute_p95_us": netrun_p95,
+            "qnn_execute_avg_us": qnn_avg,
+            "qnn_execute_p50_us": qnn_p50,
+            "qnn_execute_p95_us": qnn_p95,
+            "qnn_accelerator_execute_avg_us": accel_avg,
+            "qnn_accelerator_execute_p50_us": accel_p50,
+            "qnn_accelerator_execute_p95_us": accel_p95,
+            "rpc_execute_avg_us": rpc_avg,
+            "rpc_execute_p50_us": rpc_p50,
+            "rpc_execute_p95_us": rpc_p95,
+            "output_size": f"{qnn_bgr.shape[1]}x{qnn_bgr.shape[0]}",
+            "raw_output_bytes": str(raw_out_size),
+            "output_stddev": f"{image_stddev(qnn_bgr):.3f}",
             "psnr_bicubic_vs_hr": f"{psnr(hr, bicubic):.2f}",
             "ssim_bicubic_vs_hr": f"{ssim(hr, bicubic):.4f}",
             "psnr_qnn_vs_hr": f"{psnr(hr, qnn_bgr):.2f}",
@@ -467,15 +862,27 @@ def main() -> None:
             "sharpness_qnn_over_bicubic": f"{sharpness(qnn_bgr) / sharpness(bicubic):.3f}" if sharpness(bicubic) > 0 else "",
             "case_contact_sheet": str(case_dir / "case_contact_sheet.png"),
             "qnn_png": str(case_dir / "qnn_w8a8_512.png"),
-            "why_in_smoke": case.why_in_smoke,
+            "selection_note": case.selection_note,
             "review_hint": "Check QNN image against bicubic and HR; metrics are supporting evidence, not final visual judgment.",
         })
 
+    loop_state = make_loop_state_payload(
+        run_id=run_id,
+        output_dir=out_root,
+        rows=rows,
+        repeat_count=args.repeats,
+        input_set=args.input_set,
+    )
     write_csv(out_root / "metrics.csv", rows)
+    write_csv(out_root / "run_log.csv", [make_run_log(out_root, run_id, rows, loop_state, args.input_set)])
+    (out_root / "loop_state.json").write_text(
+        json.dumps(json_safe(loop_state), ensure_ascii=False, indent=2, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
     write_contact_sheet(rows, out_root / "contact_sheet.png")
-    write_summary(out_root, run_id, rows, by_category)
-    write_human_review_guide(out_root, rows)
-    write_next_action(out_root, run_id, rows)
+    write_summary(out_root, run_id, rows, by_category, loop_state, args.input_set)
+    write_human_review_guide(out_root, rows, loop_state, args.input_set)
+    write_next_action(out_root, run_id, rows, loop_state, args.input_set)
     print(f"[ok] wrote {out_root}")
 
 

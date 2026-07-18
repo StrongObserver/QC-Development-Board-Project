@@ -309,6 +309,8 @@ def make_run_log(
         "input_set": "qa/smoke_subset.csv" if args.smoke else "manifest.csv",
         "output_dir": str(out_dir),
         "num_cases": str(num_cases),
+        "main_variable": "model quantization variant: float32 vs W8A8 on host CPU LiteRT",
+        "frozen_variables": "same benchmark input set; same Real-ESRGAN x4v3 architecture; same 128x128 input and 512x512 HR reference; same host LiteRT timing loop",
         "avg_latency_ms": f"float={np.mean([float(row['float_mean_ms']) for row in rows]):.1f}; w8a8={np.mean([float(row['w8a8_mean_ms']) for row in rows]):.1f}",
         "p50_latency_ms": f"float={float_p50:.1f}; w8a8={w8a8_p50:.1f}",
         "p95_latency_ms": f"float={float_p95:.1f}; w8a8={w8a8_p95:.1f}",
@@ -394,6 +396,8 @@ def main() -> None:
                 "category": case.category,
                 "dataset": case.dataset,
                 "source_id": case.source_id,
+                "main_variable": "model quantization variant: float32 vs W8A8 on host CPU LiteRT",
+                "frozen_variables": "manifest/smoke subset; LR/Bicubic/HR triplet; model architecture; host LiteRT runner; warmup/runs settings",
                 "input_size": image_size(lr),
                 "output_size": image_size(float_out),
                 "float_mean_ms": f"{float_mean:.1f}",
@@ -427,6 +431,7 @@ def main() -> None:
                 "contact_sheet": rel(benchmark_root, sheet_path),
                 "selection_reason": case.selection_reason,
                 "review_boundary": "Use human review for Real-ESRGAN perceptual quality; PSNR/SSIM alone are not final acceptance.",
+                "metric_role": "PSNR/SSIM/sharpness are supporting evidence; contact sheet review owns final quality until calibrated.",
             }
         )
 
