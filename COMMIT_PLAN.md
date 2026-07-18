@@ -1,9 +1,32 @@
 # Commit Plan
 
-Updated: 2026-07-18
+Updated: 2026-07-19
 
-This repository currently contains several logical changes in one working tree.
-Do not use `git add .`.
+This file records how the large RB5 checkpoint was split. The split has already
+been committed and pushed. Keep this file as a rollback/staging reference for
+future work; do not treat it as an unfinished commit TODO.
+
+Current pushed checkpoint:
+
+```text
+e30141c docs(loop): scope negative evidence gates
+```
+
+Pushed commits in order:
+
+```text
+db0a6bf feat(app): add QNN delegate SR path
+fe55bc9 test(sr-lab): add RB5 loop evidence runners
+23350a3 docs(sr): record RB5 route decisions
+7c114d0 feat(sr): add QuickSRNet candidate assets
+3c3feb8 docs(eval): add EvalHub and research indexes
+0e92191 docs(showcase): add RB5 resume draft
+0e4cb83 docs(app): keep explicit SR model selection
+e30141c docs(loop): scope negative evidence gates
+```
+
+The worktree was clean after push. Continue to stage explicit paths only; do not
+use `git add .`.
 
 ## Commit 1: QNN Delegate App Milestone
 

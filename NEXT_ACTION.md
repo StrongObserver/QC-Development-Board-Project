@@ -15,10 +15,26 @@ The current RB5 app evidence shows fixed sample success and repeated live ROI ti
 Next priority:
 
 ```text
-Before continuing P9/P10, audit and harden the Harness/Loop policy so negative
-or conditional evidence is not misread as a reason to stop exploration. Stable
-baselines should be preserved with Git, but they are checkpoints, not ceilings.
+Proceed to P9/P10 only after the user provides or captures the minimal
+real-camera showcase set described in REAL_CAMERA_CAPTURE_PLAN.md.
+
+Do not use benchmark or fixed-sample images as a substitute for real-camera
+evidence. If no real-camera set exists, pause product/showcase claims there and
+continue only with explicitly scoped exploration lanes.
 ```
+
+## Current Checkpoint
+
+The current stable checkpoint has been committed and pushed through:
+
+```text
+e30141c docs(loop): scope negative evidence gates
+```
+
+The worktree was clean after the push. GitHub warned that
+`libQnnHtpPrepare.so` is about 83.67MB, above the recommended 50MB limit but
+below the hard 100MB limit. If repository size becomes a problem, evaluate Git
+LFS or a runtime SDK dependency strategy.
 
 ## Verified Evidence
 
@@ -241,18 +257,25 @@ classify scope: claim_gate, mainline_gate, implementation_gate, or true
 dead_end. Only a true dead_end stops a route.
 ```
 
+## What Not To Reopen As If Unfinished
+
+```text
+QNN Delegate app path
+QuickSRNet app/live validation
+P5 postprocess/sample-copy optimization
+5-minute short sustained runs
+route/metric/AIMET/YUV decision docs
+commit split and push of the current checkpoint
+```
+
 ## Next Engineering Choices
 
 Recommended order:
 
 ```text
-1. Commit/record the QNN Delegate milestone with explicit path staging.
-2. Use ROUTE_DECISION.md as the current route: no automatic dual-model live routing yet.
-3. Use EVAL_METRIC_POLICY.md to avoid PSNR-only model ranking.
-4. Preserve the 1280x960 live ROI result as the current data-path milestone.
-5. Execute ROADMAP_NEXT.md P7 only if sustained-use claims are needed: 5-10 minute power/thermal drift.
-6. Execute ROADMAP_NEXT.md P8 route update: prefer B or C, keep D out of the default path.
-7. Prepare P9 showcase material from the smallest useful evidence set.
-8. Add LPIPS/DISTS if the environment cost is acceptable.
-9. Start AIMET only if human review finds visible W8A8-vs-float degradation inside one model family.
+1. Capture the minimal real-camera set from REAL_CAMERA_CAPTURE_PLAN.md.
+2. Review that set with pass / conditional / fail labels.
+3. Decide whether app default live SR should remain explicit or switch to QuickSRNetSmall.
+4. If more latency work is needed, run a bounded YUV ROI Kotlin probe from NATIVE_YUV_ROI_PLAN.md.
+5. Add LPIPS/DISTS or AIMET only when their trigger conditions are met.
 ```
