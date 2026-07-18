@@ -60,6 +60,16 @@
         android:layout_height="wrap_content"
         android:layout_marginBottom="12dp"
         android:text="保存样张 / 长按高分辨率"
+        app:layout_constraintBottom_toTopOf="@id/qnn_fixed_button"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <Button
+        android:id="@+id/qnn_fixed_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="12dp"
+        android:text="QNN 固定样张"
         app:layout_constraintBottom_toTopOf="@id/offline_eval_button"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />

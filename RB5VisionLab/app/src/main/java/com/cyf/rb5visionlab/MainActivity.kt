@@ -7,8 +7,10 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.os.Bundle
+import android.os.Debug
 import android.os.Environment
 import android.provider.MediaStore
+import android.util.Size
 import android.util.Log
 import android.view.View
 import android.widget.Button
@@ -41,6 +43,8 @@ class MainActivity : AppCompatActivity() {
         private const val TAG = "RB5"
         private const val CAMERA_TAG = "RB5_CAMERA"
         private const val LEGACY_ANALYSIS_WIDTH = 640
+        private const val LIVE_SAMPLE_CAPTURE_INTERVAL = 30
+        private val LIVE_ANALYSIS_TARGET_SIZE = Size(1280, 960)
 
         init {
             System.loadLibrary("opencv_java4")
@@ -64,6 +68,7 @@ class MainActivity : AppCompatActivity() {
     private var latestSrSample: SrSample? = null
     private var highResResolver: SuperResolver? = null
     @Volatile private var pendingHighResSample = false
+    @Volatile private var pendingAutoLiveSr = false
 
     private data class OfflineEvalAsset(
         val label: String,
@@ -80,6 +85,22 @@ class MainActivity : AppCompatActivity() {
         val e2eMs: Long,
     )
 
+    private data class ResourceMemorySnapshot(
+        val label: String,
+        val totalPssKb: Int,
+        val dalvikPssKb: Int,
+        val nativePssKb: Int,
+        val otherPssKb: Int,
+        val runtimeUsedKb: Long,
+        val runtimeFreeKb: Long,
+        val runtimeMaxKb: Long,
+    )
+
+    private data class ProbeResolverInit(
+        val resolver: SuperResolver,
+        val initMs: Long,
+    )
+
     private val requestCameraPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) {
@@ -90,6 +111,7 @@ class MainActivity : AppCompatActivity() {
         }
 
     external fun stringFromJNI(): String
+    external fun qnnRuntimePreflight(): String
     external fun processYPlane(yData: ByteArray, width: Int, height: Int, rowStride: Int): String
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -102,13 +124,33 @@ class MainActivity : AppCompatActivity() {
 
         nativeMessage = stringFromJNI()
         Log.d(TAG, nativeMessage)
+        val qnnPreflightMessage = qnnRuntimePreflight()
+        Log.d("RB5_QNN", qnnPreflightMessage)
 
         statusTextView = findViewById(R.id.textView)
-        statusTextView.text = nativeMessage
+        statusTextView.text = "$nativeMessage\n\n$qnnPreflightMessage"
 
         cameraExecutor = Executors.newSingleThreadExecutor()
         srExecutor = Executors.newSingleThreadExecutor()
+        applyIntentSrOverrides()
         setupSuperResolution()
+        val autoRunQnnFixed = intent.getBooleanExtra("run_qnn_fixed", false)
+        val autoStartLiveSr = intent.getBooleanExtra("start_live_sr", false)
+        val autoRunResourceProbe = intent.getBooleanExtra("run_resource_probe", false)
+        Log.d("RB5_QNN", "onCreate run_qnn_fixed=$autoRunQnnFixed run_resource_probe=$autoRunResourceProbe extras=${intent.extras?.keySet()?.joinToString()}")
+        if (autoRunResourceProbe) {
+            srExecutor.execute {
+                Thread.sleep(500)
+                runResourceProbeOnWorker()
+            }
+        } else if (autoRunQnnFixed) {
+            srExecutor.execute {
+                Thread.sleep(500)
+                runOnUiThread { runQnnFixedSample() }
+            }
+        } else if (autoStartLiveSr) {
+            pendingAutoLiveSr = true
+        }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             startCamera()
         } else {
@@ -126,6 +168,7 @@ class MainActivity : AppCompatActivity() {
         val srButton = findViewById<Button>(R.id.sr_button)
         val saveSampleButton = findViewById<Button>(R.id.save_sample_button)
         val offlineEvalButton = findViewById<Button>(R.id.offline_eval_button)
+        val qnnFixedButton = findViewById<Button>(R.id.qnn_fixed_button)
         srResultView = findViewById(R.id.sr_result)
         val previewView = findViewById<PreviewView>(R.id.previewView)
         srButton.text = startButtonText()
@@ -136,6 +179,10 @@ class MainActivity : AppCompatActivity() {
             true
         }
         offlineEvalButton.setOnClickListener { runOfflineEvalSamples() }
+        qnnFixedButton.setOnClickListener {
+            Log.d("RB5_QNN", "QNN fixed button clicked")
+            runQnnFixedSample()
+        }
         offlineEvalButton.setOnLongClickListener {
             if (liveSr) {
                 statusTextView.text = "Stop live SR before switching model precision."
@@ -175,6 +222,273 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun applyIntentSrOverrides() {
+        intent.getStringExtra("sr_backend")?.let { requested ->
+            parseEnum<SrBackend>(requested)?.let { srBackend = it }
+        }
+        intent.getStringExtra("sr_model")?.let { requested ->
+            parseEnum<SrModelVariant>(requested)?.let { srModelVariant = it }
+        }
+        intent.getStringExtra("sr_model_variant")?.let { requested ->
+            parseEnum<SrModelVariant>(requested)?.let { srModelVariant = it }
+        }
+        if (intent.getBooleanExtra("run_qnn_fixed", false) && srModelVariant == SrModelVariant.FLOAT) {
+            srModelVariant = SrModelVariant.W8A8
+        }
+        Log.d("RB5_SR", "intent SR overrides backend=${srBackend.label} model=${srModelVariant.label}")
+    }
+
+    private inline fun <reified T : Enum<T>> parseEnum(value: String): T? {
+        val normalized = value.trim().uppercase(Locale.US)
+        return enumValues<T>().firstOrNull {
+            it.name.uppercase(Locale.US) == normalized
+        }
+    }
+
+    private fun startLiveSrFromIntent() {
+        liveSr = true
+        offlineEvalActive = false
+        findViewById<PreviewView>(R.id.previewView).visibility = View.GONE
+        srResultView.visibility = View.VISIBLE
+        findViewById<Button>(R.id.sr_button).text = "停止实时超分"
+        statusTextView.text = "Live ROI SR starting with ${srBackend.label}/${srModelVariant.label} from intent..."
+        Log.d("RB5_SR", "auto live SR from intent backend=${srBackend.label} model=${srModelVariant.label}")
+    }
+
+    private fun runQnnFixedSample() {
+        if (liveSr) {
+            statusTextView.text = "Stop live SR before running QNN fixed sample."
+            Toast.makeText(this, "请先停止实时超分", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val previewView = findViewById<PreviewView>(R.id.previewView)
+        offlineEvalActive = true
+        previewView.visibility = View.GONE
+        srResultView.visibility = View.VISIBLE
+        val fixedVariant = if (srModelVariant == SrModelVariant.FLOAT) SrModelVariant.W8A8 else srModelVariant
+        statusTextView.text = "QNN fixed sample running with ${fixedVariant.label}..."
+        srExecutor.execute {
+            try {
+                val fixedAsset = intent.getStringExtra("sr_asset") ?: "offline_text_edge_128.png"
+                val inputBitmap = assets.open(fixedAsset).use { input ->
+                    BitmapFactory.decodeStream(input)
+                } ?: error("Cannot decode $fixedAsset")
+                val modelInput = if (inputBitmap.width == 128 && inputBitmap.height == 128) {
+                    inputBitmap.copy(Bitmap.Config.ARGB_8888, false)
+                } else {
+                    Bitmap.createScaledBitmap(inputBitmap, 128, 128, true)
+                }
+                val qnnResolver = SuperResolver(
+                    this,
+                    modelAsset = fixedVariant.assetName,
+                    backend = SrBackend.QNN,
+                )
+                val (qnnBitmap, timing) = try {
+                    qnnResolver.enhance(modelInput)
+                } finally {
+                    qnnResolver.close()
+                }
+                val baseline = Bitmap.createScaledBitmap(modelInput, 512, 512, true)
+                val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+                val assetLabel = fixedAsset.substringBeforeLast(".").replace(Regex("[^A-Za-z0-9_]+"), "_")
+                val prefix = "QNN_FIXED_${fixedVariant.label}_${assetLabel}_$timestamp"
+                val saved = listOf(
+                    savePngToPictures(modelInput, "${prefix}_input_128.png"),
+                    savePngToPictures(baseline, "${prefix}_baseline_resize_512.png"),
+                    savePngToPictures(qnnBitmap, "${prefix}_sr_512.png"),
+                )
+                synchronized(srSampleLock) {
+                    latestSrSample = SrSample(
+                        backend = SrBackend.QNN,
+                        label = "QNN_FIXED_${fixedVariant.label}",
+                        input = modelInput,
+                        baseline = baseline,
+                        sr = qnnBitmap,
+                        inferenceMs = timing.inferenceMs,
+                        e2eMs = timing.totalMs,
+                    )
+                }
+                Log.d("RB5_QNN", "fixed sample QNN Delegate OK model=${fixedVariant.label} asset=$fixedAsset pre=${timing.preprocessMs} inf=${timing.inferenceMs} post=${timing.postprocessMs} total=${timing.totalMs} saved=${saved.joinToString()}")
+                runOnUiThread {
+                    offlineEvalActive = false
+                    srResultView.setImageBitmap(qnnBitmap)
+                    statusTextView.text =
+                        "QNN fixed sample OK (${fixedVariant.label}, $fixedAsset)\n" +
+                            "pre ${timing.preprocessMs} ms | inference ${timing.inferenceMs} ms | post ${timing.postprocessMs} ms | total ${timing.totalMs} ms\n" +
+                            saved.joinToString("\n")
+                    Toast.makeText(this, "QNN 固定样张已保存", Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Throwable) {
+                Log.e("RB5_QNN", "fixed sample failed", e)
+                runOnUiThread {
+                    offlineEvalActive = false
+                    statusTextView.text = "QNN fixed sample failed: ${e.message}"
+                    Toast.makeText(this, "QNN 固定样张失败", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun runResourceProbeOnWorker() {
+        val tag = "RB5_RESOURCE"
+        if (liveSr) {
+            Log.e(tag, "probe skipped because live SR is active")
+            return
+        }
+        val fixedAsset = intent.getStringExtra("sr_asset") ?: "offline_text_edge_128.png"
+        val steadyRuns = intent.getIntExtra("resource_probe_runs", 5).coerceAtLeast(2)
+        runOnUiThread {
+            offlineEvalActive = true
+            findViewById<PreviewView>(R.id.previewView).visibility = View.GONE
+            srResultView.visibility = View.VISIBLE
+            statusTextView.text = "QNN resource probe running..."
+        }
+
+        var real: SuperResolver? = null
+        var quick: SuperResolver? = null
+        var modelInput: Bitmap? = null
+        try {
+            Log.d(tag, "probe start asset=$fixedAsset steady_runs=$steadyRuns")
+            logResourceMemory("start")
+            val tLoad0 = System.nanoTime()
+            val inputBitmap = assets.open(fixedAsset).use { input ->
+                BitmapFactory.decodeStream(input)
+            } ?: error("Cannot decode $fixedAsset")
+            modelInput = if (inputBitmap.width == 128 && inputBitmap.height == 128) {
+                inputBitmap.copy(Bitmap.Config.ARGB_8888, false)
+            } else {
+                Bitmap.createScaledBitmap(inputBitmap, 128, 128, true)
+            }
+            val loadMs = (System.nanoTime() - tLoad0) / 1_000_000
+            Log.d(tag, "asset asset=$fixedAsset load=$loadMs bitmap=${modelInput.width}x${modelInput.height}")
+            logResourceMemory("after_asset_load")
+
+            val realInit = createProbeResolver(SrModelVariant.W8A8)
+            real = realInit.resolver
+            logResourceMemory("after_real_init")
+            runProbeEnhance("real_first", real, modelInput, 1)
+            runProbeEnhance("real_steady", real, modelInput, steadyRuns)
+            logResourceMemory("after_real_runs")
+
+            val quickInit = createProbeResolver(SrModelVariant.QUICKSR_W8A8)
+            quick = quickInit.resolver
+            logResourceMemory("after_both_init")
+            runProbeEnhance("quick_first_with_real_resident", quick, modelInput, 1)
+            runProbeEnhance("quick_steady_with_real_resident", quick, modelInput, steadyRuns)
+            logResourceMemory("after_both_runs")
+
+            val closeRealMs = closeProbeResolver("close_real_keep_quick", real)
+            real = null
+            Log.d(tag, "close model=${SrModelVariant.W8A8.label} close=$closeRealMs")
+            logResourceMemory("after_close_real")
+            val closeQuickMs = closeProbeResolver("close_quick", quick)
+            quick = null
+            Log.d(tag, "close model=${SrModelVariant.QUICKSR_W8A8.label} close=$closeQuickMs")
+            logResourceMemory("after_close_both")
+
+            val realForSwitch = createProbeResolver(SrModelVariant.W8A8)
+            real = realForSwitch.resolver
+            runProbeEnhance("switch_source_real_warm", real, modelInput, 1)
+            val tSwitch0 = System.nanoTime()
+            val switchCloseMs = closeProbeResolver("switch_close_real", real)
+            real = null
+            val switchQuickInit = createProbeResolver(SrModelVariant.QUICKSR_W8A8)
+            quick = switchQuickInit.resolver
+            val switchTiming = runProbeEnhance("switch_target_quick_first", quick, modelInput, 1).first()
+            val switchTotalMs = (System.nanoTime() - tSwitch0) / 1_000_000
+            Log.d(
+                tag,
+                "switch from=${SrModelVariant.W8A8.label} to=${SrModelVariant.QUICKSR_W8A8.label} close=$switchCloseMs init=${switchQuickInit.initMs} first_total=${switchTiming.totalMs} total=$switchTotalMs"
+            )
+            closeProbeResolver("switch_close_quick", quick)
+            quick = null
+            logResourceMemory("end")
+            Log.d(tag, "probe done status=pass")
+            runOnUiThread {
+                offlineEvalActive = false
+                statusTextView.text = "QNN resource probe done. Pull RB5_RESOURCE logcat for results."
+            }
+        } catch (e: Throwable) {
+            Log.e(tag, "probe failed", e)
+            runOnUiThread {
+                offlineEvalActive = false
+                statusTextView.text = "QNN resource probe failed: ${e.message}"
+            }
+        } finally {
+            real?.close()
+            quick?.close()
+            modelInput?.recycle()
+        }
+    }
+
+    private fun createProbeResolver(variant: SrModelVariant): ProbeResolverInit {
+        val t0 = System.nanoTime()
+        val resolver = SuperResolver(
+            this,
+            modelAsset = variant.assetName,
+            backend = SrBackend.QNN,
+        )
+        val initMs = (System.nanoTime() - t0) / 1_000_000
+        Log.d("RB5_RESOURCE", "init model=${variant.label} backend=QNN asset=${variant.assetName} init=$initMs")
+        return ProbeResolverInit(resolver, initMs)
+    }
+
+    private fun runProbeEnhance(
+        phase: String,
+        resolver: SuperResolver,
+        input: Bitmap,
+        runs: Int,
+    ): List<SrTiming> {
+        val timings = mutableListOf<SrTiming>()
+        repeat(runs) { index ->
+            val (out, timing) = resolver.enhance(input)
+            out.recycle()
+            timings += timing
+            Log.d(
+                "RB5_RESOURCE",
+                "enhance phase=$phase run=${index + 1} pre=${timing.preprocessMs} inf=${timing.inferenceMs} post=${timing.postprocessMs} total=${timing.totalMs}"
+            )
+        }
+        return timings
+    }
+
+    private fun closeProbeResolver(label: String, resolver: SuperResolver?): Long {
+        if (resolver == null) return 0
+        val t0 = System.nanoTime()
+        resolver.close()
+        val closeMs = (System.nanoTime() - t0) / 1_000_000
+        Log.d("RB5_RESOURCE", "close label=$label close=$closeMs")
+        return closeMs
+    }
+
+    private fun logResourceMemory(label: String) {
+        val snapshot = resourceMemorySnapshot(label)
+        Log.d(
+            "RB5_RESOURCE",
+            "mem label=${snapshot.label} totalPssKb=${snapshot.totalPssKb} dalvikPssKb=${snapshot.dalvikPssKb} nativePssKb=${snapshot.nativePssKb} otherPssKb=${snapshot.otherPssKb} runtimeUsedKb=${snapshot.runtimeUsedKb} runtimeFreeKb=${snapshot.runtimeFreeKb} runtimeMaxKb=${snapshot.runtimeMaxKb}"
+        )
+    }
+
+    private fun resourceMemorySnapshot(label: String): ResourceMemorySnapshot {
+        System.gc()
+        Thread.sleep(80)
+        val memoryInfo = Debug.MemoryInfo()
+        Debug.getMemoryInfo(memoryInfo)
+        val runtime = Runtime.getRuntime()
+        val totalKb = runtime.totalMemory() / 1024
+        val freeKb = runtime.freeMemory() / 1024
+        return ResourceMemorySnapshot(
+            label = label,
+            totalPssKb = memoryInfo.totalPss,
+            dalvikPssKb = memoryInfo.dalvikPss,
+            nativePssKb = memoryInfo.nativePss,
+            otherPssKb = memoryInfo.otherPss,
+            runtimeUsedKb = totalKb - freeKb,
+            runtimeFreeKb = freeKb,
+            runtimeMaxKb = runtime.maxMemory() / 1024,
+        )
+    }
+
     private fun startButtonText(): String = "实时超分 ROI (${srBackend.label}/${srModelVariant.label})"
 
     private fun offlineButtonText(): String = "离线评测样张 (${srModelVariant.label})"
@@ -182,7 +496,8 @@ class MainActivity : AppCompatActivity() {
     private fun cycleSrModelVariant() {
         srModelVariant = when (srModelVariant) {
             SrModelVariant.FLOAT -> SrModelVariant.W8A8
-            SrModelVariant.W8A8 -> SrModelVariant.FLOAT
+            SrModelVariant.W8A8 -> SrModelVariant.QUICKSR_W8A8
+            SrModelVariant.QUICKSR_W8A8 -> SrModelVariant.FLOAT
         }
         val oldResolver = resolver
         val oldOfflineResolver = offlineResolver
@@ -197,7 +512,8 @@ class MainActivity : AppCompatActivity() {
         srBackend = when (srBackend) {
             SrBackend.CPU -> SrBackend.NNAPI
             SrBackend.NNAPI -> SrBackend.GPU
-            SrBackend.GPU -> SrBackend.CPU
+            SrBackend.GPU -> SrBackend.QNN
+            SrBackend.QNN -> SrBackend.CPU
         }
         val oldResolver = resolver
         val oldOfflineResolver = offlineResolver
@@ -304,35 +620,47 @@ class MainActivity : AppCompatActivity() {
                 resolver = null
             }
             if (resolver == null) resolver = SuperResolver(this, modelAsset = srModelVariant.assetName, backend = srBackend)
-            val tCap0 = System.nanoTime()
+            val tFrameStart = System.nanoTime()
             val full = imageProxy.toBitmap()
+            val frameBitmapMs = (System.nanoTime() - tFrameStart) / 1_000_000
             val side = 128
             if (full.width < side || full.height < side) return
+            val tRoiStart = System.nanoTime()
             val (croppedRoi, cropSide) = cropCenterRoiKeepingLegacyFov(full, side)
+            val roiCropScaleMs = (System.nanoTime() - tRoiStart) / 1_000_000
             var roi = croppedRoi
             val degrees = imageProxy.imageInfo.rotationDegrees
+            val tRotateStart = System.nanoTime()
             if (degrees != 0) {
                 val matrix = Matrix().apply { postRotate(degrees.toFloat()) }
                 roi = Bitmap.createBitmap(roi, 0, 0, side, side, matrix, true)
             }
-            val captureMs = (System.nanoTime() - tCap0) / 1_000_000
+            val rotateMs = (System.nanoTime() - tRotateStart) / 1_000_000
+            val captureMs = frameBitmapMs + roiCropScaleMs + rotateMs
+            val tEnhanceStart = System.nanoTime()
             val (out, t) = resolver!!.enhance(roi)
+            val enhanceWallMs = (System.nanoTime() - tEnhanceStart) / 1_000_000
             val e2eMs = captureMs + t.totalMs
-            val baseline = Bitmap.createScaledBitmap(roi, 512, 512, true)
-            synchronized(srSampleLock) {
-                latestSrSample = SrSample(
-                    backend = srBackend,
-                    label = "D7",
-                    input = roi.copy(Bitmap.Config.ARGB_8888, false),
-                    baseline = baseline,
-                    sr = out.copy(Bitmap.Config.ARGB_8888, false),
-                    inferenceMs = t.inferenceMs,
-                    e2eMs = e2eMs,
-                )
+            val tSampleStart = System.nanoTime()
+            if (frameCount % LIVE_SAMPLE_CAPTURE_INTERVAL == 0) {
+                val baseline = Bitmap.createScaledBitmap(roi, 512, 512, true)
+                synchronized(srSampleLock) {
+                    latestSrSample = SrSample(
+                        backend = srBackend,
+                        label = "D7",
+                        input = roi.copy(Bitmap.Config.ARGB_8888, false),
+                        baseline = baseline,
+                        sr = out.copy(Bitmap.Config.ARGB_8888, false),
+                        inferenceMs = t.inferenceMs,
+                        e2eMs = e2eMs,
+                    )
+                }
             }
+            val sampleCopyMs = (System.nanoTime() - tSampleStart) / 1_000_000
+            val analyzerWallMs = frameBitmapMs + roiCropScaleMs + rotateMs + enhanceWallMs + sampleCopyMs
             Log.d(
                 srTag,
-                "backend=${srBackend.label} live ROI crop=${cropSide}->128->512 frame=${full.width}x${full.height} cap=$captureMs pre=${t.preprocessMs} inf=${t.inferenceMs} post=${t.postprocessMs} e2e=${e2eMs}ms"
+                "backend=${srBackend.label} live ROI crop=${cropSide}->128->512 frame=${full.width}x${full.height} cap=$captureMs frameBitmap=$frameBitmapMs roi=$roiCropScaleMs rotate=$rotateMs pre=${t.preprocessMs} inf=${t.inferenceMs} post=${t.postprocessMs} enhanceWall=$enhanceWallMs sampleCopy=$sampleCopyMs analyzer=$analyzerWallMs e2e=${e2eMs}ms"
             )
             runOnUiThread {
                 srResultView.setImageBitmap(out)
@@ -504,7 +832,12 @@ class MainActivity : AppCompatActivity() {
             val imageAnalysis = ImageAnalysis.Builder()
                 .setResolutionSelector(
                     ResolutionSelector.Builder()
-                        .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY)
+                        .setResolutionStrategy(
+                            ResolutionStrategy(
+                                LIVE_ANALYSIS_TARGET_SIZE,
+                                ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER,
+                            )
+                        )
                         .build()
                 )
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
@@ -555,6 +888,10 @@ class MainActivity : AppCompatActivity() {
                     imageAnalysis
                 )
                 Log.d(CAMERA_TAG, "CameraX preview and ImageAnalysis started")
+                if (pendingAutoLiveSr) {
+                    pendingAutoLiveSr = false
+                    previewView.postDelayed({ startLiveSrFromIntent() }, 500)
+                }
             } catch (exc: Exception) {
                 Log.e(CAMERA_TAG, "CameraX bind failed", exc)
             }

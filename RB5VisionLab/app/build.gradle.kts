@@ -42,6 +42,19 @@ android {
     buildFeatures {
         prefab = true
     }
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+            excludes += setOf(
+                "**/libPlatformValidatorShared.so",
+                "**/libqnn_net_run_exec.so",
+                "**/libqnn_profile_viewer_exec.so",
+                "**/libQnnHtpNetRunExtensions.so",
+                "**/libQnnIr.so",
+                "**/libQnnSaver.so",
+            )
+        }
+    }
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
@@ -51,6 +64,7 @@ android {
 }
 
 dependencies {
+    implementation(files("libs/qtld-release.aar"))
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.camera.camera2)

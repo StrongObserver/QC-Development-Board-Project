@@ -3,8 +3,10 @@ package com.cyf.rb5visionlab
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
+import com.qualcomm.qti.QnnDelegate
 import org.tensorflow.lite.DataType
 import org.tensorflow.lite.Interpreter
+import org.tensorflow.lite.Delegate
 import org.tensorflow.lite.gpu.GpuDelegate
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -14,12 +16,14 @@ enum class SrBackend(val label: String) {
     CPU("CPU"),
     NNAPI("NNAPI"),
     GPU("GPU"),
+    QNN("QNN"),
 }
 
 /** Model precision variant used for D8 quantization baseline. */
 enum class SrModelVariant(val label: String, val assetName: String) {
     FLOAT("FLOAT", "real_esrgan_general_x4v3.tflite"),
     W8A8("W8A8", "real_esrgan_general_x4v3_w8a8.tflite"),
+    QUICKSR_W8A8("QUICKSR_W8A8", "quicksrnetsmall_w8a8.tflite"),
 }
 
 /** Input tensor memory layout used by the exported TFLite model. */
@@ -57,12 +61,18 @@ class SuperResolver(
 ) {
     private val interpreter: Interpreter
     private var gpuDelegate: GpuDelegate? = null
+    private var qnnDelegate: Delegate? = null
     private val inputType: DataType
     private val outputType: DataType
     private val inputScale: Float
     private val inputZeroPoint: Int
     private val outputScale: Float
     private val outputZeroPoint: Int
+    private val inputBuffer: ByteBuffer
+    private val outputBuffer: ByteBuffer
+    private val inputPixels = IntArray(inputSize * inputSize)
+    private val outputPixels = IntArray(outputSize * outputSize)
+    private val outputUint8Lookup: IntArray?
 
     init {
         // Read the whole .tflite from assets into a direct ByteBuffer (works whether
@@ -82,6 +92,17 @@ class SuperResolver(
                     gpuDelegate = GpuDelegate()
                     addDelegate(gpuDelegate)
                 }
+                SrBackend.QNN -> {
+                    val qnnOptions = QnnDelegate.Options().apply {
+                        setBackendType(QnnDelegate.Options.BackendType.HTP_BACKEND)
+                        setSkelLibraryDir(context.applicationInfo.nativeLibraryDir)
+                        setHtpPerformanceMode(QnnDelegate.Options.HtpPerformanceMode.HTP_PERFORMANCE_HIGH_PERFORMANCE)
+                        setHtpPdSession(QnnDelegate.Options.HtpPdSession.HTP_PD_SESSION_UNSIGNED)
+                        setLogLevel(QnnDelegate.Options.LogLevel.LOG_LEVEL_INFO)
+                    }
+                    qnnDelegate = QnnDelegate(qnnOptions)
+                    addDelegate(qnnDelegate)
+                }
             }
         }
         interpreter = Interpreter(modelBuffer, options)
@@ -93,6 +114,19 @@ class SuperResolver(
         inputZeroPoint = inputQuant.zeroPoint
         outputScale = outputQuant.scale
         outputZeroPoint = outputQuant.zeroPoint
+        inputBuffer = ByteBuffer
+            .allocateDirect(inputSize * inputSize * 3 * bytesPerElement(inputType))
+            .order(ByteOrder.nativeOrder())
+        outputBuffer = ByteBuffer
+            .allocateDirect(outputSize * outputSize * 3 * bytesPerElement(outputType))
+            .order(ByteOrder.nativeOrder())
+        outputUint8Lookup = if (outputType == DataType.UINT8) {
+            IntArray(256) { raw ->
+                (((raw - outputZeroPoint) * outputScale).coerceIn(0f, 1f) * 255f).toInt()
+            }
+        } else {
+            null
+        }
     }
 
     /**
@@ -108,16 +142,13 @@ class SuperResolver(
 
         // --- preprocess: ARGB pixels -> RGB tensor in the model's input layout ---
         val tPre0 = System.nanoTime()
-        val inputBuffer = ByteBuffer
-            .allocateDirect(inputSize * inputSize * 3 * bytesPerElement(inputType))
-            .order(ByteOrder.nativeOrder())
-        val pixels = IntArray(inputSize * inputSize)
-        src.getPixels(pixels, 0, inputSize, 0, 0, inputSize, inputSize)
+        inputBuffer.clear()
+        src.getPixels(inputPixels, 0, inputSize, 0, 0, inputSize, inputSize)
         when (inputLayout) {
             SrInputLayout.NHWC -> {
                 for (y in 0 until inputSize) {
                     for (x in 0 until inputSize) {
-                        putRgb(inputBuffer, pixels[y * inputSize + x])
+                        putRgb(inputBuffer, inputPixels[y * inputSize + x])
                     }
                 }
             }
@@ -125,7 +156,7 @@ class SuperResolver(
                 for (y in 0 until inputSize) {
                     for (c in 0 until 3) {
                         for (x in 0 until inputSize) {
-                            putChannel(inputBuffer, pixels[y * inputSize + x], c)
+                            putChannel(inputBuffer, inputPixels[y * inputSize + x], c)
                         }
                     }
                 }
@@ -134,16 +165,14 @@ class SuperResolver(
                 for (c in 0 until 3) {
                     for (y in 0 until inputSize) {
                         for (x in 0 until inputSize) {
-                            putChannel(inputBuffer, pixels[y * inputSize + x], c)
+                            putChannel(inputBuffer, inputPixels[y * inputSize + x], c)
                         }
                     }
                 }
             }
         }
         inputBuffer.rewind()
-        val outputBuffer = ByteBuffer
-            .allocateDirect(outputSize * outputSize * 3 * bytesPerElement(outputType))
-            .order(ByteOrder.nativeOrder())
+        outputBuffer.clear()
         val tPre1 = System.nanoTime()
 
         // --- inference ---
@@ -152,17 +181,13 @@ class SuperResolver(
 
         // --- postprocess: [1,H,W,3] float/uint8 -> ARGB bitmap ---
         outputBuffer.rewind()
-        val outPixels = IntArray(outputSize * outputSize)
-        for (y in 0 until outputSize) {
-            for (x in 0 until outputSize) {
-                val r = (readUnitFloat(outputBuffer, outputType).coerceIn(0f, 1f) * 255f).toInt()
-                val g = (readUnitFloat(outputBuffer, outputType).coerceIn(0f, 1f) * 255f).toInt()
-                val b = (readUnitFloat(outputBuffer, outputType).coerceIn(0f, 1f) * 255f).toInt()
-                outPixels[y * outputSize + x] = Color.rgb(r, g, b)
-            }
+        when (outputType) {
+            DataType.UINT8 -> fillOutputPixelsFromUint8(outputBuffer)
+            DataType.FLOAT32 -> fillOutputPixelsFromFloat(outputBuffer)
+            else -> error("Unsupported SR output tensor type: $outputType")
         }
         val out = Bitmap.createBitmap(outputSize, outputSize, Bitmap.Config.ARGB_8888)
-        out.setPixels(outPixels, 0, outputSize, 0, 0, outputSize, outputSize)
+        out.setPixels(outputPixels, 0, outputSize, 0, 0, outputSize, outputSize)
         val tPost = System.nanoTime()
 
         val timing = SrTiming(
@@ -177,6 +202,8 @@ class SuperResolver(
         interpreter.close()
         gpuDelegate?.close()
         gpuDelegate = null
+        qnnDelegate?.close()
+        qnnDelegate = null
     }
 
     private fun putRgb(buffer: ByteBuffer, pixel: Int) {
@@ -211,8 +238,28 @@ class SuperResolver(
         else -> error("Unsupported SR output tensor type: $type")
     }
 
+    private fun fillOutputPixelsFromUint8(buffer: ByteBuffer) {
+        val lookup = outputUint8Lookup ?: error("Missing UINT8 output lookup table")
+        for (i in outputPixels.indices) {
+            val r = lookup[buffer.get().toInt() and 0xFF]
+            val g = lookup[buffer.get().toInt() and 0xFF]
+            val b = lookup[buffer.get().toInt() and 0xFF]
+            outputPixels[i] = ARGB_ALPHA or (r shl 16) or (g shl 8) or b
+        }
+    }
+
+    private fun fillOutputPixelsFromFloat(buffer: ByteBuffer) {
+        for (i in outputPixels.indices) {
+            val r = (buffer.float.coerceIn(0f, 1f) * 255f).toInt()
+            val g = (buffer.float.coerceIn(0f, 1f) * 255f).toInt()
+            val b = (buffer.float.coerceIn(0f, 1f) * 255f).toInt()
+            outputPixels[i] = ARGB_ALPHA or (r shl 16) or (g shl 8) or b
+        }
+    }
+
     companion object {
         private const val FLOAT_BYTES = 4
+        private const val ARGB_ALPHA = -0x1000000
 
         private fun bytesPerElement(type: DataType): Int = when (type) {
             DataType.FLOAT32 -> FLOAT_BYTES
