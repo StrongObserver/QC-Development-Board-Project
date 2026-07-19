@@ -289,3 +289,21 @@ This is not a dead end. It means a future performance experiment must remove
 more than Bitmap input preparation, likely by reducing output/postprocess cost
 or avoiding extra debug/Bitmap work in a deeper tensor-ready path.
 ```
+
+Output reuse follow-up:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20251110_output_reuse_default_live_roi
+previous default e2e p50/p95: 19.0 / 26.3 ms
+output-reuse e2e p50/p95: 19.0 / 24.7 ms
+previous default analyzer p50/p95: 21.0 / 29.0 ms
+output-reuse analyzer p50/p95: 21.0 / 26.0 ms
+```
+
+Interpretation:
+
+```text
+Reusing the live output Bitmap does not improve p50, but it improves tail
+latency and is low risk. Keep the output-reuse change. The default path remains
+Bitmap input + QuickSRNetSmall/QNN; tensor-ready live remains experimental.
+```

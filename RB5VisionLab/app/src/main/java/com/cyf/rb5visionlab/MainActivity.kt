@@ -67,6 +67,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var srResultView: ImageView
     private val srSampleLock = Any()
     private var latestSrSample: SrSample? = null
+    private var liveOutputBitmap: Bitmap? = null
+    private var tensorLiveOutputBitmap: Bitmap? = null
     private var highResResolver: SuperResolver? = null
     @Volatile private var pendingHighResSample = false
     @Volatile private var pendingAutoLiveSr = false
@@ -652,6 +654,8 @@ class MainActivity : AppCompatActivity() {
         val oldOfflineResolver = offlineResolver
         resolver = null
         offlineResolver = null
+        liveOutputBitmap = null
+        tensorLiveOutputBitmap = null
         cameraExecutor.execute { oldResolver?.close() }
         srExecutor.execute { oldOfflineResolver?.close() }
         Log.d("RB5_SR", "SR model switched to ${srModelVariant.label}")
@@ -668,6 +672,8 @@ class MainActivity : AppCompatActivity() {
         val oldOfflineResolver = offlineResolver
         resolver = null
         offlineResolver = null
+        liveOutputBitmap = null
+        tensorLiveOutputBitmap = null
         cameraExecutor.execute {
             oldResolver?.close()
         }
@@ -787,7 +793,8 @@ class MainActivity : AppCompatActivity() {
             val rotateMs = (System.nanoTime() - tRotateStart) / 1_000_000
             val captureMs = frameBitmapMs + roiCropScaleMs + rotateMs
             val tEnhanceStart = System.nanoTime()
-            val (out, t) = resolver!!.enhance(roi)
+            val (out, t) = resolver!!.enhanceInto(roi, liveOutputBitmap)
+            liveOutputBitmap = out
             val enhanceWallMs = (System.nanoTime() - tEnhanceStart) / 1_000_000
             val e2eMs = captureMs + t.totalMs
             val tSampleStart = System.nanoTime()
@@ -824,6 +831,7 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Throwable) {
             Log.e(srTag, "live SR failed", e)
             liveSr = false
+            liveOutputBitmap = null
             runOnUiThread {
                 srResultView.visibility = View.GONE
                 findViewById<PreviewView>(R.id.previewView).visibility = View.VISIBLE
@@ -859,7 +867,8 @@ class MainActivity : AppCompatActivity() {
             }
             val nativeRgbMs = (System.nanoTime() - tRgbStart) / 1_000_000
             val tEnhanceStart = System.nanoTime()
-            val (out, timing) = resolver!!.enhanceRgbBytes(rgbBytes)
+            val (out, timing) = resolver!!.enhanceRgbBytesInto(rgbBytes, tensorLiveOutputBitmap)
+            tensorLiveOutputBitmap = out
             val enhanceWallMs = (System.nanoTime() - tEnhanceStart) / 1_000_000
             val e2eMs = nativeRgbMs + timing.totalMs
             val analyzerWallMs = nativeRgbMs + enhanceWallMs
@@ -882,6 +891,7 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Throwable) {
             Log.e(tag, "tensor-ready live SR failed", e)
             liveSrTensorReady = false
+            tensorLiveOutputBitmap = null
             runOnUiThread {
                 srResultView.visibility = View.GONE
                 findViewById<PreviewView>(R.id.previewView).visibility = View.VISIBLE
@@ -1548,6 +1558,8 @@ class MainActivity : AppCompatActivity() {
         liveSr = false
         liveSrTensorReady = false
         offlineEvalActive = false
+        liveOutputBitmap = null
+        tensorLiveOutputBitmap = null
         // Close the interpreter on the same single-thread executor so it cannot run
         // concurrently with an in-flight enhance() (closing during run() can crash).
         // Submitting before shutdown() queues it after any pending SR task (FIFO).

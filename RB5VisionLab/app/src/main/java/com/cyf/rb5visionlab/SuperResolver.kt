@@ -134,6 +134,10 @@ class SuperResolver(
      * @return the enhanced bitmap and per-stage timing (B5).
      */
     fun enhance(input: Bitmap): Pair<Bitmap, SrTiming> {
+        return enhanceInto(input, null)
+    }
+
+    fun enhanceInto(input: Bitmap, reusableOutput: Bitmap?): Pair<Bitmap, SrTiming> {
         val src = if (input.width != inputSize || input.height != inputSize) {
             Bitmap.createScaledBitmap(input, inputSize, inputSize, true)
         } else {
@@ -186,7 +190,9 @@ class SuperResolver(
             DataType.FLOAT32 -> fillOutputPixelsFromFloat(outputBuffer)
             else -> error("Unsupported SR output tensor type: $outputType")
         }
-        val out = Bitmap.createBitmap(outputSize, outputSize, Bitmap.Config.ARGB_8888)
+        val out = reusableOutput?.takeIf {
+            it.width == outputSize && it.height == outputSize && it.config == Bitmap.Config.ARGB_8888
+        } ?: Bitmap.createBitmap(outputSize, outputSize, Bitmap.Config.ARGB_8888)
         out.setPixels(outputPixels, 0, outputSize, 0, 0, outputSize, outputSize)
         val tPost = System.nanoTime()
 
@@ -199,6 +205,10 @@ class SuperResolver(
     }
 
     fun enhanceRgbBytes(inputRgb: ByteArray): Pair<Bitmap, SrTiming> {
+        return enhanceRgbBytesInto(inputRgb, null)
+    }
+
+    fun enhanceRgbBytesInto(inputRgb: ByteArray, reusableOutput: Bitmap?): Pair<Bitmap, SrTiming> {
         require(inputRgb.size == inputSize * inputSize * 3) {
             "Expected ${inputSize * inputSize * 3} RGB bytes, got ${inputRgb.size}"
         }
@@ -243,7 +253,9 @@ class SuperResolver(
             DataType.FLOAT32 -> fillOutputPixelsFromFloat(outputBuffer)
             else -> error("Unsupported SR output tensor type: $outputType")
         }
-        val out = Bitmap.createBitmap(outputSize, outputSize, Bitmap.Config.ARGB_8888)
+        val out = reusableOutput?.takeIf {
+            it.width == outputSize && it.height == outputSize && it.config == Bitmap.Config.ARGB_8888
+        } ?: Bitmap.createBitmap(outputSize, outputSize, Bitmap.Config.ARGB_8888)
         out.setPixels(outputPixels, 0, outputSize, 0, 0, outputSize, outputSize)
         val tPost = System.nanoTime()
 

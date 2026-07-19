@@ -74,7 +74,8 @@ Message:
 
 ```text
 Reusing TFLite buffers and reducing per-frame evidence copying lowered
-postprocess/sample-copy overhead. The total e2e improvement is modest but real.
+postprocess/sample-copy overhead. Later live output Bitmap reuse reduced tail
+latency without changing the median.
 ```
 
 Use numbers:
@@ -83,6 +84,7 @@ Use numbers:
 Real-ESRGAN W8A8 postprocess: 14/16ms -> 10/13ms
 QuickSRNetSmall postprocess: 15/18ms -> 11/14ms
 sampleCopy p50/p95: about 3/4ms -> 0/0ms
+default QuickSR live e2e p50/p95 after output reuse: 19.0 / 24.7ms
 ```
 
 ## 4. Model Tradeoff
