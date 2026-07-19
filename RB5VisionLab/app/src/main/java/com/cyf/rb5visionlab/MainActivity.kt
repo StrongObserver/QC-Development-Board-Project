@@ -59,8 +59,8 @@ class MainActivity : AppCompatActivity() {
     private var frameCount = 0
     private var resolver: SuperResolver? = null
     private var offlineResolver: SuperResolver? = null
-    @Volatile private var srBackend = SrBackend.CPU
-    @Volatile private var srModelVariant = SrModelVariant.FLOAT
+    @Volatile private var srBackend = SrBackend.QNN
+    @Volatile private var srModelVariant = SrModelVariant.QUICKSR_W8A8
     @Volatile private var liveSr = false
     @Volatile private var offlineEvalActive = false
     private lateinit var srResultView: ImageView
@@ -69,10 +69,20 @@ class MainActivity : AppCompatActivity() {
     private var highResResolver: SuperResolver? = null
     @Volatile private var pendingHighResSample = false
     @Volatile private var pendingAutoLiveSr = false
+    @Volatile private var pendingRealCameraCapture = false
+    @Volatile private var pendingYuvRoiProbe = false
+    private val realCameraSessionId = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+    private var realCameraSceneIndex = 0
 
     private data class OfflineEvalAsset(
         val label: String,
         val assetName: String,
+    )
+
+    private data class RealCameraScene(
+        val id: String,
+        val title: String,
+        val prompt: String,
     )
 
     private data class SrSample(
@@ -99,6 +109,49 @@ class MainActivity : AppCompatActivity() {
     private data class ProbeResolverInit(
         val resolver: SuperResolver,
         val initMs: Long,
+    )
+
+    private val realCameraScenes = listOf(
+        RealCameraScene(
+            "text_signage_01",
+            "文字/招牌 1",
+            "拍 1 个清晰文字或屏幕文字区域，字尽量占中心 ROI，距离保持稳定。",
+        ),
+        RealCameraScene(
+            "text_signage_02",
+            "文字/招牌 2",
+            "换一组更小或更密的文字，不要和第 1 张重复。",
+        ),
+        RealCameraScene(
+            "fine_structure_01",
+            "细结构 1",
+            "拍树枝、电线、网格、织物或密集边缘，细节放在画面中心。",
+        ),
+        RealCameraScene(
+            "fine_structure_02",
+            "细结构 2",
+            "再拍 1 个不同细结构，优先选容易出现假纹理或振铃的场景。",
+        ),
+        RealCameraScene(
+            "low_light_noise_01",
+            "低光/噪声",
+            "拍 1 个偏暗区域，最好有小亮点或暗部纹理，用来检查噪声放大。",
+        ),
+        RealCameraScene(
+            "people_object_01",
+            "人物/人像替代",
+            "拍人脸、照片上的脸、手办或人物画面，重点看皮肤和边缘是否自然。",
+        ),
+        RealCameraScene(
+            "object_texture_01",
+            "日常物体纹理",
+            "拍纸张、布料、包装、键盘或桌面纹理，检查过锐和自然质感。",
+        ),
+        RealCameraScene(
+            "optional_failure_01",
+            "可选失败样张",
+            "只在你看到明显异常时拍；没有异常就拍任意一个你认为有代表性的难场景。",
+        ),
     )
 
     private val requestCameraPermission =
@@ -137,7 +190,12 @@ class MainActivity : AppCompatActivity() {
         val autoRunQnnFixed = intent.getBooleanExtra("run_qnn_fixed", false)
         val autoStartLiveSr = intent.getBooleanExtra("start_live_sr", false)
         val autoRunResourceProbe = intent.getBooleanExtra("run_resource_probe", false)
-        Log.d("RB5_QNN", "onCreate run_qnn_fixed=$autoRunQnnFixed run_resource_probe=$autoRunResourceProbe extras=${intent.extras?.keySet()?.joinToString()}")
+        val autoRunYuvRoiProbe = intent.getBooleanExtra("run_yuv_roi_probe", false)
+        Log.d(
+            "RB5_QNN",
+            "onCreate run_qnn_fixed=$autoRunQnnFixed run_resource_probe=$autoRunResourceProbe " +
+                "run_yuv_roi_probe=$autoRunYuvRoiProbe extras=${intent.extras?.keySet()?.joinToString()}"
+        )
         if (autoRunResourceProbe) {
             srExecutor.execute {
                 Thread.sleep(500)
@@ -150,6 +208,8 @@ class MainActivity : AppCompatActivity() {
             }
         } else if (autoStartLiveSr) {
             pendingAutoLiveSr = true
+        } else if (autoRunYuvRoiProbe) {
+            pendingYuvRoiProbe = true
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             startCamera()
@@ -169,10 +229,12 @@ class MainActivity : AppCompatActivity() {
         val saveSampleButton = findViewById<Button>(R.id.save_sample_button)
         val offlineEvalButton = findViewById<Button>(R.id.offline_eval_button)
         val qnnFixedButton = findViewById<Button>(R.id.qnn_fixed_button)
+        val realCameraButton = findViewById<Button>(R.id.real_camera_button)
         srResultView = findViewById(R.id.sr_result)
         val previewView = findViewById<PreviewView>(R.id.previewView)
         srButton.text = startButtonText()
         offlineEvalButton.text = offlineButtonText()
+        realCameraButton.text = realCameraButtonText()
         saveSampleButton.setOnClickListener { saveLatestSrSample() }
         saveSampleButton.setOnLongClickListener {
             requestHighResSrSample()
@@ -182,6 +244,13 @@ class MainActivity : AppCompatActivity() {
         qnnFixedButton.setOnClickListener {
             Log.d("RB5_QNN", "QNN fixed button clicked")
             runQnnFixedSample()
+        }
+        realCameraButton.setOnClickListener { requestRealCameraCapture() }
+        realCameraButton.setOnLongClickListener {
+            realCameraSceneIndex = 0
+            realCameraButton.text = realCameraButtonText()
+            statusTextView.text = realCameraPromptText()
+            true
         }
         offlineEvalButton.setOnLongClickListener {
             if (liveSr) {
@@ -493,6 +562,19 @@ class MainActivity : AppCompatActivity() {
 
     private fun offlineButtonText(): String = "离线评测样张 (${srModelVariant.label})"
 
+    private fun realCameraButtonText(): String {
+        val scene = realCameraScenes[realCameraSceneIndex.coerceIn(0, realCameraScenes.lastIndex)]
+        return "真实采集 ${realCameraSceneIndex + 1}/${realCameraScenes.size} ${scene.title}"
+    }
+
+    private fun realCameraPromptText(): String {
+        val scene = realCameraScenes[realCameraSceneIndex.coerceIn(0, realCameraScenes.lastIndex)]
+        return "Real camera capture ${realCameraSceneIndex + 1}/${realCameraScenes.size}\n" +
+            "${scene.title}\n${scene.prompt}\n" +
+            "Tap the real-camera button when the center ROI is framed. Long press resets to 1/8.\n" +
+            "Session: $realCameraSessionId"
+    }
+
     private fun cycleSrModelVariant() {
         srModelVariant = when (srModelVariant) {
             SrModelVariant.FLOAT -> SrModelVariant.W8A8
@@ -661,6 +743,7 @@ class MainActivity : AppCompatActivity() {
             Log.d(
                 srTag,
                 "backend=${srBackend.label} live ROI crop=${cropSide}->128->512 frame=${full.width}x${full.height} cap=$captureMs frameBitmap=$frameBitmapMs roi=$roiCropScaleMs rotate=$rotateMs pre=${t.preprocessMs} inf=${t.inferenceMs} post=${t.postprocessMs} enhanceWall=$enhanceWallMs sampleCopy=$sampleCopyMs analyzer=$analyzerWallMs e2e=${e2eMs}ms"
+                    + " model=${srModelVariant.label}"
             )
             runOnUiThread {
                 srResultView.setImageBitmap(out)
@@ -720,6 +803,171 @@ class MainActivity : AppCompatActivity() {
         pendingHighResSample = true
         statusTextView.text = "High-res SR sample running... Keep the camera steady."
         Toast.makeText(this, "正在保存 256→1024 样张，请保持画面稳定", Toast.LENGTH_LONG).show()
+    }
+
+    private fun requestRealCameraCapture() {
+        if (liveSr) {
+            statusTextView.text = "Stop live SR before capturing real-camera evidence."
+            Toast.makeText(this, "请先停止实时超分，再采集真实相机证据", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (pendingRealCameraCapture) {
+            statusTextView.text = "Real-camera capture is already pending. Keep the scene steady."
+            return
+        }
+        pendingRealCameraCapture = true
+        offlineEvalActive = true
+        statusTextView.text = realCameraPromptText() + "\n\nCapturing next camera frame..."
+        Toast.makeText(this, "保持画面稳定，正在采集当前场景", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun runRealCameraCapture(imageProxy: ImageProxy) {
+        val scene = realCameraScenes[realCameraSceneIndex.coerceIn(0, realCameraScenes.lastIndex)]
+        try {
+            val side = 128
+            val full = imageProxy.toBitmap()
+            if (full.width < side || full.height < side) error("Camera frame too small for real-camera ROI")
+            val (croppedRoi, cropSide) = cropCenterRoiKeepingLegacyFov(full, side)
+            var roi = croppedRoi
+            val degrees = imageProxy.imageInfo.rotationDegrees
+            if (degrees != 0) {
+                val matrix = Matrix().apply { postRotate(degrees.toFloat()) }
+                roi = Bitmap.createBitmap(roi, 0, 0, side, side, matrix, true)
+            }
+
+            val baseline = Bitmap.createScaledBitmap(roi, 512, 512, true)
+            val quickResolver = SuperResolver(
+                this,
+                modelAsset = SrModelVariant.QUICKSR_W8A8.assetName,
+                backend = SrBackend.QNN,
+            )
+            val realResolver = SuperResolver(
+                this,
+                modelAsset = SrModelVariant.W8A8.assetName,
+                backend = SrBackend.QNN,
+            )
+            val quickResult = try {
+                quickResolver.enhance(roi)
+            } finally {
+                quickResolver.close()
+            }
+            val realResult = try {
+                realResolver.enhance(roi)
+            } finally {
+                realResolver.close()
+            }
+
+            val prefix = "REALCAM_${realCameraSessionId}_${scene.id}"
+            val saved = listOf(
+                savePngToPictures(roi, "${prefix}_input_128.png"),
+                savePngToPictures(baseline, "${prefix}_bicubic_512.png"),
+                savePngToPictures(quickResult.first, "${prefix}_quicksr_qnn_512.png"),
+                savePngToPictures(realResult.first, "${prefix}_realesrgan_qnn_512.png"),
+            )
+            synchronized(srSampleLock) {
+                latestSrSample = SrSample(
+                    backend = SrBackend.QNN,
+                    label = "REALCAM_${scene.id}_QUICKSR",
+                    input = roi.copy(Bitmap.Config.ARGB_8888, false),
+                    baseline = baseline,
+                    sr = quickResult.first.copy(Bitmap.Config.ARGB_8888, false),
+                    inferenceMs = quickResult.second.inferenceMs,
+                    e2eMs = quickResult.second.totalMs,
+                )
+            }
+            Log.d(
+                "RB5_REALCAM",
+                "capture scene=${scene.id} session=$realCameraSessionId frame=${full.width}x${full.height} crop=${cropSide}->128 " +
+                    "quick_pre=${quickResult.second.preprocessMs} quick_inf=${quickResult.second.inferenceMs} quick_post=${quickResult.second.postprocessMs} " +
+                    "real_pre=${realResult.second.preprocessMs} real_inf=${realResult.second.inferenceMs} real_post=${realResult.second.postprocessMs} " +
+                    "saved=${saved.joinToString()}"
+            )
+            val completedIndex = realCameraSceneIndex + 1
+            if (realCameraSceneIndex < realCameraScenes.lastIndex) {
+                realCameraSceneIndex += 1
+            }
+            runOnUiThread {
+                offlineEvalActive = false
+                srResultView.visibility = View.GONE
+                findViewById<PreviewView>(R.id.previewView).visibility = View.VISIBLE
+                val button = findViewById<Button>(R.id.real_camera_button)
+                button.text = realCameraButtonText()
+                val nextText = if (completedIndex >= realCameraScenes.size) {
+                    "All 8 planned scenes are captured. Long press the real-camera button to restart if you need a retake."
+                } else {
+                    "Next:\n" + realCameraPromptText()
+                }
+                statusTextView.text =
+                    "Saved real-camera scene $completedIndex/${realCameraScenes.size}: ${scene.title}\n" +
+                        "QuickSR inf ${quickResult.second.inferenceMs} ms | Real-ESRGAN inf ${realResult.second.inferenceMs} ms\n" +
+                        saved.joinToString("\n") + "\n\n" + nextText
+                Toast.makeText(this, "真实相机证据已保存", Toast.LENGTH_LONG).show()
+            }
+        } catch (e: Throwable) {
+            Log.e("RB5_REALCAM", "capture failed scene=${scene.id}", e)
+            runOnUiThread {
+                offlineEvalActive = false
+                srResultView.visibility = View.GONE
+                findViewById<PreviewView>(R.id.previewView).visibility = View.VISIBLE
+                statusTextView.text = "Real-camera capture failed: ${e.message}\nTap again after reframing."
+                Toast.makeText(this, "真实相机证据保存失败", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun runYuvRoiProbe(imageProxy: ImageProxy) {
+        try {
+            val side = 128
+            val tBitmap0 = System.nanoTime()
+            val full = imageProxy.toBitmap()
+            val bitmapMs = (System.nanoTime() - tBitmap0) / 1_000_000
+            val tCrop0 = System.nanoTime()
+            var bitmapRoi = cropCenterRoiKeepingLegacyFov(full, side).first
+            val degrees = imageProxy.imageInfo.rotationDegrees
+            if (degrees != 0) {
+                val matrix = Matrix().apply { postRotate(degrees.toFloat()) }
+                bitmapRoi = Bitmap.createBitmap(bitmapRoi, 0, 0, side, side, matrix, true)
+            }
+            val bitmapCropMs = (System.nanoTime() - tCrop0) / 1_000_000
+
+            val tYuv0 = System.nanoTime()
+            var yuvRoi = yuv420ToRgbCenterRoiKeepingLegacyFov(imageProxy, side)
+            if (degrees != 0) {
+                val matrix = Matrix().apply { postRotate(degrees.toFloat()) }
+                yuvRoi = Bitmap.createBitmap(yuvRoi, 0, 0, side, side, matrix, true)
+            }
+            val yuvRoiMs = (System.nanoTime() - tYuv0) / 1_000_000
+            val mad = meanAbsDiff(bitmapRoi, yuvRoi)
+            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+            val prefix = "YUV_ROI_PROBE_${timestamp}"
+            val saved = listOf(
+                savePngToPictures(bitmapRoi, "${prefix}_bitmap_roi_128.png"),
+                savePngToPictures(yuvRoi, "${prefix}_yuv_roi_128.png"),
+                savePngToPictures(makeSideBySide(bitmapRoi, yuvRoi), "${prefix}_side_by_side.png"),
+            )
+            Log.d(
+                "RB5_YUV_ROI",
+                "probe frame=${imageProxy.width}x${imageProxy.height} rotation=$degrees " +
+                    "bitmapMs=$bitmapMs bitmapCropMs=$bitmapCropMs yuvRoiMs=$yuvRoiMs mad=${"%.2f".format(Locale.US, mad)} " +
+                    "yRow=${imageProxy.planes[0].rowStride} uRow=${imageProxy.planes[1].rowStride} vRow=${imageProxy.planes[2].rowStride} " +
+                    "uPixel=${imageProxy.planes[1].pixelStride} vPixel=${imageProxy.planes[2].pixelStride} saved=${saved.joinToString()}"
+            )
+            runOnUiThread {
+                offlineEvalActive = false
+                statusTextView.text =
+                    "YUV ROI probe saved\n" +
+                        "bitmap $bitmapMs+$bitmapCropMs ms | yuv ROI $yuvRoiMs ms | MAD ${"%.2f".format(Locale.US, mad)}\n" +
+                        saved.joinToString("\n")
+                Toast.makeText(this, "YUV ROI probe saved", Toast.LENGTH_LONG).show()
+            }
+        } catch (e: Throwable) {
+            Log.e("RB5_YUV_ROI", "probe failed", e)
+            runOnUiThread {
+                offlineEvalActive = false
+                statusTextView.text = "YUV ROI probe failed: ${e.message}"
+                Toast.makeText(this, "YUV ROI probe failed", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun runHighResSrSample(imageProxy: ImageProxy) {
@@ -805,6 +1053,75 @@ class MainActivity : AppCompatActivity() {
         return Pair(roi, cropSide)
     }
 
+    private fun yuv420ToRgbCenterRoiKeepingLegacyFov(imageProxy: ImageProxy, outputSide: Int): Bitmap {
+        val cropSide = minOf(
+            imageProxy.width * outputSide / LEGACY_ANALYSIS_WIDTH,
+            imageProxy.width,
+            imageProxy.height,
+        ).coerceAtLeast(outputSide)
+        val left = (imageProxy.width - cropSide) / 2
+        val top = (imageProxy.height - cropSide) / 2
+        val pixels = IntArray(outputSide * outputSide)
+        val yPlane = imageProxy.planes[0]
+        val uPlane = imageProxy.planes[1]
+        val vPlane = imageProxy.planes[2]
+        val yBuffer = yPlane.buffer
+        val uBuffer = uPlane.buffer
+        val vBuffer = vPlane.buffer
+        for (oy in 0 until outputSide) {
+            val srcY = top + (oy * cropSide + cropSide / (outputSide * 2)) / outputSide
+            val yBase = srcY * yPlane.rowStride
+            val uvY = srcY / 2
+            val uBase = uvY * uPlane.rowStride
+            val vBase = uvY * vPlane.rowStride
+            for (ox in 0 until outputSide) {
+                val srcX = left + (ox * cropSide + cropSide / (outputSide * 2)) / outputSide
+                val yValue = yBuffer.get(yBase + srcX * yPlane.pixelStride).toInt() and 0xFF
+                val uvX = srcX / 2
+                val uValue = uBuffer.get(uBase + uvX * uPlane.pixelStride).toInt() and 0xFF
+                val vValue = vBuffer.get(vBase + uvX * vPlane.pixelStride).toInt() and 0xFF
+                pixels[oy * outputSide + ox] = yuvToArgb(yValue, uValue, vValue)
+            }
+        }
+        return Bitmap.createBitmap(pixels, outputSide, outputSide, Bitmap.Config.ARGB_8888)
+    }
+
+    private fun yuvToArgb(y: Int, u: Int, v: Int): Int {
+        val yf = y.toFloat()
+        val uf = u.toFloat() - 128f
+        val vf = v.toFloat() - 128f
+        val r = (yf + 1.402f * vf).toInt().coerceIn(0, 255)
+        val g = (yf - 0.344136f * uf - 0.714136f * vf).toInt().coerceIn(0, 255)
+        val b = (yf + 1.772f * uf).toInt().coerceIn(0, 255)
+        return -0x1000000 or (r shl 16) or (g shl 8) or b
+    }
+
+    private fun meanAbsDiff(a: Bitmap, b: Bitmap): Double {
+        val width = minOf(a.width, b.width)
+        val height = minOf(a.height, b.height)
+        val aPixels = IntArray(width * height)
+        val bPixels = IntArray(width * height)
+        a.getPixels(aPixels, 0, width, 0, 0, width, height)
+        b.getPixels(bPixels, 0, width, 0, 0, width, height)
+        var sum = 0L
+        for (i in aPixels.indices) {
+            val ap = aPixels[i]
+            val bp = bPixels[i]
+            sum += kotlin.math.abs(((ap shr 16) and 0xFF) - ((bp shr 16) and 0xFF))
+            sum += kotlin.math.abs(((ap shr 8) and 0xFF) - ((bp shr 8) and 0xFF))
+            sum += kotlin.math.abs((ap and 0xFF) - (bp and 0xFF))
+        }
+        return sum.toDouble() / (aPixels.size * 3)
+    }
+
+    private fun makeSideBySide(left: Bitmap, right: Bitmap): Bitmap {
+        val out = Bitmap.createBitmap(left.width + right.width, maxOf(left.height, right.height), Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(out)
+        canvas.drawBitmap(left, 0f, 0f, null)
+        canvas.drawBitmap(right, left.width.toFloat(), 0f, null)
+        return out
+    }
+
     private fun savePngToPictures(bitmap: Bitmap, fileName: String): String {
         val relativePath = Environment.DIRECTORY_PICTURES + "/RB5VisionLab"
         val values = ContentValues().apply {
@@ -849,6 +1166,12 @@ class MainActivity : AppCompatActivity() {
                             if (pendingHighResSample) {
                                 pendingHighResSample = false
                                 runHighResSrSample(imageProxy)
+                            } else if (pendingYuvRoiProbe) {
+                                pendingYuvRoiProbe = false
+                                runYuvRoiProbe(imageProxy)
+                            } else if (pendingRealCameraCapture) {
+                                pendingRealCameraCapture = false
+                                runRealCameraCapture(imageProxy)
                             } else if (liveSr) {
                                 runLiveSr(imageProxy)
                             } else if (!offlineEvalActive && (frameCount == 1 || frameCount % 30 == 0)) {

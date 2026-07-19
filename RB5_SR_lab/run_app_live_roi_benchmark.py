@@ -31,6 +31,7 @@ LIVE_RE = re.compile(
     r"pre=(?P<pre_ms>\d+) inf=(?P<inf_ms>\d+) post=(?P<post_ms>\d+) "
     r"enhanceWall=(?P<enhance_wall_ms>\d+) sampleCopy=(?P<sample_copy_ms>\d+) "
     r"analyzer=(?P<analyzer_ms>\d+) e2e=(?P<e2e_ms>\d+)ms"
+    r"(?: model=(?P<log_model>\w+))?"
 )
 
 
@@ -88,18 +89,25 @@ def parse_live_rows(log_text: str, model: str) -> list[dict[str, object]]:
         match = LIVE_RE.search(line)
         if not match:
             continue
+        values = match.groupdict()
+        log_model = values.pop("log_model") or model
         row: dict[str, object] = {
             "index": len(rows) + 1,
-            "model": model,
+            "model": log_model,
             "raw_log_prefix": line[:18],
         }
-        for key, value in match.groupdict().items():
+        for key, value in values.items():
             row[key] = value if key == "backend" else int(value)
         rows.append(row)
     return rows
 
 
-def collect_logcat(model: str, min_frames: int, timeout_s: int) -> tuple[str, list[dict[str, object]]]:
+def collect_logcat(
+    model: str,
+    min_frames: int,
+    timeout_s: int,
+    use_app_default: bool,
+) -> tuple[str, list[dict[str, object]]]:
     start_cmd = [
         "shell",
         "am",
@@ -109,13 +117,9 @@ def collect_logcat(model: str, min_frames: int, timeout_s: int) -> tuple[str, li
         "--ez",
         "start_live_sr",
         "true",
-        "--es",
-        "sr_backend",
-        "QNN",
-        "--es",
-        "sr_model",
-        model,
     ]
+    if not use_app_default:
+        start_cmd.extend(["--es", "sr_backend", "QNN", "--es", "sr_model", model])
     adb("logcat", "-c")
     adb("shell", "am", "force-stop", PACKAGE_NAME, check=False)
     started = adb(*start_cmd, check=False)
@@ -175,9 +179,11 @@ def make_loop_state(
         "schema_version": 1,
         "run_id": run_id,
         "output_dir": str(out_dir),
-        "status": "ready_for_resource_measurement" if passed else "environment_blocked",
-        "stop_reason": "quick_sr_live_roi_validated" if passed else "live_roi_log_collection_failed",
-        "next_priority_task": "P6 resource cost measurement before any automatic model strategy"
+        "status": "live_roi_default_validated" if passed and model == "APP_DEFAULT" else "ready_for_resource_measurement" if passed else "environment_blocked",
+        "stop_reason": "app_default_live_roi_validated" if passed and model == "APP_DEFAULT" else "quick_sr_live_roi_validated" if passed else "live_roi_log_collection_failed",
+        "next_priority_task": "Proceed to compact showcase documentation and commit planning."
+        if passed and model == "APP_DEFAULT"
+        else "P6 resource cost measurement before any automatic model strategy"
         if passed
         else "restore Android app live ROI logging and rerun P5",
         "model": model,
@@ -267,6 +273,7 @@ def write_summary(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default="QUICKSR_W8A8", choices=["W8A8", "QUICKSR_W8A8"])
+    parser.add_argument("--use-app-default", action="store_true", help="Do not pass sr_backend/sr_model extras; validate the app's compiled default.")
     parser.add_argument("--min-frames", type=int, default=120)
     parser.add_argument("--timeout-s", type=int, default=90)
     parser.add_argument("--run-id", default="")
@@ -280,7 +287,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    run_id = args.run_id or datetime.now().strftime(f"%Y%m%d_%H%M%S_app_{args.model.lower()}_live_roi_1280x960")
+    model_label = "APP_DEFAULT" if args.use_app_default else args.model
+    run_id = args.run_id or datetime.now().strftime(f"%Y%m%d_%H%M%S_app_{model_label.lower()}_live_roi_1280x960")
     out_dir = RESULTS_ROOT / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -291,12 +299,12 @@ def main() -> None:
         (out_dir / "loop_state.json").write_text(json.dumps(loop_state, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")
         raise SystemExit(f"[blocked] {expected} not found")
 
-    log_text, frame_rows = collect_logcat(args.model, args.min_frames, args.timeout_s)
+    log_text, frame_rows = collect_logcat(model_label, args.min_frames, args.timeout_s, args.use_app_default)
     (out_dir / "raw_logcat.txt").write_text(log_text, encoding="utf-8")
     write_csv(out_dir / "frame_metrics.csv", frame_rows)
 
     blocked_by = "" if len(frame_rows) >= args.min_frames else f"parsed {len(frame_rows)} frames, expected at least {args.min_frames}"
-    loop_state = make_loop_state(run_id, out_dir, args.model, len(frame_rows), args.min_frames, blocked_by)
+    loop_state = make_loop_state(run_id, out_dir, model_label, len(frame_rows), args.min_frames, blocked_by)
     stage_rows: list[dict[str, object]] = []
     if frame_rows:
         for key, label in [
@@ -323,7 +331,7 @@ def main() -> None:
                 "device": "RB5 Gen2 QCS8550",
                 "app_component": APP_COMPONENT,
                 "backend": "QNN",
-                "model": args.model,
+                "model": model_label,
                 "parsed_frames": len(frame_rows),
                 "status": loop_state["status"],
                 "stop_reason": loop_state["stop_reason"],
@@ -340,7 +348,7 @@ def main() -> None:
                 "",
                 "## Current Conclusion",
                 "",
-                f"`{args.model}` live ROI timing collection parsed {len(frame_rows)} frames.",
+                f"`{model_label}` live ROI timing collection parsed {len(frame_rows)} frames.",
                 "",
                 "## Next Priority",
                 "",
@@ -354,7 +362,7 @@ def main() -> None:
         + "\n",
         encoding="utf-8",
     )
-    write_summary(out_dir, run_id, args.model, frame_rows, stage_rows, read_baseline_metrics(args.baseline_metrics))
+    write_summary(out_dir, run_id, model_label, frame_rows, stage_rows, read_baseline_metrics(args.baseline_metrics))
     print(f"[ok] wrote {out_dir}")
 
 

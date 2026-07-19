@@ -26,7 +26,7 @@
         android:background="#CC000000"
         android:scaleType="fitCenter"
         android:visibility="gone"
-        app:layout_constraintBottom_toTopOf="@id/sr_button"
+        app:layout_constraintBottom_toTopOf="@id/control_bar"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
@@ -44,44 +44,66 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <Button
-        android:id="@+id/sr_button"
+    <HorizontalScrollView
+        android:id="@+id/control_bar"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="12dp"
-        android:text="超分测试图 (CPU)"
-        app:layout_constraintBottom_toTopOf="@id/save_sample_button"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
-
-    <Button
-        android:id="@+id/save_sample_button"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="12dp"
-        android:text="保存样张 / 长按高分辨率"
-        app:layout_constraintBottom_toTopOf="@id/qnn_fixed_button"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
-
-    <Button
-        android:id="@+id/qnn_fixed_button"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="12dp"
-        android:text="QNN 固定样张"
-        app:layout_constraintBottom_toTopOf="@id/offline_eval_button"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
-
-    <Button
-        android:id="@+id/offline_eval_button"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="24dp"
-        android:text="离线评测样张"
+        android:layout_marginBottom="16dp"
+        android:background="#66000000"
+        android:fillViewport="false"
+        android:padding="4dp"
+        android:scrollbars="none"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+        app:layout_constraintStart_toStartOf="parent">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/real_camera_button"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:layout_marginHorizontal="4dp"
+                android:minHeight="0dp"
+                android:text="真实相机证据" />
+
+            <Button
+                android:id="@+id/sr_button"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:layout_marginHorizontal="4dp"
+                android:minHeight="0dp"
+                android:text="超分测试图 (CPU)" />
+
+            <Button
+                android:id="@+id/save_sample_button"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:layout_marginHorizontal="4dp"
+                android:minHeight="0dp"
+                android:text="保存样张 / 长按高分辨率" />
+
+            <Button
+                android:id="@+id/qnn_fixed_button"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:layout_marginHorizontal="4dp"
+                android:minHeight="0dp"
+                android:text="QNN 固定样张" />
+
+            <Button
+                android:id="@+id/offline_eval_button"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:layout_marginHorizontal="4dp"
+                android:minHeight="0dp"
+                android:text="离线评测样张" />
+
+        </LinearLayout>
+    </HorizontalScrollView>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
