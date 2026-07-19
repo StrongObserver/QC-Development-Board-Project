@@ -70,7 +70,7 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var pendingHighResSample = false
     @Volatile private var pendingAutoLiveSr = false
     @Volatile private var pendingRealCameraCapture = false
-    @Volatile private var pendingYuvRoiProbe = false
+    @Volatile private var pendingProbeMode: String = ""
     private val realCameraSessionId = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
     private var realCameraSceneIndex = 0
 
@@ -180,6 +180,20 @@ class MainActivity : AppCompatActivity() {
         vPixelStride: Int,
         outputSide: Int,
     ): IntArray
+    external fun nativeYuvToRgbRoiBytes(
+        yData: ByteArray,
+        uData: ByteArray,
+        vData: ByteArray,
+        width: Int,
+        height: Int,
+        yRowStride: Int,
+        yPixelStride: Int,
+        uRowStride: Int,
+        uPixelStride: Int,
+        vRowStride: Int,
+        vPixelStride: Int,
+        outputSide: Int,
+    ): ByteArray
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -201,14 +215,23 @@ class MainActivity : AppCompatActivity() {
         srExecutor = Executors.newSingleThreadExecutor()
         applyIntentSrOverrides()
         setupSuperResolution()
-        val autoRunQnnFixed = intent.getBooleanExtra("run_qnn_fixed", false)
-        val autoStartLiveSr = intent.getBooleanExtra("start_live_sr", false)
-        val autoRunResourceProbe = intent.getBooleanExtra("run_resource_probe", false)
-        val autoRunYuvRoiProbe = intent.getBooleanExtra("run_yuv_roi_probe", false)
+        val autoRunQnnFixed = boolIntentExtra("run_qnn_fixed")
+        val autoStartLiveSr = boolIntentExtra("start_live_sr")
+        val autoRunResourceProbe = boolIntentExtra("run_resource_probe")
+        val autoRunYuvRoiProbe = boolIntentExtra("run_yuv_roi_probe")
+        val autoRunTensorReadyProbe = boolIntentExtra("run_tensor_ready_probe")
+        val requestedProbeMode = intent.getStringExtra("probe_mode")?.trim()?.lowercase(Locale.US).orEmpty()
         Log.d(
             "RB5_QNN",
             "onCreate run_qnn_fixed=$autoRunQnnFixed run_resource_probe=$autoRunResourceProbe " +
-                "run_yuv_roi_probe=$autoRunYuvRoiProbe extras=${intent.extras?.keySet()?.joinToString()}"
+                "run_yuv_roi_probe=$autoRunYuvRoiProbe run_tensor_ready_probe=$autoRunTensorReadyProbe " +
+                "probe_mode=$requestedProbeMode extras=${intent.extras?.keySet()?.joinToString()}"
+        )
+        Log.d(
+            "RB5_SR",
+            "intent probes run_qnn_fixed=$autoRunQnnFixed start_live_sr=$autoStartLiveSr " +
+                "run_yuv_roi_probe=$autoRunYuvRoiProbe run_tensor_ready_probe=$autoRunTensorReadyProbe " +
+                "probe_mode=$requestedProbeMode"
         )
         if (autoRunResourceProbe) {
             srExecutor.execute {
@@ -222,8 +245,10 @@ class MainActivity : AppCompatActivity() {
             }
         } else if (autoStartLiveSr) {
             pendingAutoLiveSr = true
-        } else if (autoRunYuvRoiProbe) {
-            pendingYuvRoiProbe = true
+        } else if (requestedProbeMode == "yuv_roi" || autoRunYuvRoiProbe) {
+            pendingProbeMode = "yuv_roi"
+        } else if (requestedProbeMode == "tensor_ready" || autoRunTensorReadyProbe) {
+            pendingProbeMode = "tensor_ready"
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             startCamera()
@@ -319,6 +344,16 @@ class MainActivity : AppCompatActivity() {
             srModelVariant = SrModelVariant.W8A8
         }
         Log.d("RB5_SR", "intent SR overrides backend=${srBackend.label} model=${srModelVariant.label}")
+    }
+
+    private fun boolIntentExtra(name: String): Boolean {
+        if (intent.getBooleanExtra(name, false)) return true
+        val value = intent.extras?.get(name) ?: return false
+        return when (value) {
+            is Boolean -> value
+            is String -> value.equals("true", ignoreCase = true) || value == "1"
+            else -> value.toString().equals("true", ignoreCase = true)
+        }
     }
 
     private inline fun <reified T : Enum<T>> parseEnum(value: String): T? {
@@ -995,6 +1030,93 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun runTensorReadyProbe(imageProxy: ImageProxy) {
+        var resolver: SuperResolver? = null
+        try {
+            Log.d("RB5_TENSOR_READY", "probe begin")
+            val side = 128
+            val degrees = imageProxy.imageInfo.rotationDegrees
+            val tBitmap0 = System.nanoTime()
+            val full = imageProxy.toBitmap()
+            val bitmapMs = (System.nanoTime() - tBitmap0) / 1_000_000
+            Log.d("RB5_TENSOR_READY", "after toBitmap bitmapMs=$bitmapMs frame=${full.width}x${full.height}")
+            val tBitmapCrop0 = System.nanoTime()
+            var bitmapRoi = cropCenterRoiKeepingLegacyFov(full, side).first
+            if (degrees != 0) {
+                val matrix = Matrix().apply { postRotate(degrees.toFloat()) }
+                bitmapRoi = Bitmap.createBitmap(bitmapRoi, 0, 0, side, side, matrix, true)
+            }
+            val bitmapCropMs = (System.nanoTime() - tBitmapCrop0) / 1_000_000
+            Log.d("RB5_TENSOR_READY", "after bitmap crop bitmapCropMs=$bitmapCropMs rotation=$degrees")
+
+            val tRgb0 = System.nanoTime()
+            var rgbBytes = nativeYuv420ToRgbCenterRoiBytes(imageProxy, side)
+            if (degrees != 0) {
+                val nativeBitmap = rgbBytesToBitmap(rgbBytes, side)
+                val matrix = Matrix().apply { postRotate(degrees.toFloat()) }
+                val rotated = Bitmap.createBitmap(nativeBitmap, 0, 0, side, side, matrix, true)
+                rgbBytes = bitmapToRgbBytes(rotated)
+            }
+            val nativeRgbMs = (System.nanoTime() - tRgb0) / 1_000_000
+            Log.d("RB5_TENSOR_READY", "after native rgb nativeRgbMs=$nativeRgbMs bytes=${rgbBytes.size}")
+
+            Log.d("RB5_TENSOR_READY", "creating resolver")
+            resolver = SuperResolver(
+                this,
+                modelAsset = SrModelVariant.QUICKSR_W8A8.assetName,
+                backend = SrBackend.QNN,
+            )
+            Log.d("RB5_TENSOR_READY", "resolver created")
+            val tBitmapEnhance0 = System.nanoTime()
+            val bitmapResult = resolver.enhance(bitmapRoi)
+            val bitmapEnhanceWallMs = (System.nanoTime() - tBitmapEnhance0) / 1_000_000
+            Log.d("RB5_TENSOR_READY", "after bitmap enhance wall=$bitmapEnhanceWallMs")
+            val tRgbEnhance0 = System.nanoTime()
+            val rgbResult = resolver.enhanceRgbBytes(rgbBytes)
+            val rgbEnhanceWallMs = (System.nanoTime() - tRgbEnhance0) / 1_000_000
+            Log.d("RB5_TENSOR_READY", "after rgb enhance wall=$rgbEnhanceWallMs")
+            val outputMad = meanAbsDiff(bitmapResult.first, rgbResult.first)
+            val inputMad = meanAbsDiff(bitmapRoi, rgbBytesToBitmap(rgbBytes, side))
+            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+            val prefix = "TENSOR_READY_PROBE_${timestamp}"
+            val saved = listOf(
+                savePngToPictures(bitmapRoi, "${prefix}_bitmap_input_128.png"),
+                savePngToPictures(rgbBytesToBitmap(rgbBytes, side), "${prefix}_native_rgb_input_128.png"),
+                savePngToPictures(bitmapResult.first, "${prefix}_bitmap_sr_512.png"),
+                savePngToPictures(rgbResult.first, "${prefix}_rgbbytes_sr_512.png"),
+                savePngToPictures(makeHorizontalSheet(listOf(bitmapResult.first, rgbResult.first)), "${prefix}_sr_side_by_side.png"),
+            )
+            val bitmapPathMs = bitmapMs + bitmapCropMs + bitmapEnhanceWallMs
+            val rgbPathMs = nativeRgbMs + rgbEnhanceWallMs
+            Log.d(
+                "RB5_TENSOR_READY",
+                "probe frame=${imageProxy.width}x${imageProxy.height} rotation=$degrees " +
+                    "bitmapMs=$bitmapMs bitmapCropMs=$bitmapCropMs nativeRgbMs=$nativeRgbMs " +
+                    "bitmapPre=${bitmapResult.second.preprocessMs} bitmapInf=${bitmapResult.second.inferenceMs} bitmapPost=${bitmapResult.second.postprocessMs} bitmapEnhanceWall=$bitmapEnhanceWallMs bitmapPath=$bitmapPathMs " +
+                    "rgbPre=${rgbResult.second.preprocessMs} rgbInf=${rgbResult.second.inferenceMs} rgbPost=${rgbResult.second.postprocessMs} rgbEnhanceWall=$rgbEnhanceWallMs rgbPath=$rgbPathMs " +
+                    "inputMad=${"%.2f".format(Locale.US, inputMad)} outputMad=${"%.2f".format(Locale.US, outputMad)} saved=${saved.joinToString()}"
+            )
+            runOnUiThread {
+                offlineEvalActive = false
+                statusTextView.text =
+                    "Tensor-ready probe saved\n" +
+                        "bitmap path $bitmapPathMs ms | rgb path $rgbPathMs ms\n" +
+                        "input MAD ${"%.2f".format(Locale.US, inputMad)} | output MAD ${"%.2f".format(Locale.US, outputMad)}\n" +
+                        saved.joinToString("\n")
+                Toast.makeText(this, "Tensor-ready probe saved", Toast.LENGTH_LONG).show()
+            }
+        } catch (e: Throwable) {
+            Log.e("RB5_TENSOR_READY", "probe failed", e)
+            runOnUiThread {
+                offlineEvalActive = false
+                statusTextView.text = "Tensor-ready probe failed: ${e.message}"
+                Toast.makeText(this, "Tensor-ready probe failed", Toast.LENGTH_SHORT).show()
+            }
+        } finally {
+            resolver?.close()
+        }
+    }
+
     private fun runHighResSrSample(imageProxy: ImageProxy) {
         try {
             val side = 256
@@ -1138,6 +1260,58 @@ class MainActivity : AppCompatActivity() {
         return Bitmap.createBitmap(pixels, outputSide, outputSide, Bitmap.Config.ARGB_8888)
     }
 
+    private fun nativeYuv420ToRgbCenterRoiBytes(imageProxy: ImageProxy, outputSide: Int): ByteArray {
+        val y = imageProxy.planes[0]
+        val u = imageProxy.planes[1]
+        val v = imageProxy.planes[2]
+        val yBytes = ByteArray(y.buffer.remaining())
+        val uBytes = ByteArray(u.buffer.remaining())
+        val vBytes = ByteArray(v.buffer.remaining())
+        y.buffer.duplicate().get(yBytes)
+        u.buffer.duplicate().get(uBytes)
+        v.buffer.duplicate().get(vBytes)
+        return nativeYuvToRgbRoiBytes(
+            yBytes,
+            uBytes,
+            vBytes,
+            imageProxy.width,
+            imageProxy.height,
+            y.rowStride,
+            y.pixelStride,
+            u.rowStride,
+            u.pixelStride,
+            v.rowStride,
+            v.pixelStride,
+            outputSide,
+        )
+    }
+
+    private fun rgbBytesToBitmap(rgb: ByteArray, side: Int): Bitmap {
+        val pixels = IntArray(side * side)
+        for (i in pixels.indices) {
+            val base = i * 3
+            val r = rgb[base].toInt() and 0xFF
+            val g = rgb[base + 1].toInt() and 0xFF
+            val b = rgb[base + 2].toInt() and 0xFF
+            pixels[i] = -0x1000000 or (r shl 16) or (g shl 8) or b
+        }
+        return Bitmap.createBitmap(pixels, side, side, Bitmap.Config.ARGB_8888)
+    }
+
+    private fun bitmapToRgbBytes(bitmap: Bitmap): ByteArray {
+        val pixels = IntArray(bitmap.width * bitmap.height)
+        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+        val rgb = ByteArray(pixels.size * 3)
+        for (i in pixels.indices) {
+            val pixel = pixels[i]
+            val base = i * 3
+            rgb[base] = ((pixel shr 16) and 0xFF).toByte()
+            rgb[base + 1] = ((pixel shr 8) and 0xFF).toByte()
+            rgb[base + 2] = (pixel and 0xFF).toByte()
+        }
+        return rgb
+    }
+
     private fun yuvToArgb(y: Int, u: Int, v: Int): Int {
         val yf = y.toFloat()
         val uf = u.toFloat() - 128f
@@ -1223,9 +1397,14 @@ class MainActivity : AppCompatActivity() {
                             if (pendingHighResSample) {
                                 pendingHighResSample = false
                                 runHighResSrSample(imageProxy)
-                            } else if (pendingYuvRoiProbe) {
-                                pendingYuvRoiProbe = false
+                            } else if (pendingProbeMode == "yuv_roi") {
+                                pendingProbeMode = ""
+                                Log.d("RB5_SR", "pending probe consumed: yuv_roi")
                                 runYuvRoiProbe(imageProxy)
+                            } else if (pendingProbeMode == "tensor_ready") {
+                                pendingProbeMode = ""
+                                Log.d("RB5_SR", "pending probe consumed: tensor_ready")
+                                runTensorReadyProbe(imageProxy)
                             } else if (pendingRealCameraCapture) {
                                 pendingRealCameraCapture = false
                                 runRealCameraCapture(imageProxy)
@@ -1268,6 +1447,9 @@ class MainActivity : AppCompatActivity() {
                     imageAnalysis
                 )
                 Log.d(CAMERA_TAG, "CameraX preview and ImageAnalysis started")
+                when (pendingProbeMode) {
+                    "yuv_roi", "tensor_ready" -> Log.d("RB5_SR", "pending probe armed: $pendingProbeMode")
+                }
                 if (pendingAutoLiveSr) {
                     pendingAutoLiveSr = false
                     previewView.postDelayed({ startLiveSrFromIntent() }, 500)

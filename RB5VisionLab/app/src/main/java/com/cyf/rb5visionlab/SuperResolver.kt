@@ -198,6 +198,63 @@ class SuperResolver(
         return Pair(out, timing)
     }
 
+    fun enhanceRgbBytes(inputRgb: ByteArray): Pair<Bitmap, SrTiming> {
+        require(inputRgb.size == inputSize * inputSize * 3) {
+            "Expected ${inputSize * inputSize * 3} RGB bytes, got ${inputRgb.size}"
+        }
+
+        val tPre0 = System.nanoTime()
+        inputBuffer.clear()
+        when (inputLayout) {
+            SrInputLayout.NHWC -> {
+                for (i in inputRgb.indices) {
+                    putUnitByte(inputBuffer, inputRgb[i].toInt() and 0xFF)
+                }
+            }
+            SrInputLayout.NHCW -> {
+                for (y in 0 until inputSize) {
+                    for (c in 0 until 3) {
+                        for (x in 0 until inputSize) {
+                            putUnitByte(inputBuffer, inputRgb[(y * inputSize + x) * 3 + c].toInt() and 0xFF)
+                        }
+                    }
+                }
+            }
+            SrInputLayout.NCHW -> {
+                for (c in 0 until 3) {
+                    for (y in 0 until inputSize) {
+                        for (x in 0 until inputSize) {
+                            putUnitByte(inputBuffer, inputRgb[(y * inputSize + x) * 3 + c].toInt() and 0xFF)
+                        }
+                    }
+                }
+            }
+        }
+        inputBuffer.rewind()
+        outputBuffer.clear()
+        val tPre1 = System.nanoTime()
+
+        interpreter.run(inputBuffer, outputBuffer)
+        val tInf = System.nanoTime()
+
+        outputBuffer.rewind()
+        when (outputType) {
+            DataType.UINT8 -> fillOutputPixelsFromUint8(outputBuffer)
+            DataType.FLOAT32 -> fillOutputPixelsFromFloat(outputBuffer)
+            else -> error("Unsupported SR output tensor type: $outputType")
+        }
+        val out = Bitmap.createBitmap(outputSize, outputSize, Bitmap.Config.ARGB_8888)
+        out.setPixels(outputPixels, 0, outputSize, 0, 0, outputSize, outputSize)
+        val tPost = System.nanoTime()
+
+        val timing = SrTiming(
+            preprocessMs = (tPre1 - tPre0) / 1_000_000,
+            inferenceMs = (tInf - tPre1) / 1_000_000,
+            postprocessMs = (tPost - tInf) / 1_000_000,
+        )
+        return Pair(out, timing)
+    }
+
     fun close() {
         interpreter.close()
         gpuDelegate?.close()
@@ -226,6 +283,17 @@ class SuperResolver(
             DataType.FLOAT32 -> buffer.putFloat(value)
             DataType.UINT8 -> {
                 val quantized = ((value / inputScale) + inputZeroPoint).toInt().coerceIn(0, 255)
+                buffer.put(quantized.toByte())
+            }
+            else -> error("Unsupported SR input tensor type: $inputType")
+        }
+    }
+
+    private fun putUnitByte(buffer: ByteBuffer, value: Int) {
+        when (inputType) {
+            DataType.FLOAT32 -> buffer.putFloat(value / 255.0f)
+            DataType.UINT8 -> {
+                val quantized = (((value / 255.0f) / inputScale) + inputZeroPoint).toInt().coerceIn(0, 255)
                 buffer.put(quantized.toByte())
             }
             else -> error("Unsupported SR input tensor type: $inputType")

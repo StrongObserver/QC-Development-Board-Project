@@ -223,3 +223,40 @@ a tensor-ready input buffer. Keep the current Bitmap path as default until
 native/tensor-ready evidence shows at least 2-3ms p50 e2e improvement without
 color/crop/rotation regression.
 ```
+
+Tensor-ready single-frame probe:
+
+```text
+TENSOR_READY_PROBE_20251110_064501
+frame=1280x960
+rotation=270
+bitmapMs=8
+bitmapCropMs=2
+nativeRgbMs=8
+bitmapEnhanceWall=27
+rgbEnhanceWall=12
+bitmapPath=37
+rgbPath=20
+inputMAD=0.49
+outputMAD=0.74
+```
+
+Tensor-ready evidence:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\real_camera_showcase\tensor_ready_probe_20251110_064501
+```
+
+Interpretation:
+
+```text
+The tensor-ready probe is visually aligned and shows a strong single-frame
+path reduction by bypassing Bitmap input preparation. This is the first
+positive evidence that native ROI + RGB bytes can matter at the SR pipeline
+level, not only at the isolated ROI conversion level.
+
+Boundary: this is still a one-frame probe and includes some debug image
+generation work. Do not switch the default live path yet. The next step should
+be an isolated repeated live-path benchmark that uses native RGB bytes for
+QuickSRNet input and reports p50/p95 against the current Bitmap default.
+```
