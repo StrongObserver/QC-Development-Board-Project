@@ -1,6 +1,6 @@
 # RB5 Gen2 Showcase Narrative
 
-Updated: 2026-07-18
+Updated: 2026-07-19
 
 ## One-Line Positioning
 
@@ -25,6 +25,7 @@ The engineering story is:
 5. Reduced the dominant CameraX/ImageAnalysis conversion cost by changing live analysis from 4000x3000 to 1280x960.
 6. Compared Real-ESRGAN and QuickSRNetSmall as different quality/latency tradeoffs instead of ranking them by PSNR alone.
 7. Measured init, memory, and switch cost before rejecting automatic live dual-model routing as the default path.
+8. Collected a minimal real-camera showcase set and used visual review to keep the route decision caveated.
 ```
 
 ## Evidence Chain
@@ -37,13 +38,14 @@ The engineering story is:
 | QuickSRNet can run as live candidate | `20260718_app_quicksrnet_live_roi_1280x960` | e2e p50/p95 22/25ms, inference 2/2ms |
 | Automatic switching is not free | `20260718_app_qnn_resource_probe` | Real-ESRGAN -> QuickSRNet switch about 369ms |
 | PSNR is not the only quality judge | `EVAL_METRIC_POLICY.md` and contact sheets | visual veto remains required |
+| Real-camera showcase is available | `20251110_045328_minimal_real_camera_set` | 8/8 scenes complete, accepted with caveats |
 
 ## Model Roles
 
 | Model / path | Current role |
 | --- | --- |
 | Real-ESRGAN W8A8 + QNN Delegate | QNN/HTP deployment milestone, perceptual enhancement candidate, comparison baseline |
-| QuickSRNetSmall W8A8 + QNN Delegate | strongest current live ROI workhorse candidate |
+| QuickSRNetSmall W8A8 + QNN Delegate | default live ROI workhorse |
 | Automatic dual-model live routing | not default; switch cost, route risk, and power/thermal data do not justify it yet |
 
 ## Numbers Worth Remembering
@@ -57,6 +59,7 @@ Old live ROI full 4000x3000 path: e2e about 63/65ms
 New live ROI 1280x960 path: e2e about 22/25ms
 QuickSRNet live ROI: inference about 2/2ms, e2e about 22/25ms
 Real-ESRGAN -> QuickSRNet dynamic switch: about 369ms
+Real-camera showcase set: 8 scenes / 32 standard images, accepted with caveats
 ```
 
 ## What Not To Claim
@@ -84,7 +87,10 @@ structure-sensitive cases. I did not turn that into automatic routing directly:
 I measured model init, memory, and switch cost first. Since switching costs about
 369ms and power/thermal behavior is not yet validated, the current route is
 QuickSRNet as the live ROI workhorse candidate and Real-ESRGAN as the QNN/HTP
-milestone plus optional perceptual/post-capture enhancement path.
+milestone plus optional perceptual/post-capture enhancement path. I then captured
+a small real-camera set to check that this route still makes sense outside fixed
+benchmarks; it supports the route with caveats rather than proving either model
+is globally better.
 ```
 
 ## Current Showcase Boundary
@@ -96,12 +102,13 @@ The minimum showcase should use:
 2. Live ROI 63ms -> 22ms data-path optimization table.
 3. QuickSRNet vs Real-ESRGAN model tradeoff table.
 4. Three structure-sensitive app cases.
-5. Route decision explaining why automatic dual-model routing is not default.
+5. Real-camera showcase contact sheet.
+6. Route decision explaining why automatic dual-model routing is not default.
 ```
 
-Before treating it as final, complete:
+Before making stronger claims, complete:
 
 ```text
-1. VISUAL_REVIEW_QUEUE.md human visual labels.
-2. P7 sustained live ROI power/thermal drift if making sustained-use claims.
+1. P7 sustained live ROI power/thermal drift if making sustained-use claims.
+2. Optional YUV ROI probe if more live-path latency reduction is needed.
 ```

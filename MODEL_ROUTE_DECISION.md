@@ -1,6 +1,6 @@
 # Model Route Decision
 
-Updated: 2026-07-18
+Updated: 2026-07-19
 
 ## Decision
 
@@ -46,6 +46,22 @@ workhorse candidate:
 | 5-minute sustained run | no meaningful e2e drift, coarse battery temp 24.0C -> 24.0C |
 | Model size | about 43.7KB |
 | Structure-sensitive metrics | better PSNR/SSIM than Real-ESRGAN on three selected cases |
+| Real-camera showcase set | accepted with caveats; no retake required |
+
+Real-camera evidence:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\real_camera_showcase\20251110_045328_minimal_real_camera_set
+```
+
+Summary:
+
+```text
+8/8 scenes complete, 32/32 standard images valid.
+QuickSRNet remains safer/conservative for live ROI.
+Real-ESRGAN is often sharper on text/edges and remains useful as optional
+post-capture or comparison evidence.
+```
 
 ## Why Keep Real-ESRGAN
 
@@ -61,32 +77,41 @@ It may be useful for post-capture or offline enhancement where latency is less s
 Do not describe Real-ESRGAN as obsolete or simply worse. It optimizes a
 different perceptual tradeoff.
 
-## Required Human Gate
+## Real-Camera Gate
 
-This decision is engineering-ready, but not final-showcase-ready until the user
-fills `VISUAL_REVIEW_QUEUE.md`.
-
-Promotion rule:
+The minimum real-camera showcase gate is now complete and accepted with caveats.
+The review is stored in:
 
 ```text
-If QuickSRNet full-host and three-case app contact sheets are pass/conditional,
-keep decision C.
-If QuickSRNet is visually too soft or fails structure-sensitive review, fall
-back to decision A: keep Real-ESRGAN as deployment milestone and QuickSRNet as
-evidence-only.
+C:\Users\Admin\Videos\RB5 gen2\real_camera_showcase\20251110_045328_minimal_real_camera_set\ROUTE_REVIEW.md
+```
+
+Promotion rule after this review:
+
+```text
+Keep decision C.
+Do not claim QuickSRNet is globally better.
+Do not claim Real-ESRGAN is obsolete.
+Do not enable automatic live dual-model routing as the default.
 ```
 
 ## App Default Boundary
 
-This file does not require immediately changing the Android UI default model.
-Changing the actual app default should be a small separate patch after visual
-review, because it changes the user-facing demo behavior.
+The Android app default live SR path has been changed to:
+
+```text
+QNN backend + QuickSRNetSmall W8A8
+```
+
+This is a default workhorse change, not automatic scene routing. Real-ESRGAN
+must remain explicitly reachable for comparison and optional post-capture /
+perceptual enhancement evidence.
 
 ## Current Route Summary
 
 ```text
 Default engineering story: QuickSRNet live ROI + Real-ESRGAN optional/post-capture.
-Default app implementation for now: keep model selection explicit through existing UI/intent controls.
+Default app implementation: QNN/QuickSRNetSmall live ROI by default, with explicit UI/intent access to Real-ESRGAN.
 Do not add automatic scene routing to the default path yet. Keep bounded
 experiments open.
 ```

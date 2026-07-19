@@ -1,6 +1,6 @@
 # Showcase Materials
 
-Updated: 2026-07-18
+Updated: 2026-07-19
 
 ## Minimum Evidence Package
 
@@ -167,6 +167,48 @@ Boundary:
 This is short-run stability, not full power/perf-watt proof.
 ```
 
+## 7. Real-Camera Showcase Set
+
+Evidence:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\real_camera_showcase\20251110_045328_minimal_real_camera_set
+```
+
+Use:
+
+```text
+contact_sheet.png
+review_template.csv
+ROUTE_REVIEW.md
+SUMMARY.md
+```
+
+Result:
+
+```text
+8/8 scenes complete
+32/32 standard images valid
+status: accepted_with_caveats
+no retake required for the current minimum set
+```
+
+Message:
+
+```text
+The real-camera set supports the route decision rather than replacing the fixed
+benchmark. QuickSRNetSmall is now the default live ROI workhorse.
+Real-ESRGAN remains useful as a sharper text/edge comparison and optional
+post-capture/perceptual path.
+```
+
+Boundary:
+
+```text
+Do not claim either model is globally better from this 8-scene set.
+Do not use it as a training set.
+```
+
 ## Human Review Still Needed
 
 Human visual review status is now recorded in:
@@ -182,6 +224,7 @@ QNN Delegate fixed sample: pass
 App delegate vs qnn-net-run: pass
 QuickSRNet vs Real-ESRGAN full host set: conditional
 Three structure-sensitive app cases: conditional
+Real-camera showcase set: accepted_with_caveats
 ```
 
 Showcase rule:
@@ -190,6 +233,7 @@ Showcase rule:
 Use the first two as direct QNN/HTP app milestone evidence.
 Use the last two as model-tradeoff evidence with caveats, not as a global
 QuickSRNet-wins claim.
+Use the real-camera set as final showcase credibility evidence with caveats.
 ```
 
 ## Suggested Slide / Resume Order
@@ -200,4 +244,5 @@ QuickSRNet-wins claim.
 4. Data-path optimization: 63/65ms -> 22/25ms.
 5. Model tradeoff: Real-ESRGAN vs QuickSRNetSmall.
 6. Resource-aware route decision: no default automatic dual-model routing.
-7. Short sustained validation and remaining boundaries.
+7. Real-camera showcase evidence and remaining boundaries.
+8. Short sustained validation and remaining boundaries.

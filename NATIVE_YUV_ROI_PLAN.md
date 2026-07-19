@@ -1,6 +1,6 @@
 # Native / YUV ROI Plan
 
-Updated: 2026-07-18
+Updated: 2026-07-19
 
 ## Decision Scope
 
@@ -156,7 +156,40 @@ At least 2-3ms e2e p50 improvement without rotation/color/crop regression.
 
 ## Current Recommendation
 
-Do not implement this immediately in the mainline unless another round of live
-ROI optimization is needed. Keep it as a bounded `performance_lane` exploration:
-start with a Kotlin-only YUV ROI correctness probe, then move to native only if
-the probe shows measurable upside and no color/rotation/crop regression.
+Kotlin-only Step 1 has now been validated as a correctness probe, not as a
+replacement path.
+
+Result:
+
+```text
+YUV_ROI_PROBE_20251110_055422
+frame=1280x960
+rotation=270
+bitmapMs=8
+bitmapCropMs=1
+yuvRoiMs=16
+mean_abs_diff=0.34
+```
+
+Evidence:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\real_camera_showcase\yuv_roi_probe_20251110_055422
+```
+
+Interpretation:
+
+```text
+The Kotlin-only YUV ROI path is visually aligned with the current Bitmap crop
+path, but it is slower than the current toBitmap + crop path in this probe.
+Do not replace the live SR path with Kotlin-only YUV ROI.
+```
+
+Next valid performance-lane step:
+
+```text
+Move the hot ROI conversion loop to native C++ or a tensor-ready buffer only if
+more latency reduction is needed. Keep the current Bitmap path as default until
+native/tensor-ready evidence shows at least 2-3ms p50 e2e improvement without
+color/crop/rotation regression.
+```
