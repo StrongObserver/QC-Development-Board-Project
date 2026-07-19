@@ -1,6 +1,6 @@
 # RB5 Gen2 Full Scope Ledger
 
-Updated: 2026-07-19
+Updated: 2026-07-20
 
 ## Purpose
 
@@ -35,20 +35,20 @@ later, but it must not disappear.
 | E10-A | QNN/HTP Path A local runner | done | `qnn-net-run --retrieve_context` smoke/full benchmark exists | Maintain only |
 | E10-B | QNN/HTP Android app path | done | QNN TFLite Delegate + HTP app path works with skel lib | Maintain only |
 | D8 | W8A8 quantized baseline | done | Real-ESRGAN W8A8 TFLite and QNN paths; QuickSRNetSmall W8A8 default live path | Maintain only |
-| D8-config | per-channel/per-tensor/calibration comparison | queued | W8A8 baseline exists; no multi-config sweep yet | Run only if quantization study becomes next lane |
-| AIMET-CLE | AIMET CLE or Bias Correction | queued | Not triggered yet because no clear W8A8-vs-float showcase regression | Need failure crop before execution |
+| D8-config | per-channel/per-tensor/calibration comparison | done | First-pass AI Hub comparison completed for current app W8A8, calib10 default, and calib10 minmax; minmax is worse and calib10 default is close to current app W8A8 | Do not replace app model without stronger evidence |
+| AIMET-CLE | AIMET CLE or Bias Correction | queued | Trigger check completed; no clear W8A8-vs-float showcase regression was found | Need failure crop before execution |
 | AIMET-advanced | AdaRound / QAT | queued | High cost and no current trigger | Keep behind CLE/Bias trigger |
-| model-curve | Real-ESRGAN vs QuickSRNet quality/latency/size/power curve | in_progress | Quality/latency/size done; power/perf-watt incomplete | Add power/perf-watt only if needed for final claim |
+| model-curve | Real-ESRGAN vs QuickSRNet quality/latency/size/power curve | done | Quality/latency/size evidence exists; board-level battery-node power smoke exists for idle, preview, live QuickSR, QuickSR tile, and Real-ESRGAN tile | Treat power as board-level estimate, not external-meter evidence |
 | eval-fixed | fixed scenario benchmark | done | `RB5_SR_Benchmark_v1`, full 24-case, real-camera 8-scene set | Maintain only |
-| eval-perceptual | LPIPS / NIQE / OCR diagnostic metrics | queued | Metric policy says diagnostic only; not calibrated | Use only when visual and PSNR/SSIM conflict |
+| eval-perceptual | LPIPS / NIQE / OCR diagnostic metrics | in_progress | Low-cost tile diagnostics exist; LPIPS/NIQE/OCR remain uncalibrated diagnostic-only tools | Use only when visual and PSNR/SSIM conflict |
 | native-preprocess | native YUV ROI / RGB preprocessing | in_progress | Kotlin YUV correct but slow; native ROI faster single-frame; tensor-ready repeated live not default | Next attempt must target output/postprocess or deeper tensor-ready path |
 | buffer-reuse | buffer / object reuse | done | TFLite buffers, pixel arrays, sample-copy reduction, output Bitmap reuse | Maintain only |
-| zero-copy | true zero-copy CameraX -> NPU | queued | Not attempted; known high complexity: AHardwareBuffer/DMA-BUF/QNN tensor memory/vendor permissions | Start only after smaller native/tensor-ready lanes are exhausted |
+| zero-copy | true zero-copy CameraX -> NPU | blocked_needs_user | Local/public/internal research found no clear ordinary-app CameraX AHardwareBuffer/DMA-BUF -> QNN TFLite Delegate input registration path | Need Qualcomm/vendor confirmation before deeper implementation |
 | mixed-precision | w8a16 mixed precision | queued | No current W8A8 quality blocker | Needs quantization failure evidence |
 | temporal | frame skip / temporal reuse / double buffering | queued | Current project is single-frame ROI; no video path yet | Start only when video path begins |
-| tile | post-capture whole-image tile enhancement | queued | Not implemented | Candidate next feature if product demo needs still-photo enhancement |
-| video | video every-N-frame enhancement | queued | Not implemented | Requires video capture/evaluation plan first |
-| power | sustained power/perf-watt | in_progress | 120s and 5min coarse thermal signals exist; no current/power | Add real power/current only if making perf-watt claim |
+| tile | post-capture whole-image tile enhancement | done | Host MVP, host multi-scene comparison, and Android app tile entry are implemented; same-frame QuickSR vs Real-ESRGAN app evidence exists | Real-ESRGAN tile is the quality-priority post-capture route; QuickSR tile stays speed/conservative baseline |
+| video | video every-N-frame enhancement | blocked_needs_user | No CameraX VideoCapture/Recorder path yet; product choice is still open | Choose recording real video, every-N analysis frames, or protocol-only before implementation |
+| power | sustained power/perf-watt | done | Rooted battery-node current/voltage reads work; core smoke estimates exist | Use as board-level estimate only; do not claim external-meter precision |
 | showcase | resume / README / demo / interview package | done | README, SHOWCASE_INDEX, DEMO_RUNBOOK, INTERVIEW_TALK_TRACK, resume draft | Maintain only |
 
 ## Current Required Next Unfinished Items
@@ -56,14 +56,12 @@ later, but it must not disappear.
 The current checkpoint is strong enough for showcase, but the full original
 design still has unfinished required lanes:
 
-1. `tile`: post-capture whole-image tile enhancement.
-2. `D8-config`: quantization configuration comparison.
-3. `AIMET-CLE`: precision recovery, triggered by a real quantization failure.
-4. `eval-perceptual`: LPIPS / NIQE / OCR diagnostic metrics when visual and
+1. `AIMET-CLE`: precision recovery, triggered by a real quantization failure.
+2. `eval-perceptual`: LPIPS / NIQE / OCR diagnostic metrics when visual and
    PSNR/SSIM conflict.
-5. `zero-copy`: true zero-copy exploration after smaller copy-reduction lanes.
-6. `temporal` / `video`: video or every-N-frame enhancement.
-7. `power`: real power/perf-watt if that claim is needed.
+3. `zero-copy`: true zero-copy exploration after Qualcomm/vendor confirmation.
+4. `temporal` / `video`: video or every-N-frame enhancement after the product
+   and evaluation protocol are chosen.
 
 ## Loop Rule
 

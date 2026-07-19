@@ -7,14 +7,36 @@ This is the first file future AI agents should read for this project.
 ```text
 P0: User's current RB5 Gen2 project oral-template prompt
 P1: PROJECT_ENTRYPOINTS.md
-P2: PROJECT_FULL_SCOPE_LEDGER.md
-P3: Latest results/<run_id>/SUMMARY.md and NEXT_ACTION.md
-P4: RB5 Gen2_AI上下文.md and benchmark QA SOP files
-P5: metrics/contact sheets/review guides
-P6: source code, raw files, detailed logs
+P2: TOKEN_DISCLOSURE_POLICY.md
+P3: LOOP_TASK_QUEUE.md
+P4: PROJECT_FULL_SCOPE_LEDGER.md
+P5: Latest results/<run_id>/loop_state.json, then SUMMARY.md / NEXT_ACTION.md
+P6: RB5 Gen2_AI上下文.md and benchmark QA SOP files, by progressive disclosure
+P7: metrics/contact sheets/review guides
+P8: source code, raw files, detailed logs
 ```
 
 The user's current prompt always wins over older `NEXT_ACTION.md`.
+
+## Token Disclosure Rule
+
+Do not full-read every long RB5 document during routine onboarding. First read:
+
+```text
+C:\Users\Admin\Desktop\QC-Development-Board-Project\TOKEN_DISCLOSURE_POLICY.md
+C:\Users\Admin\Desktop\QC-Development-Board-Project\LOOP_TASK_QUEUE.md
+```
+
+The policy exists because the long project context document and internal
+knowledge docs can consume a large share of the conversation window. Default to
+progressive disclosure:
+
+```text
+route -> summaries -> task evidence -> full detail only when required
+```
+
+The only exception is P0: if the user's current oral template explicitly asks
+for a full read of a file, perform that full read.
 
 ## Oral Template Read Rule
 
@@ -44,11 +66,12 @@ Use this order:
 ```text
 1. Read the user's current oral-template prompt. It is the only P0 command.
 2. Read this entrypoint.
-3. Read PROJECT_FULL_SCOPE_LEDGER.md before deciding that the project is "done"
+3. Read TOKEN_DISCLOSURE_POLICY.md and LOOP_TASK_QUEUE.md.
+4. Read PROJECT_FULL_SCOPE_LEDGER.md before deciding that the project is "done"
    or before choosing only stabilization/showcase work.
-4. Read the latest result folder's loop_state.json when present.
-5. Read SUMMARY.md / NEXT_ACTION.md only as handoff context.
-6. Continue only if the hard gates in loop_state.json allow it.
+5. Read the latest result folder's loop_state.json when present.
+6. Read SUMMARY.md / NEXT_ACTION.md only as handoff context.
+7. Continue only if the hard gates in loop_state.json allow it.
 ```
 
 The current loop policy is implemented in:
@@ -157,13 +180,26 @@ manifest, contact sheet, result SOP, and reviewed run.
 
 ## First Read Checklist
 
-Read these before planning non-trivial RB5 work:
+Use progressive disclosure before planning non-trivial RB5 work. Start with the
+heading index and relevant sections instead of full-reading the long context
+file, unless the user's current oral template explicitly requires a full read:
 
 ```text
 C:\Users\Admin\Nutstore\1\Typora_save\自己的项目\RB5 Gen2_AI上下文.md
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\AI_CONTEXT.md
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\qa\RESULT_SOP.md
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\qa\TEST_PROTOCOL.md
+```
+
+For `RB5 Gen2_AI上下文.md`, default L1 sections are:
+
+```text
+heading index
+当前总状态（给失忆 AI 先看）
+当前 Android Studio 工程
+当前项目结构
+暂未开始
+the relevant subsection under 下一步计划
 ```
 
 For evaluation-system expansion, also read:

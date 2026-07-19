@@ -24,3 +24,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\read_rb5_oral_template
 If `HASH_STATUS=UNCHANGED_FROM_PREVIOUS`, stop. Ask the user to save or sync the
 Typora/Nutstore file before continuing. This prevents accidentally executing an
 older oral-template version.
+
+## RB5 progressive onboarding
+
+Use this to check the minimal RB5 read order and the token-heavy files without
+dumping long documents into the conversation:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\rb5_progressive_onboarding.ps1
+```
+
+Include latest result metadata when the current task depends on existing
+benchmark/app evidence:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\rb5_progressive_onboarding.ps1 -IncludeLatestResult
+```

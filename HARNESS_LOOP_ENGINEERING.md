@@ -114,6 +114,29 @@ stopping after a stable checkpoint. If live user instructions conflict with the
 ledger, the live oral template wins, but the skipped ledger item must remain
 visible for later.
 
+## Loop Queue Requirement
+
+The active multi-task loop queue is:
+
+```text
+C:\Users\Admin\Desktop\QC-Development-Board-Project\LOOP_TASK_QUEUE.md
+```
+
+Future agents must use this queue to keep moving through the accepted task
+plan. A loop may stop only when all tasks reach terminal state, the user
+redirects, or the current task needs a concrete user/device action or has a
+technical blocker with evidence.
+
+Use:
+
+```text
+C:\Users\Admin\Desktop\QC-Development-Board-Project\TOKEN_DISCLOSURE_POLICY.md
+```
+
+to keep onboarding and loop handoff reads small. Token reduction must not become
+evidence reduction: read less by default, then load the exact file, section,
+source code, run result, or image evidence required by the current task.
+
 ## Exploration Contract
 
 For any non-trivial exploration, define:
