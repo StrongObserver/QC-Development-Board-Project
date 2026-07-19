@@ -12,19 +12,13 @@ native + tensor-ready ROI probes
 tensor-ready repeated live benchmark
 output-reuse default live optimization
 120s default QuickSR live sustained validation
+README / demo runbook / interview talk track
 ```
 
-Local commits not yet pushed:
+Local commits not yet pushed are the output of:
 
 ```text
-47a98de feat(android): add real-camera capture and default QuickSR live path
-29c272d docs(showcase): record real-camera route decisions
-2530e63 docs(showcase): compress RB5 resume handoff
-f01e94e perf(camera): add native YUV ROI probe
-579ffa7 perf(camera): probe tensor-ready SR input
-2e4b69c perf(camera): benchmark tensor-ready live ROI
-ff5b129 perf(android): reuse live SR output bitmap
-137a0f6 docs(showcase): add output-reuse sustained evidence
+git log --oneline origin/main..HEAD
 ```
 
 ## Highest Priority
@@ -32,7 +26,7 @@ ff5b129 perf(android): reuse live SR output bitmap
 Next priority:
 
 ```text
-Decide whether to push the eight local commits to origin/main.
+Decide whether to push local commits to origin/main.
 ```
 
 Do not reopen as unfinished:
@@ -138,8 +132,9 @@ current Bitmap default remains better on p50 after output reuse: 19.0/24.7ms
 Recommended order:
 
 ```text
-1. Push local commits to origin/main if the user approves.
-2. Use current showcase/resume docs as the milestone package.
+1. Push any new local commits to origin/main if the user approves.
+2. Use `README.md`, `SHOWCASE_MATERIALS.md`, `RESUME_PROJECT_DRAFT.md`,
+   `INTERVIEW_TALK_TRACK.md`, and `DEMO_RUNBOOK.md` as the milestone package.
 3. Do not continue performance work for this milestone unless the user asks.
 4. If performance work resumes, attack output/postprocess or deeper tensor-ready output handling.
 5. Keep AIMET/LPIPS/DISTS deferred until their trigger conditions appear.

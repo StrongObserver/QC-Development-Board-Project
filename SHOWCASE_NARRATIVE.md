@@ -26,6 +26,7 @@ The engineering story is:
 6. Compared Real-ESRGAN and QuickSRNetSmall as different quality/latency tradeoffs instead of ranking them by PSNR alone.
 7. Measured init, memory, and switch cost before rejecting automatic live dual-model routing as the default path.
 8. Collected a minimal real-camera showcase set and used visual review to keep the route decision caveated.
+9. Tested native/tensor-ready ROI variants and kept the Bitmap default because repeated live p50 did not improve.
 ```
 
 ## Evidence Chain
@@ -39,6 +40,7 @@ The engineering story is:
 | Automatic switching is not free | `20260718_app_qnn_resource_probe` | Real-ESRGAN -> QuickSRNet switch about 369ms |
 | PSNR is not the only quality judge | `EVAL_METRIC_POLICY.md` and contact sheets | visual veto remains required |
 | Real-camera showcase is available | `20251110_045328_minimal_real_camera_set` | 8/8 scenes complete, accepted with caveats |
+| Tensor-ready live is bounded | `20251110_tensor_ready_live_roi_1280x960` | valid but not promoted; p50 e2e did not beat Bitmap default |
 
 ## Model Roles
 
@@ -58,6 +60,8 @@ QNN Delegate fixed sample W8A8: about 4-5ms inference, about 53-61ms total
 Old live ROI full 4000x3000 path: e2e about 63/65ms
 New live ROI 1280x960 path: e2e about 22/25ms
 QuickSRNet live ROI: inference about 2/2ms, e2e about 22/25ms
+Current default after output reuse: e2e about 19.0/24.7ms
+120s sustained default run: e2e first/last 20% 20/25ms -> 21/26ms
 Real-ESRGAN -> QuickSRNet dynamic switch: about 369ms
 Real-camera showcase set: 8 scenes / 32 standard images, accepted with caveats
 ```
@@ -68,7 +72,8 @@ Real-camera showcase set: 8 scenes / 32 standard images, accepted with caveats
 - Do not claim Real-ESRGAN is worse just because it is more perceptual/GAN-style.
 - Do not claim automatic dual-model live routing is product-ready.
 - Do not claim sustained power or thermal stability until P7 is complete.
-- Do not claim true zero-copy or native YUV ROI optimization has been implemented.
+- Do not claim full power/perf-watt characterization from the current short sustained run.
+- Do not claim true zero-copy or promote tensor-ready live as the default path.
 
 ## Interview Answer
 
@@ -90,7 +95,10 @@ QuickSRNet as the live ROI workhorse candidate and Real-ESRGAN as the QNN/HTP
 milestone plus optional perceptual/post-capture enhancement path. I then captured
 a small real-camera set to check that this route still makes sense outside fixed
 benchmarks; it supports the route with caveats rather than proving either model
-is globally better.
+is globally better. I also tested native YUV ROI and tensor-ready input; they
+were technically valid, but repeated live timing did not justify replacing the
+default path, so I kept the simpler route and used output reuse for a small
+tail-latency improvement.
 ```
 
 ## Current Showcase Boundary
@@ -109,6 +117,6 @@ The minimum showcase should use:
 Before making stronger claims, complete:
 
 ```text
-1. P7 sustained live ROI power/thermal drift if making sustained-use claims.
-2. Optional YUV ROI probe if more live-path latency reduction is needed.
+1. Longer power/perf-watt characterization if making sustained-use claims.
+2. Deeper output/postprocess work only if more live-path latency reduction is needed.
 ```
