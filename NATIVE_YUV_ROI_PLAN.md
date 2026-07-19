@@ -260,3 +260,32 @@ generation work. Do not switch the default live path yet. The next step should
 be an isolated repeated live-path benchmark that uses native RGB bytes for
 QuickSRNet input and reports p50/p95 against the current Bitmap default.
 ```
+
+Repeated tensor-ready live benchmark:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20251110_tensor_ready_live_roi_1280x960
+parsed_frames=167
+current Bitmap default e2e p50/p95: 19.0 / 26.3 ms
+tensor-ready e2e p50/p95: 20.0 / 25.7 ms
+current Bitmap default analyzer p50/p95: 21.0 / 29.0 ms
+tensor-ready analyzer p50/p95: 21.0 / 26.7 ms
+```
+
+Decision:
+
+```text
+mainline_not_justified_yet
+```
+
+Interpretation:
+
+```text
+The tensor-ready live path is technically valid, but repeated live timing does
+not meet the promotion gate. It slightly improves p95 analyzer/e2e but does not
+improve p50 app e2e, so the default Bitmap live path should remain in place.
+
+This is not a dead end. It means a future performance experiment must remove
+more than Bitmap input preparation, likely by reducing output/postprocess cost
+or avoiding extra debug/Bitmap work in a deeper tensor-ready path.
+```

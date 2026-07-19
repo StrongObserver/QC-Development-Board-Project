@@ -62,6 +62,7 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var srBackend = SrBackend.QNN
     @Volatile private var srModelVariant = SrModelVariant.QUICKSR_W8A8
     @Volatile private var liveSr = false
+    @Volatile private var liveSrTensorReady = false
     @Volatile private var offlineEvalActive = false
     private lateinit var srResultView: ImageView
     private val srSampleLock = Any()
@@ -217,6 +218,7 @@ class MainActivity : AppCompatActivity() {
         setupSuperResolution()
         val autoRunQnnFixed = boolIntentExtra("run_qnn_fixed")
         val autoStartLiveSr = boolIntentExtra("start_live_sr")
+        val autoStartTensorReadyLiveSr = boolIntentExtra("start_live_sr_tensor_ready")
         val autoRunResourceProbe = boolIntentExtra("run_resource_probe")
         val autoRunYuvRoiProbe = boolIntentExtra("run_yuv_roi_probe")
         val autoRunTensorReadyProbe = boolIntentExtra("run_tensor_ready_probe")
@@ -230,6 +232,7 @@ class MainActivity : AppCompatActivity() {
         Log.d(
             "RB5_SR",
             "intent probes run_qnn_fixed=$autoRunQnnFixed start_live_sr=$autoStartLiveSr " +
+                "start_live_sr_tensor_ready=$autoStartTensorReadyLiveSr " +
                 "run_yuv_roi_probe=$autoRunYuvRoiProbe run_tensor_ready_probe=$autoRunTensorReadyProbe " +
                 "probe_mode=$requestedProbeMode"
         )
@@ -245,6 +248,8 @@ class MainActivity : AppCompatActivity() {
             }
         } else if (autoStartLiveSr) {
             pendingAutoLiveSr = true
+        } else if (autoStartTensorReadyLiveSr) {
+            pendingProbeMode = "tensor_live"
         } else if (requestedProbeMode == "yuv_roi" || autoRunYuvRoiProbe) {
             pendingProbeMode = "yuv_roi"
         } else if (requestedProbeMode == "tensor_ready" || autoRunTensorReadyProbe) {
@@ -306,6 +311,7 @@ class MainActivity : AppCompatActivity() {
         srButton.setOnClickListener {
             liveSr = !liveSr
             if (liveSr) {
+                liveSrTensorReady = false
                 offlineEvalActive = false
                 previewView.visibility = View.GONE
                 srResultView.visibility = View.VISIBLE
@@ -365,12 +371,24 @@ class MainActivity : AppCompatActivity() {
 
     private fun startLiveSrFromIntent() {
         liveSr = true
+        liveSrTensorReady = false
         offlineEvalActive = false
         findViewById<PreviewView>(R.id.previewView).visibility = View.GONE
         srResultView.visibility = View.VISIBLE
         findViewById<Button>(R.id.sr_button).text = "停止实时超分"
         statusTextView.text = "Live ROI SR starting with ${srBackend.label}/${srModelVariant.label} from intent..."
         Log.d("RB5_SR", "auto live SR from intent backend=${srBackend.label} model=${srModelVariant.label}")
+    }
+
+    private fun startTensorReadyLiveSrFromIntent() {
+        liveSr = false
+        liveSrTensorReady = true
+        offlineEvalActive = false
+        findViewById<PreviewView>(R.id.previewView).visibility = View.GONE
+        srResultView.visibility = View.VISIBLE
+        findViewById<Button>(R.id.sr_button).text = "停止 Tensor Live"
+        statusTextView.text = "Tensor-ready live ROI SR starting with QNN/QUICKSR_W8A8..."
+        Log.d("RB5_SR_TENSOR", "auto tensor-ready live SR from intent backend=QNN model=QUICKSR_W8A8")
     }
 
     private fun runQnnFixedSample() {
@@ -811,6 +829,64 @@ class MainActivity : AppCompatActivity() {
                 findViewById<PreviewView>(R.id.previewView).visibility = View.VISIBLE
                 findViewById<Button>(R.id.sr_button).text = startButtonText()
                 statusTextView.text = "Live SR failed on ${srBackend.label}. Long press to choose another backend."
+            }
+        }
+    }
+
+    private fun runTensorReadyLiveSr(imageProxy: ImageProxy) {
+        val tag = "RB5_SR_TENSOR"
+        try {
+            if (resolver?.backend != SrBackend.QNN || resolver?.modelAsset != SrModelVariant.QUICKSR_W8A8.assetName) {
+                resolver?.close()
+                resolver = null
+            }
+            if (resolver == null) {
+                resolver = SuperResolver(
+                    this,
+                    modelAsset = SrModelVariant.QUICKSR_W8A8.assetName,
+                    backend = SrBackend.QNN,
+                )
+            }
+            val side = 128
+            val degrees = imageProxy.imageInfo.rotationDegrees
+            val tRgbStart = System.nanoTime()
+            var rgbBytes = nativeYuv420ToRgbCenterRoiBytes(imageProxy, side)
+            if (degrees != 0) {
+                val nativeBitmap = rgbBytesToBitmap(rgbBytes, side)
+                val matrix = Matrix().apply { postRotate(degrees.toFloat()) }
+                val rotated = Bitmap.createBitmap(nativeBitmap, 0, 0, side, side, matrix, true)
+                rgbBytes = bitmapToRgbBytes(rotated)
+            }
+            val nativeRgbMs = (System.nanoTime() - tRgbStart) / 1_000_000
+            val tEnhanceStart = System.nanoTime()
+            val (out, timing) = resolver!!.enhanceRgbBytes(rgbBytes)
+            val enhanceWallMs = (System.nanoTime() - tEnhanceStart) / 1_000_000
+            val e2eMs = nativeRgbMs + timing.totalMs
+            val analyzerWallMs = nativeRgbMs + enhanceWallMs
+            Log.d(
+                tag,
+                "backend=QNN model=QUICKSR_W8A8 tensorLive crop=256->128->512 " +
+                    "frame=${imageProxy.width}x${imageProxy.height} nativeRgb=$nativeRgbMs rotate=$degrees " +
+                    "pre=${timing.preprocessMs} inf=${timing.inferenceMs} post=${timing.postprocessMs} " +
+                    "enhanceWall=$enhanceWallMs analyzer=$analyzerWallMs e2e=${e2eMs}ms"
+            )
+            runOnUiThread {
+                srResultView.setImageBitmap(out)
+                statusTextView.text =
+                    "Tensor-ready live ROI SR (QNN/QUICKSR_W8A8)\n" +
+                        "frame ${imageProxy.width}x${imageProxy.height} | ROI 128\n" +
+                        "native RGB ${nativeRgbMs} ms | preprocess ${timing.preprocessMs} ms\n" +
+                        "inference ${timing.inferenceMs} ms | postprocess ${timing.postprocessMs} ms\n" +
+                        "end-to-end ~${e2eMs} ms"
+            }
+        } catch (e: Throwable) {
+            Log.e(tag, "tensor-ready live SR failed", e)
+            liveSrTensorReady = false
+            runOnUiThread {
+                srResultView.visibility = View.GONE
+                findViewById<PreviewView>(R.id.previewView).visibility = View.VISIBLE
+                findViewById<Button>(R.id.sr_button).text = startButtonText()
+                statusTextView.text = "Tensor-ready live SR failed: ${e.message}"
             }
         }
     }
@@ -1408,6 +1484,8 @@ class MainActivity : AppCompatActivity() {
                             } else if (pendingRealCameraCapture) {
                                 pendingRealCameraCapture = false
                                 runRealCameraCapture(imageProxy)
+                            } else if (liveSrTensorReady) {
+                                runTensorReadyLiveSr(imageProxy)
                             } else if (liveSr) {
                                 runLiveSr(imageProxy)
                             } else if (!offlineEvalActive && (frameCount == 1 || frameCount % 30 == 0)) {
@@ -1449,6 +1527,11 @@ class MainActivity : AppCompatActivity() {
                 Log.d(CAMERA_TAG, "CameraX preview and ImageAnalysis started")
                 when (pendingProbeMode) {
                     "yuv_roi", "tensor_ready" -> Log.d("RB5_SR", "pending probe armed: $pendingProbeMode")
+                    "tensor_live" -> {
+                        pendingProbeMode = ""
+                        previewView.postDelayed({ startTensorReadyLiveSrFromIntent() }, 500)
+                        Log.d("RB5_SR_TENSOR", "pending tensor-ready live armed")
+                    }
                 }
                 if (pendingAutoLiveSr) {
                     pendingAutoLiveSr = false
@@ -1463,6 +1546,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         liveSr = false
+        liveSrTensorReady = false
         offlineEvalActive = false
         // Close the interpreter on the same single-thread executor so it cannot run
         // concurrently with an in-flight enhance() (closing during run() can crash).

@@ -33,6 +33,13 @@ LIVE_RE = re.compile(
     r"analyzer=(?P<analyzer_ms>\d+) e2e=(?P<e2e_ms>\d+)ms"
     r"(?: model=(?P<log_model>\w+))?"
 )
+TENSOR_LIVE_RE = re.compile(
+    r"backend=(?P<backend>\w+) model=(?P<log_model>\w+) tensorLive crop=(?P<crop_side>\d+)->128->512 "
+    r"frame=(?P<frame_width>\d+)x(?P<frame_height>\d+) "
+    r"nativeRgb=(?P<native_rgb_ms>\d+) rotate=(?P<rotate_ms>\d+) "
+    r"pre=(?P<pre_ms>\d+) inf=(?P<inf_ms>\d+) post=(?P<post_ms>\d+) "
+    r"enhanceWall=(?P<enhance_wall_ms>\d+) analyzer=(?P<analyzer_ms>\d+) e2e=(?P<e2e_ms>\d+)ms"
+)
 
 
 def run(cmd: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -83,10 +90,10 @@ def summarize_stage(run_id: str, stage: str, values: list[float]) -> dict[str, o
     }
 
 
-def parse_live_rows(log_text: str, model: str) -> list[dict[str, object]]:
+def parse_live_rows(log_text: str, model: str, tensor_ready: bool) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     for line in log_text.splitlines():
-        match = LIVE_RE.search(line)
+        match = TENSOR_LIVE_RE.search(line) if tensor_ready else LIVE_RE.search(line)
         if not match:
             continue
         values = match.groupdict()
@@ -98,6 +105,11 @@ def parse_live_rows(log_text: str, model: str) -> list[dict[str, object]]:
         }
         for key, value in values.items():
             row[key] = value if key == "backend" else int(value)
+        if tensor_ready:
+            row["cap_ms"] = row["native_rgb_ms"]
+            row["frame_bitmap_ms"] = 0
+            row["roi_ms"] = row["native_rgb_ms"]
+            row["sample_copy_ms"] = 0
         rows.append(row)
     return rows
 
@@ -107,6 +119,7 @@ def collect_logcat(
     min_frames: int,
     timeout_s: int,
     use_app_default: bool,
+    tensor_ready: bool,
 ) -> tuple[str, list[dict[str, object]]]:
     start_cmd = [
         "shell",
@@ -115,7 +128,7 @@ def collect_logcat(
         "-n",
         APP_COMPONENT,
         "--ez",
-        "start_live_sr",
+        "start_live_sr_tensor_ready" if tensor_ready else "start_live_sr",
         "true",
     ]
     if not use_app_default:
@@ -138,13 +151,14 @@ def collect_logcat(
                 "-v",
                 "time",
                 "RB5_SR:D",
+                "RB5_SR_TENSOR:D",
                 "RB5_QNN:D",
                 "AndroidRuntime:E",
                 "*:S",
                 check=False,
             )
             final_log = dump.stdout
-            final_rows = parse_live_rows(final_log, model)
+            final_rows = parse_live_rows(final_log, model, tensor_ready)
             if len(final_rows) >= min_frames:
                 break
     finally:
@@ -274,6 +288,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default="QUICKSR_W8A8", choices=["W8A8", "QUICKSR_W8A8"])
     parser.add_argument("--use-app-default", action="store_true", help="Do not pass sr_backend/sr_model extras; validate the app's compiled default.")
+    parser.add_argument("--tensor-ready", action="store_true", help="Run the isolated native-RGB tensor-ready live path.")
     parser.add_argument("--min-frames", type=int, default=120)
     parser.add_argument("--timeout-s", type=int, default=90)
     parser.add_argument("--run-id", default="")
@@ -287,7 +302,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    model_label = "APP_DEFAULT" if args.use_app_default else args.model
+    model_label = "TENSOR_READY_QUICKSR_W8A8" if args.tensor_ready else "APP_DEFAULT" if args.use_app_default else args.model
     run_id = args.run_id or datetime.now().strftime(f"%Y%m%d_%H%M%S_app_{model_label.lower()}_live_roi_1280x960")
     out_dir = RESULTS_ROOT / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -299,7 +314,7 @@ def main() -> None:
         (out_dir / "loop_state.json").write_text(json.dumps(loop_state, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")
         raise SystemExit(f"[blocked] {expected} not found")
 
-    log_text, frame_rows = collect_logcat(model_label, args.min_frames, args.timeout_s, args.use_app_default)
+    log_text, frame_rows = collect_logcat(model_label, args.min_frames, args.timeout_s, args.use_app_default, args.tensor_ready)
     (out_dir / "raw_logcat.txt").write_text(log_text, encoding="utf-8")
     write_csv(out_dir / "frame_metrics.csv", frame_rows)
 
@@ -309,6 +324,7 @@ def main() -> None:
     if frame_rows:
         for key, label in [
             ("frame_bitmap_ms", "frameBitmap"),
+            ("native_rgb_ms", "nativeRgb"),
             ("cap_ms", "cap"),
             ("roi_ms", "roi"),
             ("rotate_ms", "rotate"),
@@ -320,7 +336,8 @@ def main() -> None:
             ("analyzer_ms", "analyzer"),
             ("e2e_ms", "e2e"),
         ]:
-            stage_rows.append(summarize_stage(run_id, label, [float(row[key]) for row in frame_rows]))
+            if key in frame_rows[0]:
+                stage_rows.append(summarize_stage(run_id, label, [float(row[key]) for row in frame_rows]))
     write_csv(out_dir / "metrics.csv", stage_rows)
     write_csv(
         out_dir / "run_log.csv",
