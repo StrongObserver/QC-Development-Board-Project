@@ -85,6 +85,8 @@ Real-ESRGAN W8A8 postprocess: 14/16ms -> 10/13ms
 QuickSRNetSmall postprocess: 15/18ms -> 11/14ms
 sampleCopy p50/p95: about 3/4ms -> 0/0ms
 default QuickSR live e2e p50/p95 after output reuse: 19.0 / 24.7ms
+120s sustained output-reuse QuickSR live e2e first/last 20% p50/p95:
+20.0 / 25.0ms -> 21.0 / 26.0ms
 ```
 
 ## 4. Model Tradeoff
@@ -153,6 +155,7 @@ Evidence:
 ```text
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260718_p4_sustained_w8a8_live_roi_5min
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260718_p4_sustained_quicksr_live_roi_5min
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20251110_output_reuse_quicksr_live_roi_120s
 ```
 
 Use numbers:
@@ -160,6 +163,7 @@ Use numbers:
 ```text
 Real-ESRGAN W8A8: 300s, e2e first/last 20% p50/p95 = 22/25ms -> 22/25ms
 QuickSRNetSmall: 300s, e2e first/last 20% p50/p95 = 21/26ms -> 22/27ms
+Current output-reuse QuickSR default: 120s, e2e first/last 20% p50/p95 = 20/25ms -> 21/26ms
 battery temperature coarse signal: 24.0C -> 24.0C
 ```
 
