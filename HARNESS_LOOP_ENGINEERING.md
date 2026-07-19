@@ -1,6 +1,6 @@
 # Harness And Loop Engineering Policy
 
-Updated: 2026-07-18
+Updated: 2026-07-19
 
 ## Purpose
 
@@ -8,6 +8,8 @@ This file fixes a recurring loop failure mode:
 
 ```text
 Negative evidence must not be converted into project stagnation.
+Stable progress must not be converted into project completion unless every
+designed objective is either completed or has a verified hard blocker.
 ```
 
 The project needs stable baselines and Git commits, but a committed stable
@@ -66,6 +68,51 @@ lanes:
 | `quality_lane` | Investigate visible artifacts or model tradeoffs |
 | `performance_lane` | Attack a measured latency/memory/power bottleneck |
 | `product_lane` | Validate real-camera, sustained, or user-facing behavior |
+
+## Full-Scope Completion Rule
+
+The project design is the scope floor, not an optional menu. If the original
+project plan lists an item, the loop must keep that item in one of these states:
+
+| state | meaning |
+| --- | --- |
+| `done` | implemented and verified with evidence |
+| `in_progress` | currently being executed |
+| `queued` | not current step yet, but still required |
+| `blocked_needs_user` | cannot proceed without a concrete user/device/action |
+| `blocked_technical` | attempted and blocked by a concrete technical issue |
+| `not_viable_with_evidence` | proven not viable under project constraints |
+
+Do not use vague labels such as `optional`, `later`, `not needed`, or
+`not current` to remove work from the project. Those labels can only affect
+ordering, not whether the item remains in the task ledger.
+
+Rules:
+
+1. A checkpoint can close a milestone, not the whole project.
+2. `mainline_gate` means "not default now"; it does not mean "do not try".
+3. `implementation_gate` means "use a smaller probe first"; it does not mean
+   "skip the feature".
+4. A hard item can move to `blocked_technical` only after an actual attempt and
+   evidence, not because it looks hard.
+5. A route can move to `not_viable_with_evidence` only with direct evidence that
+   it cannot work or would violate a hard constraint.
+6. Every loop handoff must name the next unfinished design objective, not only
+   the next documentation or stabilization task.
+
+## Full-Scope Ledger Requirement
+
+Maintain a project-wide task ledger for the original design goals. The current
+ledger is:
+
+```text
+C:\Users\Admin\Desktop\QC-Development-Board-Project\PROJECT_FULL_SCOPE_LEDGER.md
+```
+
+Future agents must consult this ledger before declaring the project "done" or
+stopping after a stable checkpoint. If live user instructions conflict with the
+ledger, the live oral template wins, but the skipped ledger item must remain
+visible for later.
 
 ## Exploration Contract
 

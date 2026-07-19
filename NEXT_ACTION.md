@@ -21,8 +21,11 @@ showcase index
 Next priority:
 
 ```text
-Use the current milestone package for presentation or start a new explicitly
-requested engineering lane.
+Continue the full-scope project ledger. The showcase package is complete, but
+the original project design still includes queued work such as tile enhancement,
+quantization configuration comparison, AIMET trigger handling, perceptual/OCR
+diagnostics, true zero-copy exploration, video/temporal enhancement, and real
+power/perf-watt characterization.
 ```
 
 Do not reopen as unfinished:
@@ -128,10 +131,13 @@ current Bitmap default remains better on p50 after output reuse: 19.0/24.7ms
 Recommended order:
 
 ```text
-1. Use `SHOWCASE_INDEX.md` as the presentation entrypoint.
-2. Use `README.md`, `SHOWCASE_MATERIALS.md`, `RESUME_PROJECT_DRAFT.md`,
-   `INTERVIEW_TALK_TRACK.md`, and `DEMO_RUNBOOK.md` as the milestone package.
-3. Do not continue performance work for this milestone unless the user asks.
-4. If performance work resumes, attack output/postprocess or deeper tensor-ready output handling.
-5. Keep AIMET/LPIPS/DISTS deferred until their trigger conditions appear.
+1. Read `PROJECT_FULL_SCOPE_LEDGER.md`.
+2. Pick the next unfinished original-design item unless the user's live oral
+   template gives a narrower P0 instruction.
+3. Treat hard/time-consuming items as queued or blocked-with-evidence, not as
+   optional or silently dropped.
+4. Keep the current showcase package as the stable checkpoint.
+5. Suggested next engineering lane if no narrower instruction exists:
+   post-capture whole-image tile enhancement, because it is explicitly in the
+   original stage plan and is not blocked by missing quantization-failure data.
 ```

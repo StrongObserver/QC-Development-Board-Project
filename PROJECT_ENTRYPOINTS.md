@@ -7,13 +7,32 @@ This is the first file future AI agents should read for this project.
 ```text
 P0: User's current RB5 Gen2 project oral-template prompt
 P1: PROJECT_ENTRYPOINTS.md
-P2: Latest results/<run_id>/SUMMARY.md and NEXT_ACTION.md
-P3: RB5 Gen2_AI上下文.md and benchmark QA SOP files
-P4: metrics/contact sheets/review guides
-P5: source code, raw files, detailed logs
+P2: PROJECT_FULL_SCOPE_LEDGER.md
+P3: Latest results/<run_id>/SUMMARY.md and NEXT_ACTION.md
+P4: RB5 Gen2_AI上下文.md and benchmark QA SOP files
+P5: metrics/contact sheets/review guides
+P6: source code, raw files, detailed logs
 ```
 
 The user's current prompt always wins over older `NEXT_ACTION.md`.
+
+## Oral Template Read Rule
+
+The current oral template must be read in full every time the user says it was
+updated or asks to follow it:
+
+```text
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5 Gen2项目口播模板.txt
+```
+
+Use full-file UTF-8 reading, not `-TotalCount`, excerpts, summaries, cached
+memory, or previous-chat assumptions. The required shape is:
+
+```powershell
+Get-Content -LiteralPath 'C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5 Gen2项目口播模板.txt' -Raw -Encoding UTF8
+```
+
+After reading, the agent must judge the task boundary from the current file.
 
 ## Default Loop Engineering Rule
 
@@ -25,9 +44,11 @@ Use this order:
 ```text
 1. Read the user's current oral-template prompt. It is the only P0 command.
 2. Read this entrypoint.
-3. Read the latest result folder's loop_state.json when present.
-4. Read SUMMARY.md / NEXT_ACTION.md only as handoff context.
-5. Continue only if the hard gates in loop_state.json allow it.
+3. Read PROJECT_FULL_SCOPE_LEDGER.md before deciding that the project is "done"
+   or before choosing only stabilization/showcase work.
+4. Read the latest result folder's loop_state.json when present.
+5. Read SUMMARY.md / NEXT_ACTION.md only as handoff context.
+6. Continue only if the hard gates in loop_state.json allow it.
 ```
 
 The current loop policy is implemented in:
@@ -55,6 +76,11 @@ Important meanings:
 - A stable commit is a recoverable checkpoint, not a ceiling. After preserving a
   known-good path, keep bounded exploration lanes open when they serve the
   project goal.
+- The original project design is not optional. Every designed item must remain
+  in `PROJECT_FULL_SCOPE_LEDGER.md` as done, in_progress, queued,
+  blocked_needs_user, blocked_technical, or not_viable_with_evidence.
+- Do not treat "not current mainline", "not default", "hard", or "time-consuming"
+  as permission to stop attempting a designed item.
 - The current mainline has already moved through:
   single smoke -> repeated smoke p50/p95 -> full 24-case benchmark -> Path B
   Android app QNN Delegate evidence. Do not restart old bring-up tasks unless the

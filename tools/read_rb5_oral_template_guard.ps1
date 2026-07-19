@@ -14,9 +14,8 @@ function Join-Codepoints([int[]]$Codes) {
 }
 
 if ($Path -eq "") {
-    $ownProjectDir = Join-Codepoints @(0x81EA, 0x5DF1, 0x7684, 0x9879, 0x76EE)
-    $templateName = "RB5 Gen2 " + (Join-Codepoints @(0x9879, 0x76EE, 0x53E3, 0x64AD, 0x6A21, 0x677F)) + ".md"
-    $Path = Join-Path $env:USERPROFILE ("Nutstore\1\Typora_save\" + $ownProjectDir + "\" + $templateName)
+    $templateName = "RB5 Gen2" + (Join-Codepoints @(0x9879, 0x76EE, 0x53E3, 0x64AD, 0x6A21, 0x677F)) + ".txt"
+    $Path = Join-Path $env:USERPROFILE ("Desktop\QC-Development-Board-Project\" + $templateName)
 }
 
 if ($StateFile -eq "") {
@@ -32,6 +31,7 @@ if (-not (Test-Path -LiteralPath $Path)) {
 $item = Get-Item -LiteralPath $Path
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash
 $content = Get-Content -Raw -Encoding UTF8 -LiteralPath $Path
+$lineCount = (Get-Content -Encoding UTF8 -LiteralPath $Path | Measure-Object -Line).Lines
 $stateHash = ""
 if (Test-Path -LiteralPath $StateFile) {
     $stateHash = (Get-Content -Raw -Encoding ASCII -LiteralPath $StateFile).Trim()
@@ -42,6 +42,8 @@ if ($PreviousHash -eq "" -and $stateHash -ne "") {
 
 Write-Host "TEMPLATE_PATH=$($item.FullName)"
 Write-Host "LENGTH=$($item.Length)"
+Write-Host "FULL_READ=1"
+Write-Host "LINE_COUNT=$lineCount"
 Write-Host "LAST_WRITE_TIME=$($item.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss'))"
 Write-Host "ATTRIBUTES=$($item.Attributes)"
 Write-Host "SHA256=$hash"
