@@ -2,14 +2,16 @@
 
 ## Current Conclusion
 
-The current checkpoint has completed:
+Current checkpoint is complete and local `main` is ahead of `origin/main`.
 
 ```text
 real-camera capture support
 accepted real-camera showcase set
 default QNN/QuickSRNetSmall live ROI path
-Kotlin-only YUV ROI correctness probe
-two local commits on main
+native + tensor-ready ROI probes
+tensor-ready repeated live benchmark
+output-reuse default live optimization
+120s default QuickSR live sustained validation
 ```
 
 Local commits not yet pushed:
@@ -17,6 +19,12 @@ Local commits not yet pushed:
 ```text
 47a98de feat(android): add real-camera capture and default QuickSR live path
 29c272d docs(showcase): record real-camera route decisions
+2530e63 docs(showcase): compress RB5 resume handoff
+f01e94e perf(camera): add native YUV ROI probe
+579ffa7 perf(camera): probe tensor-ready SR input
+2e4b69c perf(camera): benchmark tensor-ready live ROI
+ff5b129 perf(android): reuse live SR output bitmap
+137a0f6 docs(showcase): add output-reuse sustained evidence
 ```
 
 ## Highest Priority
@@ -24,7 +32,7 @@ Local commits not yet pushed:
 Next priority:
 
 ```text
-Compress the showcase/resume narrative and decide whether to push the two local commits.
+Decide whether to push the eight local commits to origin/main.
 ```
 
 Do not reopen as unfinished:
@@ -35,6 +43,11 @@ QuickSRNet app/live validation
 real-camera minimum showcase set
 app default model decision
 Kotlin-only YUV ROI correctness probe
+native YUV ROI single-frame probe
+tensor-ready single-frame probe
+tensor-ready repeated live benchmark
+output-reuse default live optimization
+120s default live sustained validation
 ```
 
 ## Verified Evidence
@@ -52,6 +65,33 @@ resolved model: QUICKSR_W8A8
 parsed frames: 95
 QNN inference p50/p95: 1.0 / 1.0 ms
 app e2e p50/p95: 19.0 / 26.3 ms
+```
+
+Output-reuse default live ROI:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20251110_output_reuse_default_live_roi
+```
+
+Key numbers:
+
+```text
+app e2e p50/p95: 19.0 / 24.7 ms
+analyzer p50/p95: 21.0 / 26.0 ms
+```
+
+120s sustained default QuickSR live:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20251110_output_reuse_quicksr_live_roi_120s
+```
+
+Key numbers:
+
+```text
+parsed frames: 3551
+e2e first/last 20% p50/p95: 20.0 / 25.0 ms -> 21.0 / 26.0 ms
+battery temperature coarse signal: 24.0C -> 24.0C
 ```
 
 Real-camera showcase:
@@ -84,13 +124,13 @@ bitmapCropMs=1
 yuvRoiMs=16
 ```
 
-Interpretation:
+Native / tensor-ready ROI:
 
 ```text
-Kotlin-only YUV ROI is visually aligned but slower than the current Bitmap path.
-Do not replace the default live SR path with Kotlin-only YUV ROI.
-If continuing performance work, use a native C++ or tensor-ready probe with a
-2-3ms p50 e2e improvement gate.
+YUV_ROI_PROBE_20251110_061600: nativeYuvRoiMs=5, nativeMAD=0.41
+TENSOR_READY_PROBE_20251110_064501: bitmapPath=37ms, rgbPath=20ms, outputMAD=0.74
+20251110_tensor_ready_live_roi_1280x960: tensor-ready live e2e p50/p95=20.0/25.7ms
+current Bitmap default remains better on p50 after output reuse: 19.0/24.7ms
 ```
 
 ## Next Engineering Choices
@@ -98,9 +138,9 @@ If continuing performance work, use a native C++ or tensor-ready probe with a
 Recommended order:
 
 ```text
-1. Finish showcase/resume narrative compression.
-2. Ask the user whether to push local commits to origin/main.
-3. If more engineering work is requested, design a native/tensor-ready ROI probe.
-4. Only run sustained power/thermal validation if making sustained-use claims.
+1. Push local commits to origin/main if the user approves.
+2. Use current showcase/resume docs as the milestone package.
+3. Do not continue performance work for this milestone unless the user asks.
+4. If performance work resumes, attack output/postprocess or deeper tensor-ready output handling.
 5. Keep AIMET/LPIPS/DISTS deferred until their trigger conditions appear.
 ```
