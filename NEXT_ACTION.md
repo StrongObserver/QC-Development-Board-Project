@@ -14,6 +14,7 @@ output-reuse default live optimization
 120s default QuickSR live sustained validation
 README / demo runbook / interview talk track
 showcase index
+Nutstore long-term context updated with final closeout and full-scope ledger
 ```
 
 ## Highest Priority
