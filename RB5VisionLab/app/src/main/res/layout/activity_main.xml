@@ -96,6 +96,14 @@
                 android:text="QNN 固定样张" />
 
             <Button
+                android:id="@+id/tile_still_button"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:layout_marginHorizontal="4dp"
+                android:minHeight="0dp"
+                android:text="整图 Tile" />
+
+            <Button
                 android:id="@+id/offline_eval_button"
                 android:layout_width="wrap_content"
                 android:layout_height="48dp"

@@ -61,6 +61,7 @@ class MainActivity : AppCompatActivity() {
     private var offlineResolver: SuperResolver? = null
     @Volatile private var srBackend = SrBackend.QNN
     @Volatile private var srModelVariant = SrModelVariant.QUICKSR_W8A8
+    @Volatile private var tileModelVariant = SrModelVariant.W8A8
     @Volatile private var liveSr = false
     @Volatile private var liveSrTensorReady = false
     @Volatile private var offlineEvalActive = false
@@ -73,6 +74,10 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var pendingHighResSample = false
     @Volatile private var pendingAutoLiveSr = false
     @Volatile private var pendingRealCameraCapture = false
+    @Volatile private var pendingTileStillCapture = false
+    @Volatile private var pendingAutoTileStill = false
+    @Volatile private var pendingTileCompareCapture = false
+    @Volatile private var pendingAutoTileCompare = false
     @Volatile private var pendingProbeMode: String = ""
     private val realCameraSessionId = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
     private var realCameraSceneIndex = 0
@@ -224,6 +229,8 @@ class MainActivity : AppCompatActivity() {
         val autoRunResourceProbe = boolIntentExtra("run_resource_probe")
         val autoRunYuvRoiProbe = boolIntentExtra("run_yuv_roi_probe")
         val autoRunTensorReadyProbe = boolIntentExtra("run_tensor_ready_probe")
+        val autoRunTileStill = boolIntentExtra("run_tile_still")
+        val autoRunTileCompare = boolIntentExtra("run_tile_compare")
         val requestedProbeMode = intent.getStringExtra("probe_mode")?.trim()?.lowercase(Locale.US).orEmpty()
         Log.d(
             "RB5_QNN",
@@ -235,6 +242,8 @@ class MainActivity : AppCompatActivity() {
             "RB5_SR",
             "intent probes run_qnn_fixed=$autoRunQnnFixed start_live_sr=$autoStartLiveSr " +
                 "start_live_sr_tensor_ready=$autoStartTensorReadyLiveSr " +
+                "run_tile_still=$autoRunTileStill tile_model=${tileModelVariant.label} " +
+                "run_tile_compare=$autoRunTileCompare " +
                 "run_yuv_roi_probe=$autoRunYuvRoiProbe run_tensor_ready_probe=$autoRunTensorReadyProbe " +
                 "probe_mode=$requestedProbeMode"
         )
@@ -250,6 +259,10 @@ class MainActivity : AppCompatActivity() {
             }
         } else if (autoStartLiveSr) {
             pendingAutoLiveSr = true
+        } else if (autoRunTileStill) {
+            pendingAutoTileStill = true
+        } else if (autoRunTileCompare) {
+            pendingAutoTileCompare = true
         } else if (autoStartTensorReadyLiveSr) {
             pendingProbeMode = "tensor_live"
         } else if (requestedProbeMode == "yuv_roi" || autoRunYuvRoiProbe) {
@@ -276,11 +289,13 @@ class MainActivity : AppCompatActivity() {
         val offlineEvalButton = findViewById<Button>(R.id.offline_eval_button)
         val qnnFixedButton = findViewById<Button>(R.id.qnn_fixed_button)
         val realCameraButton = findViewById<Button>(R.id.real_camera_button)
+        val tileStillButton = findViewById<Button>(R.id.tile_still_button)
         srResultView = findViewById(R.id.sr_result)
         val previewView = findViewById<PreviewView>(R.id.previewView)
         srButton.text = startButtonText()
         offlineEvalButton.text = offlineButtonText()
         realCameraButton.text = realCameraButtonText()
+        tileStillButton.text = tileButtonText()
         saveSampleButton.setOnClickListener { saveLatestSrSample() }
         saveSampleButton.setOnLongClickListener {
             requestHighResSrSample()
@@ -290,6 +305,13 @@ class MainActivity : AppCompatActivity() {
         qnnFixedButton.setOnClickListener {
             Log.d("RB5_QNN", "QNN fixed button clicked")
             runQnnFixedSample()
+        }
+        tileStillButton.setOnClickListener { requestTileStillCapture() }
+        tileStillButton.setOnLongClickListener {
+            cycleTileModelVariant()
+            tileStillButton.text = tileButtonText()
+            statusTextView.text = "Tile model switched to ${tileModelVariant.label}. Tap tile button to run still tile."
+            true
         }
         realCameraButton.setOnClickListener { requestRealCameraCapture() }
         realCameraButton.setOnLongClickListener {
@@ -351,6 +373,8 @@ class MainActivity : AppCompatActivity() {
         if (intent.getBooleanExtra("run_qnn_fixed", false) && srModelVariant == SrModelVariant.FLOAT) {
             srModelVariant = SrModelVariant.W8A8
         }
+        parseTileModelExtra(intent.getStringExtra("tile_model"))?.let { tileModelVariant = it }
+        parseTileModelExtra(intent.getStringExtra("tile_model_variant"))?.let { tileModelVariant = it }
         Log.d("RB5_SR", "intent SR overrides backend=${srBackend.label} model=${srModelVariant.label}")
     }
 
@@ -368,6 +392,15 @@ class MainActivity : AppCompatActivity() {
         val normalized = value.trim().uppercase(Locale.US)
         return enumValues<T>().firstOrNull {
             it.name.uppercase(Locale.US) == normalized
+        }
+    }
+
+    private fun parseTileModelExtra(value: String?): SrModelVariant? {
+        val normalized = value?.trim()?.uppercase(Locale.US) ?: return null
+        return when (normalized) {
+            "REAL", "REALESRGAN", "REAL_ESRGAN", "W8A8" -> SrModelVariant.W8A8
+            "QUICK", "QUICKSR", "QUICKSRNET", "QUICKSR_W8A8" -> SrModelVariant.QUICKSR_W8A8
+            else -> parseEnum<SrModelVariant>(normalized)
         }
     }
 
@@ -391,6 +424,15 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.sr_button).text = "停止 Tensor Live"
         statusTextView.text = "Tensor-ready live ROI SR starting with QNN/QUICKSR_W8A8..."
         Log.d("RB5_SR_TENSOR", "auto tensor-ready live SR from intent backend=QNN model=QUICKSR_W8A8")
+    }
+
+    private fun tileButtonText(): String = "整图 Tile (${tileModelVariant.label})"
+
+    private fun cycleTileModelVariant() {
+        tileModelVariant = when (tileModelVariant) {
+            SrModelVariant.QUICKSR_W8A8 -> SrModelVariant.W8A8
+            else -> SrModelVariant.QUICKSR_W8A8
+        }
     }
 
     private fun runQnnFixedSample() {
@@ -940,6 +982,21 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, "正在保存 256→1024 样张，请保持画面稳定", Toast.LENGTH_LONG).show()
     }
 
+    private fun requestTileStillCapture() {
+        if (liveSr || liveSrTensorReady) {
+            statusTextView.text = "Stop live SR before running tile still capture."
+            Toast.makeText(this, "请先停止实时超分，再运行整图 Tile", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (pendingTileStillCapture) {
+            statusTextView.text = "Tile still capture is already pending. Keep the camera steady."
+            return
+        }
+        pendingTileStillCapture = true
+        statusTextView.text = "Tile still capture armed. Keep the camera steady."
+        Toast.makeText(this, "保持画面稳定，正在采集整图 Tile", Toast.LENGTH_SHORT).show()
+    }
+
     private fun requestRealCameraCapture() {
         if (liveSr) {
             statusTextView.text = "Stop live SR before capturing real-camera evidence."
@@ -1048,6 +1105,182 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "真实相机证据保存失败", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    private fun runTileStillCapture(imageProxy: ImageProxy) {
+        try {
+            offlineEvalActive = true
+            val stillSide = 512
+            val tileSide = 128
+            val full = imageProxy.toBitmap()
+            if (full.width < stillSide || full.height < stillSide) error("Camera frame too small for tile still")
+            val (croppedStill, cropSide) = cropCenterRoiKeepingLegacyFov(full, stillSide)
+            var still = croppedStill
+            val degrees = imageProxy.imageInfo.rotationDegrees
+            if (degrees != 0) {
+                val matrix = Matrix().apply { postRotate(degrees.toFloat()) }
+                still = Bitmap.createBitmap(still, 0, 0, stillSide, stillSide, matrix, true)
+            }
+
+            val selectedTileModel = tileModelVariant
+            val totalStart = System.nanoTime()
+            val (tileSr, tileTimings) = runTileModelOnStill(still, selectedTileModel)
+            val totalMs = (System.nanoTime() - totalStart) / 1_000_000
+            val baseline = Bitmap.createScaledBitmap(still, stillSide * 4, stillSide * 4, true)
+            val sheet = makeTileComparisonSheet(still, baseline, tileSr)
+            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+            val tileModelLabel = when (selectedTileModel) {
+                SrModelVariant.W8A8 -> "REALESRGAN"
+                SrModelVariant.QUICKSR_W8A8 -> "QUICKSR"
+                SrModelVariant.FLOAT -> "FLOAT"
+            }
+            val prefix = "TILE_STILL_${timestamp}_${tileModelLabel}_QNN"
+            val saved = listOf(
+                savePngToPictures(still, "${prefix}_input_512.png"),
+                savePngToPictures(baseline, "${prefix}_bicubic_2048.png"),
+                savePngToPictures(tileSr, "${prefix}_tile_sr_2048.png"),
+                savePngToPictures(sheet, "${prefix}_comparison.png"),
+            )
+            val p50 = percentileLong(tileTimings, 0.50)
+            val p95 = percentileLong(tileTimings, 0.95)
+            synchronized(srSampleLock) {
+                latestSrSample = SrSample(
+                    backend = SrBackend.QNN,
+                    label = "TILE_STILL_${tileModelLabel}",
+                    input = still.copy(Bitmap.Config.ARGB_8888, false),
+                    baseline = baseline,
+                    sr = tileSr.copy(Bitmap.Config.ARGB_8888, false),
+                    inferenceMs = p50,
+                    e2eMs = totalMs,
+                )
+            }
+            Log.d(
+                "RB5_TILE",
+                "tile still model=${selectedTileModel.label} frame=${full.width}x${full.height} crop=${cropSide}->512 tiles=${tileTimings.size} " +
+                    "tileP50=$p50 tileP95=$p95 total=$totalMs saved=${saved.joinToString()}"
+            )
+            runOnUiThread {
+                offlineEvalActive = false
+                srResultView.visibility = View.VISIBLE
+                findViewById<PreviewView>(R.id.previewView).visibility = View.GONE
+                srResultView.setImageBitmap(tileSr)
+                statusTextView.text =
+                    "Tile still SR saved (${selectedTileModel.label}/QNN)\n" +
+                        "frame ${full.width}x${full.height} | crop ${cropSide}->512 | output 2048\n" +
+                        "tiles ${tileTimings.size} | tile p50/p95 ${p50}/${p95} ms | total ${totalMs} ms\n" +
+                        saved.joinToString("\n")
+                Toast.makeText(this, "整图 Tile 结果已保存", Toast.LENGTH_LONG).show()
+            }
+        } catch (e: Throwable) {
+            Log.e("RB5_TILE", "tile still capture failed", e)
+            runOnUiThread {
+                offlineEvalActive = false
+                srResultView.visibility = View.GONE
+                findViewById<PreviewView>(R.id.previewView).visibility = View.VISIBLE
+                statusTextView.text = "Tile still capture failed: ${e.message}"
+                Toast.makeText(this, "整图 Tile 失败", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun runTileCompareCapture(imageProxy: ImageProxy) {
+        try {
+            offlineEvalActive = true
+            val stillSide = 512
+            val full = imageProxy.toBitmap()
+            if (full.width < stillSide || full.height < stillSide) error("Camera frame too small for tile compare")
+            val (croppedStill, cropSide) = cropCenterRoiKeepingLegacyFov(full, stillSide)
+            var still = croppedStill
+            val degrees = imageProxy.imageInfo.rotationDegrees
+            if (degrees != 0) {
+                val matrix = Matrix().apply { postRotate(degrees.toFloat()) }
+                still = Bitmap.createBitmap(still, 0, 0, stillSide, stillSide, matrix, true)
+            }
+
+            val totalStart = System.nanoTime()
+            val (quickSr, quickTimings) = runTileModelOnStill(still, SrModelVariant.QUICKSR_W8A8)
+            val (realSr, realTimings) = runTileModelOnStill(still, SrModelVariant.W8A8)
+            val totalMs = (System.nanoTime() - totalStart) / 1_000_000
+            val baseline = Bitmap.createScaledBitmap(still, stillSide * 4, stillSide * 4, true)
+            val sheet = makeTileComparisonSheet(still, baseline, quickSr, realSr)
+            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+            val prefix = "TILE_COMPARE_${timestamp}_QNN"
+            val saved = listOf(
+                savePngToPictures(still, "${prefix}_input_512.png"),
+                savePngToPictures(baseline, "${prefix}_bicubic_2048.png"),
+                savePngToPictures(quickSr, "${prefix}_quicksr_2048.png"),
+                savePngToPictures(realSr, "${prefix}_realesrgan_2048.png"),
+                savePngToPictures(sheet, "${prefix}_comparison.png"),
+            )
+            val quickP50 = percentileLong(quickTimings, 0.50)
+            val quickP95 = percentileLong(quickTimings, 0.95)
+            val realP50 = percentileLong(realTimings, 0.50)
+            val realP95 = percentileLong(realTimings, 0.95)
+            synchronized(srSampleLock) {
+                latestSrSample = SrSample(
+                    backend = SrBackend.QNN,
+                    label = "TILE_COMPARE_REALESRGAN",
+                    input = still.copy(Bitmap.Config.ARGB_8888, false),
+                    baseline = baseline,
+                    sr = realSr.copy(Bitmap.Config.ARGB_8888, false),
+                    inferenceMs = realP50,
+                    e2eMs = totalMs,
+                )
+            }
+            Log.d(
+                "RB5_TILE",
+                "tile compare frame=${full.width}x${full.height} crop=${cropSide}->512 " +
+                    "quickTiles=${quickTimings.size} quickP50=$quickP50 quickP95=$quickP95 " +
+                    "realTiles=${realTimings.size} realP50=$realP50 realP95=$realP95 total=$totalMs saved=${saved.joinToString()}"
+            )
+            runOnUiThread {
+                offlineEvalActive = false
+                srResultView.visibility = View.VISIBLE
+                findViewById<PreviewView>(R.id.previewView).visibility = View.GONE
+                srResultView.setImageBitmap(realSr)
+                statusTextView.text =
+                    "Tile compare saved (QuickSR vs Real-ESRGAN, same frame)\n" +
+                        "frame ${full.width}x${full.height} | crop ${cropSide}->512 | output 2048\n" +
+                        "Quick p50/p95 ${quickP50}/${quickP95} ms | Real p50/p95 ${realP50}/${realP95} ms | total ${totalMs} ms\n" +
+                        saved.joinToString("\n")
+                Toast.makeText(this, "同帧 Tile 对比已保存", Toast.LENGTH_LONG).show()
+            }
+        } catch (e: Throwable) {
+            Log.e("RB5_TILE", "tile compare capture failed", e)
+            runOnUiThread {
+                offlineEvalActive = false
+                srResultView.visibility = View.GONE
+                findViewById<PreviewView>(R.id.previewView).visibility = View.VISIBLE
+                statusTextView.text = "Tile compare failed: ${e.message}"
+                Toast.makeText(this, "同帧 Tile 对比失败", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun runTileModelOnStill(still: Bitmap, modelVariant: SrModelVariant): Pair<Bitmap, List<Long>> {
+        val stillSide = 512
+        val tileSide = 128
+        val resolver = SuperResolver(
+            this,
+            modelAsset = modelVariant.assetName,
+            backend = SrBackend.QNN,
+        )
+        val tileSr = Bitmap.createBitmap(stillSide * 4, stillSide * 4, Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(tileSr)
+        val tileTimings = mutableListOf<Long>()
+        try {
+            for (tileY in 0 until stillSide step tileSide) {
+                for (tileX in 0 until stillSide step tileSide) {
+                    val tile = Bitmap.createBitmap(still, tileX, tileY, tileSide, tileSide)
+                    val (srTile, timing) = resolver.enhance(tile)
+                    tileTimings += timing.totalMs
+                    canvas.drawBitmap(srTile, (tileX * 4).toFloat(), (tileY * 4).toFloat(), null)
+                }
+            }
+        } finally {
+            resolver.close()
+        }
+        return Pair(tileSr, tileTimings)
     }
 
     private fun runYuvRoiProbe(imageProxy: ImageProxy) {
@@ -1439,6 +1672,28 @@ class MainActivity : AppCompatActivity() {
         return out
     }
 
+    private fun makeTileComparisonSheet(input: Bitmap, bicubic: Bitmap, tileSr: Bitmap): Bitmap {
+        val inputPreview = Bitmap.createScaledBitmap(input, 512, 512, true)
+        val bicubicPreview = Bitmap.createScaledBitmap(bicubic, 512, 512, true)
+        val tilePreview = Bitmap.createScaledBitmap(tileSr, 512, 512, true)
+        return makeHorizontalSheet(listOf(inputPreview, bicubicPreview, tilePreview))
+    }
+
+    private fun makeTileComparisonSheet(input: Bitmap, bicubic: Bitmap, quickSr: Bitmap, realSr: Bitmap): Bitmap {
+        val inputPreview = Bitmap.createScaledBitmap(input, 512, 512, true)
+        val bicubicPreview = Bitmap.createScaledBitmap(bicubic, 512, 512, true)
+        val quickPreview = Bitmap.createScaledBitmap(quickSr, 512, 512, true)
+        val realPreview = Bitmap.createScaledBitmap(realSr, 512, 512, true)
+        return makeHorizontalSheet(listOf(inputPreview, bicubicPreview, quickPreview, realPreview))
+    }
+
+    private fun percentileLong(values: List<Long>, q: Double): Long {
+        if (values.isEmpty()) return 0L
+        val sorted = values.sorted()
+        val index = ((sorted.size - 1) * q).toInt().coerceIn(0, sorted.lastIndex)
+        return sorted[index]
+    }
+
     private fun savePngToPictures(bitmap: Bitmap, fileName: String): String {
         val relativePath = Environment.DIRECTORY_PICTURES + "/RB5VisionLab"
         val values = ContentValues().apply {
@@ -1494,6 +1749,14 @@ class MainActivity : AppCompatActivity() {
                             } else if (pendingRealCameraCapture) {
                                 pendingRealCameraCapture = false
                                 runRealCameraCapture(imageProxy)
+                            } else if (pendingTileStillCapture) {
+                                pendingTileStillCapture = false
+                                Log.d("RB5_TILE", "pending tile still consumed model=${tileModelVariant.label}")
+                                runTileStillCapture(imageProxy)
+                            } else if (pendingTileCompareCapture) {
+                                pendingTileCompareCapture = false
+                                Log.d("RB5_TILE", "pending tile compare consumed")
+                                runTileCompareCapture(imageProxy)
                             } else if (liveSrTensorReady) {
                                 runTensorReadyLiveSr(imageProxy)
                             } else if (liveSr) {
@@ -1546,6 +1809,22 @@ class MainActivity : AppCompatActivity() {
                 if (pendingAutoLiveSr) {
                     pendingAutoLiveSr = false
                     previewView.postDelayed({ startLiveSrFromIntent() }, 500)
+                }
+                if (pendingAutoTileStill) {
+                    pendingAutoTileStill = false
+                    previewView.postDelayed({
+                        pendingTileStillCapture = true
+                        statusTextView.text = "Tile still auto capture armed (${tileModelVariant.label}/QNN)."
+                        Log.d("RB5_TILE", "auto tile still armed model=${tileModelVariant.label}")
+                    }, 500)
+                }
+                if (pendingAutoTileCompare) {
+                    pendingAutoTileCompare = false
+                    previewView.postDelayed({
+                        pendingTileCompareCapture = true
+                        statusTextView.text = "Tile compare auto capture armed (QuickSR vs Real-ESRGAN/QNN)."
+                        Log.d("RB5_TILE", "auto tile compare armed")
+                    }, 500)
                 }
             } catch (exc: Exception) {
                 Log.e(CAMERA_TAG, "CameraX bind failed", exc)
