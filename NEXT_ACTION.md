@@ -2,7 +2,7 @@
 
 ## Current Conclusion
 
-Current checkpoint is complete and local `main` is ahead of `origin/main`.
+Current checkpoint is complete and local `main` is synced with `origin/main`.
 
 ```text
 real-camera capture support
@@ -13,12 +13,7 @@ tensor-ready repeated live benchmark
 output-reuse default live optimization
 120s default QuickSR live sustained validation
 README / demo runbook / interview talk track
-```
-
-Local commits not yet pushed are the output of:
-
-```text
-git log --oneline origin/main..HEAD
+showcase index
 ```
 
 ## Highest Priority
@@ -26,7 +21,8 @@ git log --oneline origin/main..HEAD
 Next priority:
 
 ```text
-Decide whether to push local commits to origin/main.
+Use the current milestone package for presentation or start a new explicitly
+requested engineering lane.
 ```
 
 Do not reopen as unfinished:
@@ -132,7 +128,7 @@ current Bitmap default remains better on p50 after output reuse: 19.0/24.7ms
 Recommended order:
 
 ```text
-1. Push any new local commits to origin/main if the user approves.
+1. Use `SHOWCASE_INDEX.md` as the presentation entrypoint.
 2. Use `README.md`, `SHOWCASE_MATERIALS.md`, `RESUME_PROJECT_DRAFT.md`,
    `INTERVIEW_TALK_TRACK.md`, and `DEMO_RUNBOOK.md` as the milestone package.
 3. Do not continue performance work for this milestone unless the user asks.

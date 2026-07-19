@@ -50,6 +50,7 @@ tracked by default.
 - `eval_hub/`: evaluation registry, lifecycle layers, and metric-role policy.
 - `knowledge_base/`: external research cards and reference index.
 - `SHOWCASE_MATERIALS.md`: current minimum evidence package.
+- `SHOWCASE_INDEX.md`: one-page navigation for presentation materials.
 - `SHOWCASE_NARRATIVE.md`: interview-ready project story.
 - `RESUME_PROJECT_DRAFT.md`: Chinese and English resume bullets.
 - `NEXT_ACTION.md`: current handoff.
