@@ -166,6 +166,20 @@ class MainActivity : AppCompatActivity() {
     external fun stringFromJNI(): String
     external fun qnnRuntimePreflight(): String
     external fun processYPlane(yData: ByteArray, width: Int, height: Int, rowStride: Int): String
+    external fun nativeYuvToRgbRoi(
+        yData: ByteArray,
+        uData: ByteArray,
+        vData: ByteArray,
+        width: Int,
+        height: Int,
+        yRowStride: Int,
+        yPixelStride: Int,
+        uRowStride: Int,
+        uPixelStride: Int,
+        vRowStride: Int,
+        vPixelStride: Int,
+        outputSide: Int,
+    ): IntArray
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -937,18 +951,28 @@ class MainActivity : AppCompatActivity() {
                 yuvRoi = Bitmap.createBitmap(yuvRoi, 0, 0, side, side, matrix, true)
             }
             val yuvRoiMs = (System.nanoTime() - tYuv0) / 1_000_000
-            val mad = meanAbsDiff(bitmapRoi, yuvRoi)
+            val tNative0 = System.nanoTime()
+            var nativeRoi = nativeYuv420ToRgbCenterRoiKeepingLegacyFov(imageProxy, side)
+            if (degrees != 0) {
+                val matrix = Matrix().apply { postRotate(degrees.toFloat()) }
+                nativeRoi = Bitmap.createBitmap(nativeRoi, 0, 0, side, side, matrix, true)
+            }
+            val nativeRoiMs = (System.nanoTime() - tNative0) / 1_000_000
+            val yuvMad = meanAbsDiff(bitmapRoi, yuvRoi)
+            val nativeMad = meanAbsDiff(bitmapRoi, nativeRoi)
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
             val prefix = "YUV_ROI_PROBE_${timestamp}"
             val saved = listOf(
                 savePngToPictures(bitmapRoi, "${prefix}_bitmap_roi_128.png"),
                 savePngToPictures(yuvRoi, "${prefix}_yuv_roi_128.png"),
-                savePngToPictures(makeSideBySide(bitmapRoi, yuvRoi), "${prefix}_side_by_side.png"),
+                savePngToPictures(nativeRoi, "${prefix}_native_roi_128.png"),
+                savePngToPictures(makeHorizontalSheet(listOf(bitmapRoi, yuvRoi, nativeRoi)), "${prefix}_side_by_side.png"),
             )
             Log.d(
                 "RB5_YUV_ROI",
                 "probe frame=${imageProxy.width}x${imageProxy.height} rotation=$degrees " +
-                    "bitmapMs=$bitmapMs bitmapCropMs=$bitmapCropMs yuvRoiMs=$yuvRoiMs mad=${"%.2f".format(Locale.US, mad)} " +
+                    "bitmapMs=$bitmapMs bitmapCropMs=$bitmapCropMs yuvRoiMs=$yuvRoiMs nativeRoiMs=$nativeRoiMs " +
+                    "yuvMad=${"%.2f".format(Locale.US, yuvMad)} nativeMad=${"%.2f".format(Locale.US, nativeMad)} " +
                     "yRow=${imageProxy.planes[0].rowStride} uRow=${imageProxy.planes[1].rowStride} vRow=${imageProxy.planes[2].rowStride} " +
                     "uPixel=${imageProxy.planes[1].pixelStride} vPixel=${imageProxy.planes[2].pixelStride} saved=${saved.joinToString()}"
             )
@@ -956,7 +980,8 @@ class MainActivity : AppCompatActivity() {
                 offlineEvalActive = false
                 statusTextView.text =
                     "YUV ROI probe saved\n" +
-                        "bitmap $bitmapMs+$bitmapCropMs ms | yuv ROI $yuvRoiMs ms | MAD ${"%.2f".format(Locale.US, mad)}\n" +
+                        "bitmap $bitmapMs+$bitmapCropMs ms | kotlin $yuvRoiMs ms | native $nativeRoiMs ms\n" +
+                        "MAD kotlin ${"%.2f".format(Locale.US, yuvMad)} | native ${"%.2f".format(Locale.US, nativeMad)}\n" +
                         saved.joinToString("\n")
                 Toast.makeText(this, "YUV ROI probe saved", Toast.LENGTH_LONG).show()
             }
@@ -1086,6 +1111,33 @@ class MainActivity : AppCompatActivity() {
         return Bitmap.createBitmap(pixels, outputSide, outputSide, Bitmap.Config.ARGB_8888)
     }
 
+    private fun nativeYuv420ToRgbCenterRoiKeepingLegacyFov(imageProxy: ImageProxy, outputSide: Int): Bitmap {
+        val y = imageProxy.planes[0]
+        val u = imageProxy.planes[1]
+        val v = imageProxy.planes[2]
+        val yBytes = ByteArray(y.buffer.remaining())
+        val uBytes = ByteArray(u.buffer.remaining())
+        val vBytes = ByteArray(v.buffer.remaining())
+        y.buffer.duplicate().get(yBytes)
+        u.buffer.duplicate().get(uBytes)
+        v.buffer.duplicate().get(vBytes)
+        val pixels = nativeYuvToRgbRoi(
+            yBytes,
+            uBytes,
+            vBytes,
+            imageProxy.width,
+            imageProxy.height,
+            y.rowStride,
+            y.pixelStride,
+            u.rowStride,
+            u.pixelStride,
+            v.rowStride,
+            v.pixelStride,
+            outputSide,
+        )
+        return Bitmap.createBitmap(pixels, outputSide, outputSide, Bitmap.Config.ARGB_8888)
+    }
+
     private fun yuvToArgb(y: Int, u: Int, v: Int): Int {
         val yf = y.toFloat()
         val uf = u.toFloat() - 128f
@@ -1114,11 +1166,16 @@ class MainActivity : AppCompatActivity() {
         return sum.toDouble() / (aPixels.size * 3)
     }
 
-    private fun makeSideBySide(left: Bitmap, right: Bitmap): Bitmap {
-        val out = Bitmap.createBitmap(left.width + right.width, maxOf(left.height, right.height), Bitmap.Config.ARGB_8888)
+    private fun makeHorizontalSheet(bitmaps: List<Bitmap>): Bitmap {
+        val width = bitmaps.sumOf { it.width }
+        val height = bitmaps.maxOf { it.height }
+        val out = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = android.graphics.Canvas(out)
-        canvas.drawBitmap(left, 0f, 0f, null)
-        canvas.drawBitmap(right, left.width.toFloat(), 0f, null)
+        var x = 0f
+        for (bitmap in bitmaps) {
+            canvas.drawBitmap(bitmap, x, 0f, null)
+            x += bitmap.width
+        }
         return out
     }
 

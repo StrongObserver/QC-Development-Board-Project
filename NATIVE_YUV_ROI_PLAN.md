@@ -185,11 +185,41 @@ path, but it is slower than the current toBitmap + crop path in this probe.
 Do not replace the live SR path with Kotlin-only YUV ROI.
 ```
 
+Native probe result:
+
+```text
+YUV_ROI_PROBE_20251110_061600
+frame=1280x960
+rotation=270
+bitmapMs=7
+bitmapCropMs=1
+kotlinYuvRoiMs=14
+nativeYuvRoiMs=5
+kotlinMAD=0.41
+nativeMAD=0.41
+```
+
+Native evidence:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\real_camera_showcase\yuv_roi_probe_20251110_061600
+```
+
+Interpretation:
+
+```text
+The native C++ ROI conversion is visually aligned and faster than both the
+Kotlin-only YUV path and this run's Bitmap+crop timing. It is promising, but it
+is still only a one-frame probe and does not yet prove a 2-3ms p50 app e2e gain.
+Do not switch the default live SR path until native ROI is tested inside the
+live path with repeated p50/p95 timing.
+```
+
 Next valid performance-lane step:
 
 ```text
-Move the hot ROI conversion loop to native C++ or a tensor-ready buffer only if
-more latency reduction is needed. Keep the current Bitmap path as default until
+Use the native ROI conversion in an isolated live-path experiment or move toward
+a tensor-ready input buffer. Keep the current Bitmap path as default until
 native/tensor-ready evidence shows at least 2-3ms p50 e2e improvement without
 color/crop/rotation regression.
 ```
