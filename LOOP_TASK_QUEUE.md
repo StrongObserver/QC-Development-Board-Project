@@ -57,7 +57,7 @@ original project design unless there is concrete evidence that it cannot work.
 | 3 | tile-eval | done | Tile quality/performance evaluation | input/bicubic/SR/contact sheet plus timing and memory notes | human review needed or result accepted |
 | 4 | tile-app | done | Minimal Android app tile entry | app can trigger post-capture tile path without regressing live ROI | device/manual action needed or app evidence complete |
 | 5 | d8-config | done | Quantization configuration comparison | at least two quantization/calibration variants compared on fixed inputs | toolchain blocked or comparison complete |
-| 6 | aimet-trigger | done | AIMET CLE/Bias Correction trigger check | exact W8A8-vs-float failure crop found, or AIMET remains deferred_with_trigger | no trigger, blocked, or recovery evidence complete |
+| 6 | aimet-trigger | in_progress | AIMET CLE/Bias Correction trigger check | exact W8A8-vs-float failure crop found, or AIMET remains deferred_with_trigger | recovery feasibility complete or toolchain blocked with evidence |
 | 7 | eval-diagnostic | done | LPIPS/NIQE/OCR diagnostic metrics | diagnostic metrics added only for a visual/metric conflict or text claim | calibrated enough for diagnostic use or deferred |
 | 8 | zero-copy-probe | in_progress | True zero-copy feasibility research/probe | Phase 1 TFLite C API custom allocation + QNN Delegate invoke validated | timing comparison complete or blocked with evidence |
 | 9 | video-temporal-plan | done | Video/every-N-frame enhancement protocol | every-N ImageAnalysis smoke is classified as cadence evidence, not per-frame latency gain | full VideoCapture needs explicit demo/product need |
@@ -68,14 +68,14 @@ original project design unless there is concrete evidence that it cannot work.
 
 ## Current Closeout Task
 
-Current active task: `qnn-shared-memory-timing-compare`.
+Current active task: `aimet-feasibility-validation`.
 
 Current open work is no longer tile, D8-config, output postprocess, app e2e
 schema bring-up, or every-N smoke. Those lanes have evidence and should be
-treated as closed unless a regression appears. The active technical exploration
-is QNN shared-memory timing comparison after Phase 1 confirmed that TFLite C API
-custom allocation, QNN Delegate binding, and one invoke succeed in the app
-process.
+treated as closed unless a regression appears. QNN shared-memory Phase 1 has
+validated custom allocation and invoke timing. The active technical exploration
+is now AIMET feasibility validation after automated crop search found concrete
+W8A8-vs-float local regression candidates.
 
 Current evidence to preserve:
 
@@ -94,6 +94,9 @@ C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_qnn_shared_m
 
 QNN shared-memory Phase 1:
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_qnn_shared_memory_phase1
+
+AIMET trigger crop search:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\aimet_trigger_search\20260720_full_v2_patch96
 ```
 
 Current route boundaries:
@@ -176,10 +179,10 @@ Boundary:
 ```text
 This is app timing and schema evidence, not visual quality evidence and not true
 zero-copy. Do not reopen output postprocess as the next task unless a regression
-appears. The current active route is timing comparison for the C API
-shared-memory tensor-binding path. AIMET/perceptual metrics only run when their
-trigger conditions appear; full VideoCapture only runs when a demo or product
-need is explicit.
+appears. AIMET trigger search has found candidate crops; the next step is
+toolchain feasibility for CLE/Bias Correction. Perceptual metrics only run when
+their trigger conditions appear; full VideoCapture only runs when a demo or
+product need is explicit.
 Prompts for Qualcomm/internal AI must be output directly in chat, not written to
 Markdown files, unless the user explicitly asks for a file.
 ```

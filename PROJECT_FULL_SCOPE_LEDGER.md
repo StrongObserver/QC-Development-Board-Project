@@ -36,7 +36,7 @@ later, but it must not disappear.
 | E10-B | QNN/HTP Android app path | done | QNN TFLite Delegate + HTP app path works with skel lib | Maintain only |
 | D8 | W8A8 quantized baseline | done | Real-ESRGAN W8A8 TFLite and QNN paths; QuickSRNetSmall W8A8 default live path | Maintain only |
 | D8-config | per-channel/per-tensor/calibration comparison | done | First-pass AI Hub comparison completed for current app W8A8, calib10 default, and calib10 minmax; minmax is worse and calib10 default is close to current app W8A8 | Do not replace app model without stronger evidence |
-| AIMET-CLE | AIMET CLE or Bias Correction | blocked_needs_user | Trigger check completed; no clear W8A8-vs-float showcase regression was found | Reopen only when human review or a benchmark finds a concrete W8A8-vs-float failure crop |
+| AIMET-CLE | AIMET CLE or Bias Correction | in_progress | Automated trigger search found concrete W8A8-vs-float local regression candidates, strongest at `structure_edges_urban067` with about 2.0dB local float-over-W8A8 delta | Validate AIMET/CLE or Bias Correction toolchain on the candidate crop without weakening the stable baseline |
 | AIMET-advanced | AdaRound / QAT | blocked_needs_user | High cost and no current quantization failure trigger | Reopen only after CLE/Bias is insufficient on a real failure crop |
 | model-curve | Real-ESRGAN vs QuickSRNet quality/latency/size/power curve | done | Quality/latency/size evidence exists; board-level battery-node power smoke exists for idle, preview, live QuickSR, QuickSR tile, and Real-ESRGAN tile | Treat power as board-level estimate, not external-meter evidence |
 | eval-fixed | fixed scenario benchmark | done | `RB5_SR_Benchmark_v1`, full 24-case, real-camera 8-scene set | Maintain only |

@@ -12,7 +12,7 @@ loop. This is not a permanent rejection of AIMET.
 Status:
 
 ```text
-AIMET: deferred_with_trigger
+AIMET: trigger_candidate_found
 ```
 
 2026-07-20 recheck:
@@ -21,6 +21,32 @@ AIMET: deferred_with_trigger
 The latest app work changed output-buffer handling and app e2e logging only.
 It did not introduce a new W8A8-vs-float visual failure crop. Therefore AIMET
 remains deferred_with_trigger.
+```
+
+2026-07-20 active trigger search:
+
+```text
+RB5_SR_lab\find_aimet_failure_crops.py
+RB5_SR_lab\results\aimet_trigger_search\20260720_full_v2_patch96
+```
+
+Automated local-crop search over `20260715_1950_realesrgan_host_float_vs_w8a8_full_v2`
+found 18 candidate crops and 3 strong candidates under the current threshold.
+The strongest two are `structure_edges_urban067` crops:
+
+```text
+structure_edges_urban067 x=336 y=48  delta=2.044dB  MAD=6.511
+structure_edges_urban067 x=336 y=96  delta=2.069dB  MAD=5.725
+```
+
+Interpretation:
+
+```text
+This is now enough to justify an AIMET feasibility validation, because there is
+a concrete W8A8-vs-float local regression candidate. It is not yet proof that
+AIMET will fix the issue. Human review should inspect candidate_overview.png,
+then the next technical step is checking whether the local AIMET toolchain can
+run CLE or Bias Correction for this model without derailing the stable baseline.
 ```
 
 ## Why
@@ -46,7 +72,7 @@ W8A8-vs-float degradation appears.
 
 ## Trigger To Reconsider
 
-Start AIMET only if one of these is true:
+Start AIMET feasibility validation if one of these is true:
 
 ```text
 1. Human visual review finds W8A8 visibly worse than float on a main showcase case.
