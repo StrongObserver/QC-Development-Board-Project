@@ -22,6 +22,7 @@ RB5 Gen2 / QCS8550 Android device.
 | --- | --- |
 | Repository overview | `README.md` |
 | Current checkpoint report | `CHECKPOINT_REPORT.md` |
+| Final interview package | `FINAL_INTERVIEW_PACKAGE.md` |
 | Evidence package | `SHOWCASE_MATERIALS.md` |
 | Interview story | `SHOWCASE_NARRATIVE.md` |
 | Oral interview script | `INTERVIEW_ORAL_SCRIPT.md` |

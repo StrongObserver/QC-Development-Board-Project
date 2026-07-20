@@ -57,6 +57,8 @@ tracked by default.
 - `SHOWCASE_MATERIALS.md`: current minimum evidence package.
 - `SHOWCASE_INDEX.md`: one-page navigation for presentation materials.
 - `SHOWCASE_NARRATIVE.md`: interview-ready project story.
+- `FINAL_INTERVIEW_PACKAGE.md`: compact pre-interview review sheet.
+- `INTERVIEW_ORAL_SCRIPT.md`: spoken 30-second / 2-minute / deep-dive answers.
 - `RESUME_PROJECT_DRAFT.md`: Chinese and English resume bullets.
 - `NEXT_ACTION.md`: current handoff.
 
