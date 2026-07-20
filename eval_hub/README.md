@@ -57,7 +57,7 @@ every question:
 | `text_fidelity` | Text/signage readability and character deformation | Missing; TextZoom/TPGSR-style data should be added if text category fails or app demo needs text proof |
 | `iqa_artificial` | Artificial distortion IQA calibration and metric sanity | CSIQ is easy to fetch; TID/LIVE/KADID are optional/larger |
 | `iqa_authentic_mobile` | Real-world photo quality/no-reference IQA | Missing; KonIQ/SPAQ/LIVE Challenge are optional lifecycle additions |
-| `device_app_e2e` | Android app end-to-end latency, memory, power, temperature | Not a dataset; needs app/QNN integration and device logs |
+| `device_app_e2e` | Android app end-to-end latency, memory, power, temperature | Schema active; live ROI app e2e rows exist; fixed manifest replay is still future |
 | `video_temporal` | Video/sequence SR stability, flicker, motion and thermal behavior | Future only; not part of current fixed-image gate |
 
 ## Metric Policy
@@ -173,21 +173,25 @@ Current EvalHub status:
 registered: 16
 present: 6
 P1 image/data gaps: none after RealSR and TextZoom manual downloads
-remaining P1 gap: rb5_app_e2e_logs, which is not an image dataset and requires Path B app integration
+remaining P1 gap: full rb5_app_e2e manifest replay. Live ROI app e2e rows now exist, but this is not an image dataset.
 ```
 
 Manga109 is not treated as a blocker. It requires official approval and is only
 useful if manga/line-art stress cases become important later.
 
-The app/device lifecycle layer has a schema and protocol but no data yet:
+The app/device lifecycle layer has a schema, protocol, and initial live ROI rows:
 
 ```text
 eval_hub/registries/app_e2e_log_schema.csv
 eval_hub/registries/app_e2e_protocol.md
+evalhub_data/derived/app_e2e/20260720_app_e2e_schema_output_reuse_120f/app_e2e_log.csv
+evalhub_data/derived/app_e2e/20260720_app_e2e_schema_output_reuse_60s/app_e2e_log.csv
 ```
 
-Use these only after Path B native runner / Android app integration exists.
-Current `qnn-net-run` evidence must not be reported as app e2e evidence.
+Use these for app live ROI timing, sustained-run, memory, power, and fallback
+records. Current `qnn-net-run` evidence must still not be reported as app e2e
+evidence. The current app e2e layer is live ROI timing evidence, not full fixed
+manifest replay evidence.
 
 Manual/download-gated sources are tracked in:
 

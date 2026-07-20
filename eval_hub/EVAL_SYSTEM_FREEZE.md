@@ -11,12 +11,13 @@
 当前评测系统已经达到“可以长期支撑当前项目主线”的状态：
 
 - 当前主门禁稳定：`RB5_SR_Benchmark_v1` 仍是 128x128 -> 512x512 主评测入口。
-- 生命周期扩展层已建立：EvalHub 已覆盖标准 SR、真实退化 SR、文字保真 SR、IQA 校准、app e2e 协议。
+- 生命周期扩展层已建立：EvalHub 已覆盖标准 SR、真实退化 SR、文字保真 SR、IQA 校准、app e2e 协议，并已有初始 live ROI app e2e 行。
 - 数据和方法已经绑定：每个数据层有明确用途、指标角色和边界，避免每次进展后重做评测系统。
 - 大数据不进 Git：`evalhub_data/` 被 `.gitignore` 忽略，仓库只跟踪注册表、脚本和 SOP。
 
-当前仍未完成的不是图片数据集，而是 app 端到端真实采集：`rb5_app_e2e_logs`
-需要等 Path B native/app 集成后生成。
+当前仍未完成的不是图片数据集，而是完整 app 端到端 manifest replay：
+`rb5_app_e2e_logs` 已有 live ROI timing 行，但还没有覆盖固定 manifest
+回放、截图/视频证据和完整 resource/power 组合。
 
 ## 当前数据层
 
@@ -28,7 +29,7 @@
 | 标准 SR 扩展 | Set5/Set14/BSD100/Urban100 | 219 cases | 更宽标准 SR sanity | 合成 x4，不是真实退化 |
 | 真实退化 SR | RealSR V3 x4 Test | 100 cases | 真实相机退化鲁棒性 | 只在需要 real-camera claim 时启用 |
 | 文字保真 SR | TextZoom test easy/medium/hard | 4373 cases | 文字可读性/变形专项 | 不作为通用 SR 替代 |
-| app e2e | app logs schema/protocol | schema only | 端到端延迟/功耗/温度 | 等 Path B 后采集 |
+| app e2e | app logs schema/protocol + initial live ROI rows | 2 live ROI rows | 端到端延迟/功耗/温度 | 不是完整 manifest replay |
 
 ## 评测方法绑定
 
@@ -39,7 +40,7 @@
 | RealSR | `eval_sr_manifest.py` host sanity; future QNN/app if real-camera claim | PSNR/SSIM/sharpness/contact sheet | human review owns real-degradation claim |
 | TextZoom | `eval_sr_manifest.py` host sanity; future OCR/readability metric | PSNR/SSIM/sharpness + `text_label` + visual text review | human review, OCR optional later |
 | CSIQ | future IQA metric scripts | PSNR/SSIM/LPIPS/DISTS/etc. vs DMOS | metric calibration only |
-| app e2e | future Android/QNN app logs | e2e p50/p95, memory, power, temperature, fallback | hard gates + human review |
+| app e2e | Android/QNN app logs | e2e p50/p95, memory, power, temperature, fallback | hard gates + human review |
 
 Metric roles are fixed in `eval_hub/registries/metric_policy.csv`:
 
@@ -117,28 +118,34 @@ evalhub_data\derived_runs\evalhub_smoke_textzoom_2cases
 
 These are host LiteRT sanity checks only, not RB5 QNN/app e2e evidence.
 
+Initial app e2e rows exist under:
+
+```text
+evalhub_data\derived\app_e2e\20260720_app_e2e_schema_output_reuse_120f\app_e2e_log.csv
+evalhub_data\derived\app_e2e\20260720_app_e2e_schema_output_reuse_60s\app_e2e_log.csv
+```
+
+These are Android app live ROI timing rows. They are not fixed manifest replay,
+not visual quality evidence, and not `qnn-net-run` evidence.
+
 ## What Not To Do
 
 - Do not replace `RB5_SR_Benchmark_v1` with EvalHub data.
 - Do not commit `evalhub_data/`.
 - Do not treat CSIQ as an SR benchmark.
 - Do not report host LiteRT EvalHub runs as RB5 QNN or app e2e.
+- Do not report app live ROI timing rows as fixed manifest replay or visual quality evidence.
 - Do not build video/temporal evaluation before fixed-image and app paths are stable.
 - Do not treat Manga109 as a blocker; it requires official approval and is optional.
 
 ## Next Evaluation Work
 
 The evaluation system is stable enough to resume engineering work. The next
-evaluation action should be:
+evaluation action depends on the claim:
 
 ```text
-Run QNN W8A8 full 24-case benchmark on RB5_SR_Benchmark_v1.
-```
-
-After Path B app integration exists, start the app e2e layer using:
-
-```text
-eval_hub\registries\app_e2e_log_schema.csv
-eval_hub\registries\app_e2e_protocol.md
+For fixed SR quality/performance claims: use RB5_SR_Benchmark_v1.
+For app live ROI claims: use app_e2e_log_schema.csv rows from the Android app runners.
+For stronger app e2e claims: add fixed manifest replay or screenshot/video evidence.
 ```
 
