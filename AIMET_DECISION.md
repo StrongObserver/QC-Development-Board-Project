@@ -124,6 +124,38 @@ Next valid step is one of:
 2. confirm a PyTorch FP source model path and then assess aimet-torch separately.
 ```
 
+2026-07-20 loop recheck:
+
+```text
+P1 toolchain decision output:
+RB5_SR_lab\results\p1_aimet_toolchain_decision_20260720
+
+wsl -l -v:
+WSL is not installed/enabled on this Windows host.
+
+RB5_SR_lab\.venv-eval\Scripts\python.exe -m pip index versions aimet-onnx:
+ERROR: No matching distribution found for aimet-onnx
+
+RB5_SR_lab\.venv-eval\Scripts\python.exe -m pip install --dry-run --no-cache-dir aimet-torch==2.35.1:
+aimet-torch is visible to pip, but the dry-run attempts a large dependency
+resolution and does not solve the current TFLite/ONNX PTQ recovery path without
+a confirmed PyTorch FP source/export route.
+
+External research cards checked:
+knowledge_base\external_research\super_resolution\quicksrnet\RESOURCE_CARD.md
+knowledge_base\external_research\qnn_android\qualcomm_ai_hub_apps\RESOURCE_CARD.md
+knowledge_base\external_research\qnn_android\edgeimpulse_qnn_android\RESOURCE_CARD.md
+```
+
+Updated interpretation:
+
+```text
+AIMET now has trigger crops, but remains blocked_needs_user because no supported
+local AIMET-ONNX runtime exists. Do not keep retrying native Windows pip
+installs. The next useful human action is to provide WSL/Linux or confirm the
+PyTorch FP source model/export path.
+```
+
 ## If AIMET Starts Later
 
 Use the lightest path first:

@@ -91,6 +91,21 @@ product decision to build a full CameraX VideoCapture/Recorder route.
 Current evidence to preserve:
 
 ```text
+Default live ROI recheck:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_loop_p0_1_default_live_roi_recheck
+
+YUV ROI correctness recheck:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_loop_p0_2_yuv_roi_recheck
+
+Native-rotated tensor correctness:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_loop_p0_3_tensor_correctness_rotated_native
+
+Native-rotated tensor live timing:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_loop_p0_3_tensor_rotated_native_v2
+
+App path comparison:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_loop_p0_4_app_path_compare
+
 Latest app e2e output-path smoke:
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_e2e_schema_output_reuse_120f
 
@@ -126,11 +141,19 @@ C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_demo_relatio
 
 App fixed-sample replay:
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_fixed_replay_quicksr_3assets
+
+AIMET toolchain decision:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\p1_aimet_toolchain_decision_20260720
 ```
 
 Current route boundaries:
 
 ```text
+0. The default live ROI path remains the mainline after the P0 recheck:
+   default Bitmap live ROI e2e p50/p95 is 14/18ms, while native-rotated tensor
+   live ROI is 14/20ms. Native YUV ROI correctness is good enough for probes
+   (`nativeMad=0.39`), and native rotation correctness passes, but this does not
+   justify replacing the default path.
 1. Output postprocess is no longer the next target unless a regression appears.
 2. every-N ImageAnalysis is a completed cadence/product boundary, not a per-frame
    latency win: everyN=3 gives about 9.9 effective enhanced FPS, while each
@@ -165,6 +188,11 @@ Current route boundaries:
 9. App fixed-sample replay is now a small regression layer: it runs fixed assets
    through the Android QNN path, pulls input/baseline/SR outputs, and writes an
    app_e2e row. It supports repeatability but is not live-camera quality proof.
+10. AIMET-CLE remains blocked_needs_user: trigger crops exist, but native
+   Windows/Python 3.12 still lacks `aimet-onnx`, WSL is not installed, and
+   external research did not provide a Windows-only workaround. `aimet-torch`
+   only becomes actionable if the PyTorch FP source model/export route is
+   confirmed.
 ```
 
 Power/perf-watt:
