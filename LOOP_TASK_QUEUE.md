@@ -79,8 +79,9 @@ concrete W8A8-vs-float local regression candidates, but native Windows remains
 blocked for actual AIMET execution. TextZoom/OCR mini evaluation is now a
 diagnostic-only text-fidelity tool, not a hard quality gate. RealSR 10-case
 mini review is now a real-degradation lifecycle sanity check, not a replacement
-for `RB5_SR_Benchmark_v1`. Demo Mode video capture is now validated through
-`adb screenrecord` on the live ROI UI; it is not a true VideoCapture SR pipeline.
+for `RB5_SR_Benchmark_v1`. Demo Mode wide-FoV video capture is now validated
+through `adb screenrecord` on the live ROI UI; it is not a true VideoCapture SR
+pipeline.
 
 The current loop can stop under exit condition 2/3: remaining progress needs
 either user/toolchain input (AIMET on WSL/Linux or supported environment),
@@ -118,7 +119,7 @@ RealSR mini lifecycle sanity:
 C:\Users\Admin\Desktop\QC-Development-Board-Project\evalhub_data\derived_runs\evalhub_realsr_mini_10cases_20260720_v2
 
 Demo Mode video demo:
-C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_demo_mode_ui_final_20s
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_demo_mode_wide_fov_20s
 ```
 
 Current route boundaries:
@@ -147,9 +148,11 @@ Current route boundaries:
    cases and shows real-degradation metrics can disagree with sharpness, but it
    is not RB5 QNN/app evidence and cannot replace the 24-case main gate.
 8. Demo Mode video is a screenrecorded app demo: it hides the old control-heavy
-   UI, shows the live ROI result full-screen in landscape, and keeps a compact
-   performance overlay. It still does not prove temporal consistency or true
-   per-frame video SR.
+   UI, shows the live ROI result full-screen in landscape, keeps a compact
+   performance overlay, and uses a wider crop 960->128 for better FoV. The
+   default debug UI still has all buttons, and tapping the overlay in Demo Mode
+   temporarily shows/hides the original control bar. It still does not prove
+   temporal consistency or true per-frame video SR.
 ```
 
 Power/perf-watt:

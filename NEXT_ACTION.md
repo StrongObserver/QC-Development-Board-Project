@@ -289,14 +289,18 @@ contact sheet review owns any real-camera robustness claim.
 Demo Mode video demo:
 
 ```text
-C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_demo_mode_ui_final_20s
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_demo_mode_wide_fov_20s
 model: QUICKSR_W8A8 through QNN TFLite Delegate / HTP
 recording: adb screenrecord, 20s, 1280x720 MP4, Demo Mode UI
-video sanity: OpenCV opened=True, frames=795, bytes=2,388,242
+video sanity: OpenCV opened=True, frames=815, bytes=2,307,085
 parsed live ROI frames: 190
-timing: pre/inf/post/e2e p50 = 2.0 / 1.0 / 1.0 / 12.5 ms; e2e p95 = 18.0 ms
+timing: pre/inf/post/e2e p50 = 1.0 / 1.0 / 0.0 / 19.0 ms; e2e p95 = 23.0 ms
 visual check: no startup desktop, no bottom control bar, no Android navigation
-bar, large landscape SR view, readable top-right performance overlay.
+bar, large landscape SR view, readable top-right performance overlay, wider
+FoV with crop 960->128 instead of the legacy 256->128-style zoomed crop.
+control boundary: default debug UI still has all buttons; Demo Mode can still be
+driven by adb intent, and tapping the top-right overlay temporarily shows/hides
+the original control bar.
 boundary: demo recording of the live ROI UI, not CameraX VideoCapture/Recorder,
 not temporal SR quality evidence, and not external power evidence.
 ```

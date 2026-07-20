@@ -80,6 +80,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var demoOverlayView: TextView
     private lateinit var controlBarView: View
     private var demoMode = false
+    private var demoControlsVisible = false
     private val srSampleLock = Any()
     private var latestSrSample: SrSample? = null
     private var liveOutputBitmap: Bitmap? = null
@@ -435,10 +436,14 @@ class MainActivity : AppCompatActivity() {
         if (demoMode) {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
             WindowInsetsControllerCompat(window, window.decorView).hide(WindowInsetsCompat.Type.systemBars())
-            controlBarView.visibility = View.GONE
-            statusTextView.visibility = View.GONE
+            controlBarView.visibility = if (demoControlsVisible) View.VISIBLE else View.GONE
+            statusTextView.visibility = if (demoControlsVisible) View.VISIBLE else View.GONE
             demoOverlayView.visibility = View.VISIBLE
             demoOverlayView.text = "RB5 VisionLab\nQNN / HTP\nLive ROI demo"
+            demoOverlayView.setOnClickListener {
+                demoControlsVisible = !demoControlsVisible
+                applyDemoModeUi()
+            }
             srResultView.scaleType = ImageView.ScaleType.CENTER_CROP
             (srResultView.layoutParams as? ConstraintLayout.LayoutParams)?.let { params ->
                 params.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
@@ -447,10 +452,12 @@ class MainActivity : AppCompatActivity() {
                 srResultView.layoutParams = params
             }
         } else {
+            demoControlsVisible = false
             WindowInsetsControllerCompat(window, window.decorView).show(WindowInsetsCompat.Type.systemBars())
             controlBarView.visibility = View.VISIBLE
             statusTextView.visibility = View.VISIBLE
             demoOverlayView.visibility = View.GONE
+            demoOverlayView.setOnClickListener(null)
             srResultView.scaleType = ImageView.ScaleType.FIT_CENTER
             (srResultView.layoutParams as? ConstraintLayout.LayoutParams)?.let { params ->
                 params.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
@@ -484,13 +491,14 @@ class MainActivity : AppCompatActivity() {
         effectiveEnhancedFps: Double,
         frameWidth: Int,
         frameHeight: Int,
+        cropSide: Int,
         everyN: Int,
     ): String {
         return "RB5 Gen2 Live SR\n" +
             "${srBackend.label} / ${srModelVariant.label}\n" +
             "E2E ${e2eMs} ms  |  NPU ${timing.inferenceMs} ms\n" +
             "FPS ${"%.1f".format(Locale.US, effectiveEnhancedFps)}  |  everyN $everyN\n" +
-            "Frame ${frameWidth}x${frameHeight}"
+            "Frame ${frameWidth}x${frameHeight}  |  crop ${cropSide}->128"
     }
 
     private fun applyIntentSrOverrides() {
@@ -1084,7 +1092,7 @@ class MainActivity : AppCompatActivity() {
             val side = 128
             if (full.width < side || full.height < side) return
             val tRoiStart = System.nanoTime()
-            val (croppedRoi, cropSide) = cropCenterRoiKeepingLegacyFov(full, side)
+            val (croppedRoi, cropSide) = cropLiveDemoAwareCenterRoi(full, side)
             val roiCropScaleMs = (System.nanoTime() - tRoiStart) / 1_000_000
             var roi = croppedRoi
             val degrees = imageProxy.imageInfo.rotationDegrees
@@ -1133,6 +1141,7 @@ class MainActivity : AppCompatActivity() {
                         effectiveEnhancedFps,
                         full.width,
                         full.height,
+                        cropSide,
                         everyN,
                     )
                 } else {
@@ -1782,6 +1791,22 @@ class MainActivity : AppCompatActivity() {
             full.width,
             full.height,
         ).coerceAtLeast(modelInputSide)
+        val left = (full.width - cropSide) / 2
+        val top = (full.height - cropSide) / 2
+        val crop = Bitmap.createBitmap(full, left, top, cropSide, cropSide)
+        val roi = if (cropSide == modelInputSide) {
+            crop
+        } else {
+            Bitmap.createScaledBitmap(crop, modelInputSide, modelInputSide, true)
+        }
+        return Pair(roi, cropSide)
+    }
+
+    private fun cropLiveDemoAwareCenterRoi(full: Bitmap, modelInputSide: Int): Pair<Bitmap, Int> {
+        if (!demoMode) {
+            return cropCenterRoiKeepingLegacyFov(full, modelInputSide)
+        }
+        val cropSide = minOf(full.width, full.height).coerceAtLeast(modelInputSide)
         val left = (full.width - cropSide) / 2
         val top = (full.height - cropSide) / 2
         val crop = Bitmap.createBitmap(full, left, top, cropSide, cropSide)

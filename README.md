@@ -33,7 +33,7 @@ Automatic dual-model live routing is intentionally not the default.
 | 120s default live run | 3551 frames, e2e first/last 20% p50/p95 `20.0/25.0ms -> 21.0/26.0ms` |
 | 60s latest live run | 1763 frames, e2e first/last 20% p50/p95 `15.0/20.0ms -> 16.0/21.0ms` |
 | Every-N temporal smoke | `everyN=3`, effective enhanced FPS `9.9`, enhanced-frame e2e `22 / 25ms` |
-| Demo Mode live ROI video | `20260720_demo_mode_ui_final_20s`, 20s MP4, e2e p50/p95 `12.5 / 18.0ms` |
+| Demo Mode wide-FoV live ROI video | `20260720_demo_mode_wide_fov_20s`, 20s MP4, crop `960->128`, e2e p50/p95 `19 / 23ms` |
 | Shared-memory feasibility | Phase 2 normal-vs-shared tensor compare passed; checksum matched and shared invoke avg was `1.056ms` vs normal `1.104ms`, but this is still not CameraX true zero-copy |
 | Real-camera showcase | 8 scenes / 32 standard images, `accepted_with_caveats` |
 | Tensor-ready live experiment | valid, but not promoted: p50 e2e `20.0ms` vs Bitmap default `19.0ms` |
