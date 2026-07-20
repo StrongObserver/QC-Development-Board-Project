@@ -16,8 +16,8 @@ CameraX live ROI
 Local and remote state:
 
 ```text
-main is synced to origin/main at e3768c9
-working tree is clean
+working tree should be clean after the latest push
+use `git log --oneline -n 10` for the current commit list
 ```
 
 ## What Is Proven
@@ -60,7 +60,7 @@ video product readiness
 
 ## Commit Checkpoint
 
-The checkpoint was pushed to `origin/main`:
+Core checkpoint commits pushed to `origin/main`:
 
 ```text
 4b16bd8 perf(android): optimize live SR output and cadence logging
@@ -71,6 +71,7 @@ fd78911 docs(showcase): refresh RB5 demo evidence
 c43f013 docs(loop): close full-scope trigger gates
 be8c35d docs(report): add RB5 checkpoint report
 e3768c9 docs(showcase): add RB5 oral interview script
+b8f7664 docs(showcase): add final interview package
 ```
 
 ## Verification
