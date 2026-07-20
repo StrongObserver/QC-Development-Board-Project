@@ -32,6 +32,7 @@ QNN shared-memory Phase 1 tensor binding + invoke timing probe
 AIMET trigger crop search
 TextZoom OCR mini diagnostic
 RealSR 10-case lifecycle mini review
+low-cost live ROI screenrecord demo
 ```
 
 ## Highest Priority
@@ -41,14 +42,15 @@ Next priority:
 ```text
 The project is past the clean archive checkpoint and has completed four bounded
 exploration steps: QNN shared-memory Phase 1, AIMET trigger search, TextZoom
-OCR mini diagnostics, and RealSR lifecycle mini review. Continue the loop with
-the remaining low-cost lanes:
+OCR mini diagnostics, RealSR lifecycle mini review, and a low-cost live ROI
+screenrecord demo. Continue the loop with the remaining bounded lanes:
 1. a concrete W8A8-vs-float failure crop appears -> AIMET/CLE or mixed precision;
 2. visual review conflicts with PSNR/SSIM or a text-readability claim is needed -> LPIPS/NIQE/OCR diagnostics;
 3. shared-memory Phase 1 passed -> compare timing and output validity against the Kotlin/TFLite default path;
-4. the user wants a video demo/product path -> CameraX VideoCapture/Recorder protocol and implementation.
-5. low-cost video demo protocol -> only if it can reuse existing app/device
-   evidence without destabilizing the archived deliverable.
+4. shared-memory Phase 1 passed -> decide whether a bounded C API e2e comparison
+   is worth implementing beyond the probe.
+5. human review is needed -> watch the low-cost MP4 and decide whether the
+   framing/readability is acceptable as demo evidence.
 ```
 
 Do not reopen as unfinished:
@@ -270,6 +272,20 @@ the 24-case main gate. Real-degradation PSNR can penalize sharper SR output, so
 contact sheet review owns any real-camera robustness claim.
 ```
 
+Low-cost video demo:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_low_cost_video_demo_quicksr_20s_v2
+model: QUICKSR_W8A8 through QNN TFLite Delegate / HTP
+recording: adb screenrecord, 20s, 1280x720 MP4
+video sanity: OpenCV opened=True, frames=743, first_frame_ok=True, first_frame_mean=56.00, bytes=1,527,322
+parsed live ROI frames: 192
+timing: pre/inf/post/e2e p50 = 2.0 / 1.0 / 1.0 / 13.5 ms; e2e p95 = 18.0 ms
+boundary: demo recording of the live ROI UI, not CameraX VideoCapture/Recorder,
+not temporal SR quality evidence, and not external power evidence. Human review
+still needs to watch the MP4 for framing/readability.
+```
+
 ## Next Engineering Choices
 
 Recommended order:
@@ -283,8 +299,10 @@ Recommended order:
 4. Keep AIMET and mixed precision behind the candidate-crop/toolchain boundary:
    trigger exists, but native Windows AIMET execution is blocked.
 5. Keep LPIPS/NIQE/OCR diagnostic-only unless calibrated against visual review.
-6. Do the low-cost video demo protocol next if it can reuse existing app/device
-   paths without destabilizing the archived deliverable.
+6. Human-review the low-cost MP4 for framing/readability before treating it as
+   a showcase artifact.
 7. Keep RealSR as lifecycle sanity until a reviewed real-camera robustness claim
    is needed.
+8. If continuing engineering without human review, decide whether to build a
+   bounded C API e2e comparison path after the shared-memory Phase 1 probe.
 ```

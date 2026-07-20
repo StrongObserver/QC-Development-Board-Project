@@ -60,7 +60,7 @@ original project design unless there is concrete evidence that it cannot work.
 | 6 | aimet-trigger | done | AIMET CLE/Bias Correction trigger check | exact W8A8-vs-float failure crop found, or AIMET remains deferred_with_trigger | recovery feasibility complete or toolchain blocked with evidence |
 | 7 | eval-diagnostic | done | LPIPS/NIQE/OCR diagnostic metrics | TextZoom OCR mini diagnostic script and sample run exist; metric remains diagnostic-only | calibrated enough for diagnostic use or deferred |
 | 8 | zero-copy-probe | in_progress | True zero-copy feasibility research/probe | Phase 1 TFLite C API custom allocation + QNN Delegate invoke validated | timing comparison complete or blocked with evidence |
-| 9 | video-temporal-plan | done | Video/every-N-frame enhancement protocol | every-N ImageAnalysis smoke is classified as cadence evidence, not per-frame latency gain | full VideoCapture needs explicit demo/product need |
+| 9 | video-temporal-plan | done | Video/every-N-frame enhancement protocol | every-N ImageAnalysis smoke is classified as cadence evidence; low-cost screenrecord demo path exists | full VideoCapture needs explicit demo/product need |
 | 10 | power-perf-watt | done | Real power/perf-watt characterization | current/power evidence exists if making an efficiency claim | hardware/tooling blocked or evidence complete |
 | 11 | diff-audit | done | Audit current uncommitted changes and artifact boundaries | explicit source/doc/script files vs generated artifacts are separated | audit complete |
 | 12 | commit-boundary-plan | done | Split current work into logical commits | staging paths are explicit and generated artifacts excluded | plan complete |
@@ -68,7 +68,7 @@ original project design unless there is concrete evidence that it cannot work.
 
 ## Current Closeout Task
 
-Current active task: `low-cost-video-demo-protocol`.
+Current active task: `shared-memory-e2e-decision-or-human-review`.
 
 Current open work is no longer tile, D8-config, output postprocess, app e2e
 schema bring-up, or every-N smoke. Those lanes have evidence and should be
@@ -78,7 +78,9 @@ concrete W8A8-vs-float local regression candidates, but native Windows remains
 blocked for actual AIMET execution. TextZoom/OCR mini evaluation is now a
 diagnostic-only text-fidelity tool, not a hard quality gate. RealSR 10-case
 mini review is now a real-degradation lifecycle sanity check, not a replacement
-for `RB5_SR_Benchmark_v1`.
+for `RB5_SR_Benchmark_v1`. Low-cost video demo capture is now validated through
+`adb screenrecord` on the existing live ROI UI; it is not a true VideoCapture SR
+pipeline.
 
 Current evidence to preserve:
 
@@ -106,6 +108,9 @@ C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\textzoom_
 
 RealSR mini lifecycle sanity:
 C:\Users\Admin\Desktop\QC-Development-Board-Project\evalhub_data\derived_runs\evalhub_realsr_mini_10cases_20260720_v2
+
+Low-cost video demo:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_low_cost_video_demo_quicksr_20s_v2
 ```
 
 Current route boundaries:
@@ -132,6 +137,9 @@ Current route boundaries:
 7. RealSR mini review is host LiteRT sanity only: it covers Canon/Nikon 5+5
    cases and shows real-degradation metrics can disagree with sharpness, but it
    is not RB5 QNN/app evidence and cannot replace the 24-case main gate.
+8. Low-cost video demo is a screenrecorded app demo: it can show the live ROI UI
+   running on RB5, but it does not prove temporal consistency or true per-frame
+   video SR. Human review still needs to check framing/readability of the MP4.
 ```
 
 Power/perf-watt:

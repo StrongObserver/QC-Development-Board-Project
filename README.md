@@ -33,6 +33,7 @@ Automatic dual-model live routing is intentionally not the default.
 | 120s default live run | 3551 frames, e2e first/last 20% p50/p95 `20.0/25.0ms -> 21.0/26.0ms` |
 | 60s latest live run | 1763 frames, e2e first/last 20% p50/p95 `15.0/20.0ms -> 16.0/21.0ms` |
 | Every-N temporal smoke | `everyN=3`, effective enhanced FPS `9.9`, enhanced-frame e2e `22 / 25ms` |
+| Low-cost live ROI demo video | `20260720_low_cost_video_demo_quicksr_20s_v2`, 20s MP4, e2e p50/p95 `13.5 / 18.0ms` |
 | Shared-memory feasibility | QNN Delegate C API supports shared memory, but current Java/Kotlin wrapper does not expose the needed custom allocation API |
 | Real-camera showcase | 8 scenes / 32 standard images, `accepted_with_caveats` |
 | Tensor-ready live experiment | valid, but not promoted: p50 e2e `20.0ms` vs Bitmap default `19.0ms` |
@@ -97,6 +98,7 @@ true zero-copy
 full power/perf-watt characterization
 automatic dual-model routing product readiness
 QuickSRNet globally better than Real-ESRGAN
+the screenrecord demo as a true VideoCapture/Recorder SR pipeline
 ```
 
 The supported claim is narrower and stronger:
