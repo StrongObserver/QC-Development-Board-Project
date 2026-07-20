@@ -73,6 +73,7 @@ class SuperResolver(
     private val inputPixels = IntArray(inputSize * inputSize)
     private val outputPixels = IntArray(outputSize * outputSize)
     private val outputUint8Lookup: IntArray?
+    private val outputUint8Bytes: ByteArray?
 
     init {
         // Read the whole .tflite from assets into a direct ByteBuffer (works whether
@@ -124,6 +125,11 @@ class SuperResolver(
             IntArray(256) { raw ->
                 (((raw - outputZeroPoint) * outputScale).coerceIn(0f, 1f) * 255f).toInt()
             }
+        } else {
+            null
+        }
+        outputUint8Bytes = if (outputType == DataType.UINT8) {
+            ByteArray(outputSize * outputSize * 3)
         } else {
             null
         }
@@ -320,10 +326,13 @@ class SuperResolver(
 
     private fun fillOutputPixelsFromUint8(buffer: ByteBuffer) {
         val lookup = outputUint8Lookup ?: error("Missing UINT8 output lookup table")
+        val bytes = outputUint8Bytes ?: error("Missing UINT8 output byte buffer")
+        buffer.get(bytes)
+        var src = 0
         for (i in outputPixels.indices) {
-            val r = lookup[buffer.get().toInt() and 0xFF]
-            val g = lookup[buffer.get().toInt() and 0xFF]
-            val b = lookup[buffer.get().toInt() and 0xFF]
+            val r = lookup[bytes[src++].toInt() and 0xFF]
+            val g = lookup[bytes[src++].toInt() and 0xFF]
+            val b = lookup[bytes[src++].toInt() and 0xFF]
             outputPixels[i] = ARGB_ALPHA or (r shl 16) or (g shl 8) or b
         }
     }

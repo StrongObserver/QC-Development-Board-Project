@@ -2,6 +2,7 @@ package com.cyf.rb5visionlab
 
 import android.Manifest
 import android.content.ContentValues
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -64,7 +65,12 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var tileModelVariant = SrModelVariant.W8A8
     @Volatile private var liveSr = false
     @Volatile private var liveSrTensorReady = false
+    @Volatile private var liveSrEveryN = 1
+    @Volatile private var liveSrSessionId = "manual"
     @Volatile private var offlineEvalActive = false
+    @Volatile private var liveSrSeenFrames = 0
+    @Volatile private var liveSrEnhancedFrames = 0
+    @Volatile private var liveSrStartNs = 0L
     private lateinit var srResultView: ImageView
     private val srSampleLock = Any()
     private var latestSrSample: SrSample? = null
@@ -232,6 +238,8 @@ class MainActivity : AppCompatActivity() {
         val autoRunTileStill = boolIntentExtra("run_tile_still")
         val autoRunTileCompare = boolIntentExtra("run_tile_compare")
         val requestedProbeMode = intent.getStringExtra("probe_mode")?.trim()?.lowercase(Locale.US).orEmpty()
+        liveSrEveryN = intIntentExtra("sr_every_n", 1).coerceAtLeast(1)
+        liveSrSessionId = intent.getStringExtra("sr_session_id")?.trim().orEmpty().ifEmpty { "manual" }
         Log.d(
             "RB5_QNN",
             "onCreate run_qnn_fixed=$autoRunQnnFixed run_resource_probe=$autoRunResourceProbe " +
@@ -245,7 +253,7 @@ class MainActivity : AppCompatActivity() {
                 "run_tile_still=$autoRunTileStill tile_model=${tileModelVariant.label} " +
                 "run_tile_compare=$autoRunTileCompare " +
                 "run_yuv_roi_probe=$autoRunYuvRoiProbe run_tensor_ready_probe=$autoRunTensorReadyProbe " +
-                "probe_mode=$requestedProbeMode"
+                "probe_mode=$requestedProbeMode sr_every_n=$liveSrEveryN sr_session_id=$liveSrSessionId"
         )
         if (autoRunResourceProbe) {
             srExecutor.execute {
@@ -281,6 +289,18 @@ class MainActivity : AppCompatActivity() {
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
             insets
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        applyIntentSrOverrides()
+        liveSrEveryN = intIntentExtra("sr_every_n", 1).coerceAtLeast(1)
+        liveSrSessionId = intent.getStringExtra("sr_session_id")?.trim().orEmpty().ifEmpty { "manual" }
+        if (boolIntentExtra("start_live_sr")) {
+            startLiveSrFromIntent()
+        }
+        Log.d("RB5_SR", "onNewIntent start_live_sr=${boolIntentExtra("start_live_sr")} sr_every_n=$liveSrEveryN sr_session_id=$liveSrSessionId")
     }
 
     private fun setupSuperResolution() {
@@ -337,6 +357,8 @@ class MainActivity : AppCompatActivity() {
             if (liveSr) {
                 liveSrTensorReady = false
                 offlineEvalActive = false
+                liveSrEveryN = 1
+                resetLiveSrCadenceCounters()
                 previewView.visibility = View.GONE
                 srResultView.visibility = View.VISIBLE
                 srButton.text = "停止实时超分"
@@ -358,6 +380,12 @@ class MainActivity : AppCompatActivity() {
             statusTextView.text = "SR backend switched to ${srBackend.label}. Tap to run; long press to switch backend."
             true
         }
+    }
+
+    private fun resetLiveSrCadenceCounters() {
+        liveSrSeenFrames = 0
+        liveSrEnhancedFrames = 0
+        liveSrStartNs = System.nanoTime()
     }
 
     private fun applyIntentSrOverrides() {
@@ -388,6 +416,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun intIntentExtra(name: String, default: Int): Int {
+        val value = intent.extras?.get(name) ?: return default
+        return when (value) {
+            is Int -> value
+            is Long -> value.toInt()
+            is String -> value.trim().toIntOrNull() ?: default
+            else -> value.toString().trim().toIntOrNull() ?: default
+        }
+    }
+
     private inline fun <reified T : Enum<T>> parseEnum(value: String): T? {
         val normalized = value.trim().uppercase(Locale.US)
         return enumValues<T>().firstOrNull {
@@ -412,7 +450,8 @@ class MainActivity : AppCompatActivity() {
         srResultView.visibility = View.VISIBLE
         findViewById<Button>(R.id.sr_button).text = "停止实时超分"
         statusTextView.text = "Live ROI SR starting with ${srBackend.label}/${srModelVariant.label} from intent..."
-        Log.d("RB5_SR", "auto live SR from intent backend=${srBackend.label} model=${srModelVariant.label}")
+        resetLiveSrCadenceCounters()
+        Log.d("RB5_SR", "auto live SR from intent backend=${srBackend.label} model=${srModelVariant.label} session=$liveSrSessionId everyN=$liveSrEveryN")
     }
 
     private fun startTensorReadyLiveSrFromIntent() {
@@ -811,6 +850,17 @@ class MainActivity : AppCompatActivity() {
      */
     private fun runLiveSr(imageProxy: ImageProxy) {
         val srTag = "RB5_SR"
+        liveSrSeenFrames += 1
+        val everyN = liveSrEveryN.coerceAtLeast(1)
+        if (everyN > 1 && ((liveSrSeenFrames - 1) % everyN != 0)) {
+            Log.d(
+                srTag,
+                "backend=${srBackend.label} live ROI skip everyN=$everyN frameIndex=$liveSrSeenFrames " +
+                    "enhancedIndex=$liveSrEnhancedFrames model=${srModelVariant.label} session=$liveSrSessionId"
+            )
+            return
+        }
+        liveSrEnhancedFrames += 1
         try {
             if (resolver?.backend != srBackend || resolver?.modelAsset != srModelVariant.assetName) {
                 resolver?.close()
@@ -856,16 +906,19 @@ class MainActivity : AppCompatActivity() {
             }
             val sampleCopyMs = (System.nanoTime() - tSampleStart) / 1_000_000
             val analyzerWallMs = frameBitmapMs + roiCropScaleMs + rotateMs + enhanceWallMs + sampleCopyMs
+            val elapsedNs = (System.nanoTime() - liveSrStartNs).coerceAtLeast(1L)
+            val effectiveEnhancedFps = liveSrEnhancedFrames * 1_000_000_000.0 / elapsedNs.toDouble()
             Log.d(
                 srTag,
                 "backend=${srBackend.label} live ROI crop=${cropSide}->128->512 frame=${full.width}x${full.height} cap=$captureMs frameBitmap=$frameBitmapMs roi=$roiCropScaleMs rotate=$rotateMs pre=${t.preprocessMs} inf=${t.inferenceMs} post=${t.postprocessMs} enhanceWall=$enhanceWallMs sampleCopy=$sampleCopyMs analyzer=$analyzerWallMs e2e=${e2eMs}ms"
-                    + " model=${srModelVariant.label}"
+                    + " model=${srModelVariant.label} session=$liveSrSessionId everyN=$everyN frameIndex=$liveSrSeenFrames enhancedIndex=$liveSrEnhancedFrames effectiveEnhancedFps=${"%.2f".format(Locale.US, effectiveEnhancedFps)}"
             )
             runOnUiThread {
                 srResultView.setImageBitmap(out)
                 statusTextView.text =
                     "Live ROI SR (TFLite ${srBackend.label}/${srModelVariant.label})\n" +
                         "frame ${full.width}x${full.height} | ROI ${cropSide}->128\n" +
+                        "everyN $everyN | enhanced $liveSrEnhancedFrames/$liveSrSeenFrames\n" +
                         "capture+crop ${captureMs} ms | preprocess ${t.preprocessMs} ms\n" +
                         "inference ${t.inferenceMs} ms | postprocess ${t.postprocessMs} ms\n" +
                         "end-to-end ~${e2eMs} ms"
