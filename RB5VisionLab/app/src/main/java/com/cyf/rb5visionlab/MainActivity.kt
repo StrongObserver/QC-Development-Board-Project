@@ -1093,6 +1093,7 @@ class MainActivity : AppCompatActivity() {
             if (full.width < side || full.height < side) return
             val tRoiStart = System.nanoTime()
             val (croppedRoi, cropSide) = cropLiveDemoAwareCenterRoi(full, side)
+            val demoDisplayBitmap = if (demoMode) cropLiveDemoDisplayBitmap(full, cropSide) else null
             val roiCropScaleMs = (System.nanoTime() - tRoiStart) / 1_000_000
             var roi = croppedRoi
             val degrees = imageProxy.imageInfo.rotationDegrees
@@ -1131,9 +1132,10 @@ class MainActivity : AppCompatActivity() {
                 srTag,
                 "backend=${srBackend.label} live ROI crop=${cropSide}->128->512 frame=${full.width}x${full.height} cap=$captureMs frameBitmap=$frameBitmapMs roi=$roiCropScaleMs rotate=$rotateMs pre=${t.preprocessMs} inf=${t.inferenceMs} post=${t.postprocessMs} enhanceWall=$enhanceWallMs sampleCopy=$sampleCopyMs analyzer=$analyzerWallMs e2e=${e2eMs}ms"
                     + " model=${srModelVariant.label} session=$liveSrSessionId everyN=$everyN frameIndex=$liveSrSeenFrames enhancedIndex=$liveSrEnhancedFrames effectiveEnhancedFps=${"%.2f".format(Locale.US, effectiveEnhancedFps)}"
+                    + if (demoMode) " display=wide_preview" else ""
             )
             runOnUiThread {
-                srResultView.setImageBitmap(out)
+                srResultView.setImageBitmap(demoDisplayBitmap ?: out)
                 if (demoMode) {
                     demoOverlayView.text = liveDemoOverlayText(
                         t,
@@ -1816,6 +1818,12 @@ class MainActivity : AppCompatActivity() {
             Bitmap.createScaledBitmap(crop, modelInputSide, modelInputSide, true)
         }
         return Pair(roi, cropSide)
+    }
+
+    private fun cropLiveDemoDisplayBitmap(full: Bitmap, cropSide: Int): Bitmap {
+        val left = (full.width - cropSide) / 2
+        val top = (full.height - cropSide) / 2
+        return Bitmap.createBitmap(full, left, top, cropSide, cropSide)
     }
 
     private fun yuv420ToRgbCenterRoiKeepingLegacyFov(imageProxy: ImageProxy, outputSide: Int): Bitmap {

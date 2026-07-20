@@ -119,7 +119,7 @@ RealSR mini lifecycle sanity:
 C:\Users\Admin\Desktop\QC-Development-Board-Project\evalhub_data\derived_runs\evalhub_realsr_mini_10cases_20260720_v2
 
 Demo Mode video demo:
-C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_demo_mode_wide_fov_20s
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_demo_mode_wide_clear_20s
 ```
 
 Current route boundaries:
@@ -148,11 +148,11 @@ Current route boundaries:
    cases and shows real-degradation metrics can disagree with sharpness, but it
    is not RB5 QNN/app evidence and cannot replace the 24-case main gate.
 8. Demo Mode video is a screenrecorded app demo: it hides the old control-heavy
-   UI, shows the live ROI result full-screen in landscape, keeps a compact
-   performance overlay, and uses a wider crop 960->128 for better FoV. The
-   default debug UI still has all buttons, and tapping the overlay in Demo Mode
-   temporarily shows/hides the original control bar. It still does not prove
-   temporal consistency or true per-frame video SR.
+   UI, shows a wide clear camera preview full-screen in landscape, keeps a
+   compact QNN/SR performance overlay, and avoids stretching the 128->512 SR
+   output as the main visual. The default debug UI still has all buttons, and
+   tapping the overlay in Demo Mode temporarily shows/hides the original control
+   bar. It still does not prove temporal consistency or true per-frame video SR.
 ```
 
 Power/perf-watt:
