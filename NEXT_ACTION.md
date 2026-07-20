@@ -45,11 +45,11 @@ The project is past the clean archive checkpoint and has completed bounded
 exploration steps: QNN shared-memory Phase 0/1/2, AIMET trigger search,
 TextZoom OCR mini diagnostics, RealSR lifecycle mini review, and a low-cost
 live ROI screenrecord demo. Continue the loop with the remaining bounded lanes:
-1. a concrete W8A8-vs-float failure crop appears -> AIMET/CLE or mixed precision;
-2. visual review conflicts with PSNR/SSIM or a text-readability claim is needed -> LPIPS/NIQE/OCR diagnostics;
-3. human review is needed -> watch the low-cost MP4 and decide whether the
+1. AIMET/CLE can continue only after WSL/Linux or another supported AIMET
+   toolchain is available.
+2. human review is needed -> watch the low-cost MP4 and decide whether the
    framing/readability is acceptable as demo evidence.
-4. if continuing data-path engineering -> design a larger CameraX/native
+3. if continuing data-path engineering -> design a larger CameraX/native
    integration path; invoke-level shared-memory probing itself is complete.
 ```
 

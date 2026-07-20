@@ -36,13 +36,13 @@ later, but it must not disappear.
 | E10-B | QNN/HTP Android app path | done | QNN TFLite Delegate + HTP app path works with skel lib | Maintain only |
 | D8 | W8A8 quantized baseline | done | Real-ESRGAN W8A8 TFLite and QNN paths; QuickSRNetSmall W8A8 default live path | Maintain only |
 | D8-config | per-channel/per-tensor/calibration comparison | done | First-pass AI Hub comparison completed for current app W8A8, calib10 default, and calib10 minmax; minmax is worse and calib10 default is close to current app W8A8 | Do not replace app model without stronger evidence |
-| AIMET-CLE | AIMET CLE or Bias Correction | in_progress | Automated trigger search found concrete W8A8-vs-float local regression candidates, strongest at `structure_edges_urban067` with about 2.0dB local float-over-W8A8 delta | Validate AIMET/CLE or Bias Correction toolchain on the candidate crop without weakening the stable baseline |
+| AIMET-CLE | AIMET CLE or Bias Correction | blocked_needs_user | Automated trigger search found concrete W8A8-vs-float local regression candidates, strongest at `structure_edges_urban067` with about 2.0dB local float-over-W8A8 delta; native Windows AIMET execution is unsupported in the current environment | Provide WSL/Linux or another supported AIMET toolchain before running CLE/Bias Correction |
 | AIMET-advanced | AdaRound / QAT | blocked_needs_user | High cost and no current quantization failure trigger | Reopen only after CLE/Bias is insufficient on a real failure crop |
 | model-curve | Real-ESRGAN vs QuickSRNet quality/latency/size/power curve | done | Quality/latency/size evidence exists; board-level battery-node power smoke exists for idle, preview, live QuickSR, QuickSR tile, and Real-ESRGAN tile | Treat power as board-level estimate, not external-meter evidence |
 | eval-fixed | fixed scenario benchmark | done | `RB5_SR_Benchmark_v1`, full 24-case, real-camera 8-scene set | Maintain only |
 | eval-realsr | RealSR real-degradation lifecycle sanity | done | `evalhub_realsr_mini_10cases_20260720_v2` covers Canon/Nikon 5+5 host LiteRT cases; bicubic PSNR is higher, while SR SSIM/sharpness can improve, so visual review remains required | Use only before real-camera robustness claims; do not replace the 24-case main gate |
 | eval-perceptual | LPIPS / NIQE / OCR diagnostic metrics | done | TextZoom OCR mini diagnostic exists at `RB5_SR_lab\results\textzoom_ocr\20260720_textzoom_ocr_mini_v2`; OCR similarity is low even on HR references, so it remains diagnostic-only and visual review still owns final quality decisions | Reopen only to calibrate OCR/LPIPS/NIQE against human review on a representative slice |
-| native-preprocess | native YUV ROI / RGB preprocessing | in_progress | Kotlin YUV correct but slow; native ROI faster single-frame; tensor-ready repeated live not default; output UINT8 bulk-copy now reduces postprocess to about 1/1ms in app e2e smoke | Future attempts should target deeper tensor-ready/YUV ROI only as isolated experiments |
+| native-preprocess | native YUV ROI / RGB preprocessing | blocked_technical | Kotlin YUV is correct but slower; native ROI is faster single-frame; tensor-ready repeated live did not beat the default path; output UINT8 bulk-copy reduced postprocess to about 1/1ms | Further progress requires a larger CameraX/native data-path integration experiment, not another small preprocessing probe |
 | buffer-reuse | buffer / object reuse | done | TFLite buffers, pixel arrays, sample-copy reduction, output Bitmap reuse, and reusable UINT8 output byte buffer | Maintain only |
 | zero-copy | true zero-copy CameraX -> NPU | done | Phase 2 normal tensor vs shared custom allocation compare passed with matching checksum; shared invoke avg was 1,056us vs normal 1,104us, so invoke-level gain is small and this is still not CameraX buffer binding | Treat invoke-level probe as complete; any further work is a separate CameraX/native data-path integration project |
 | mixed-precision | w8a16 mixed precision | blocked_needs_user | No current W8A8 quality blocker or layer-level sensitivity evidence | Reopen only with quantization failure evidence |
@@ -59,8 +59,8 @@ design still has unfinished required lanes:
 
 1. `AIMET-CLE` / `mixed-precision`: concrete W8A8-vs-float failure crops exist,
    but native Windows AIMET execution is blocked; next step needs WSL/Linux or
-   another supported AIMET toolchain.
-2. `zero-copy`: invoke-level feasibility is complete through Phase 2, but true
+   another supported AIMET toolchain from the user.
+2. `native-preprocess` / `zero-copy`: small probes are complete, but true
    CameraX -> tensor -> display zero-copy is not implemented. Further work would
    be a larger CameraX/native data-path integration project, not another small
    shared-allocation probe.

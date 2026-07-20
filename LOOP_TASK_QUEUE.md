@@ -68,7 +68,7 @@ original project design unless there is concrete evidence that it cannot work.
 
 ## Current Closeout Task
 
-Current active task: `human-review-or-next-data-path-integration`.
+Current active task: `blocked-needs-user-or-new-scope`.
 
 Current open work is no longer tile, D8-config, output postprocess, app e2e
 schema bring-up, every-N smoke, or invoke-level shared-memory probing. Those
@@ -82,6 +82,11 @@ mini review is now a real-degradation lifecycle sanity check, not a replacement
 for `RB5_SR_Benchmark_v1`. Low-cost video demo capture is now validated through
 `adb screenrecord` on the existing live ROI UI; it is not a true VideoCapture SR
 pipeline.
+
+The current loop can stop under exit condition 2/3: remaining progress needs
+either user/toolchain input (AIMET on WSL/Linux or supported environment),
+human visual review (low-cost MP4 framing/readability), or a new larger scoped
+CameraX/native data-path integration experiment.
 
 Current evidence to preserve:
 
