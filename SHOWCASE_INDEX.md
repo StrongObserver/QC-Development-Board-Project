@@ -9,7 +9,7 @@ Android CameraX live ROI
 -> QuickSRNetSmall W8A8
 -> QNN TFLite Delegate
 -> Qualcomm HTP
--> display at about 19.0 / 24.7ms e2e p50/p95
+-> display at about 15 / 19ms e2e p50/p95 in the latest app e2e smoke
 ```
 
 The project is not just a model demo. It shows deployment, profiling,
@@ -35,6 +35,9 @@ RB5 Gen2 / QCS8550 Android device.
 | QNN Delegate app path works | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260718_app_qnn_delegate_fixed_live_rb5` |
 | Data path was the bottleneck | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260718_app_qnn_delegate_live_roi_breakdown` |
 | Default QuickSR live path | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20251110_output_reuse_default_live_roi` |
+| Latest app e2e schema + output bulk-copy smoke | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_e2e_schema_output_reuse_120f` |
+| Latest 60s sustained app e2e smoke | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_e2e_schema_output_reuse_60s` |
+| Every-N temporal smoke | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_every_n3_live_roi_60s_final` |
 | 120s short sustained run | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20251110_output_reuse_quicksr_live_roi_120s` |
 | Real-camera showcase | `C:\Users\Admin\Videos\RB5 gen2\real_camera_showcase\20251110_045328_minimal_real_camera_set` |
 | Tensor-ready boundary | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20251110_tensor_ready_live_roi_1280x960` |
@@ -45,8 +48,12 @@ RB5 Gen2 / QCS8550 Android device.
 | --- | ---: |
 | Old live ROI e2e before data-path fix | about `63 / 65ms` p50/p95 |
 | Default QuickSR live e2e after output reuse | `19.0 / 24.7ms` p50/p95 |
+| Latest QuickSR live e2e after UINT8 output bulk-copy | `15 / 19ms` p50/p95 |
 | Default QuickSR live inference | `1.0 / 1.0ms` p50/p95 |
+| Latest QuickSR live postprocess | `1 / 1ms` p50/p95 in 120-frame smoke |
 | 120s sustained e2e drift | `20.0/25.0ms -> 21.0/26.0ms` |
+| Latest 60s sustained e2e drift | `15.0/20.0ms -> 16.0/21.0ms` |
+| Every-N temporal smoke | `everyN=3`, effective enhanced FPS `9.9`, enhanced-frame e2e `22 / 25ms` |
 | Real-ESRGAN -> QuickSRNet switch | about `369ms` |
 | QuickSRNetSmall W8A8 model size | about `43.7KB` |
 | Real-camera set | `8 scenes / 32 images`, `accepted_with_caveats` |

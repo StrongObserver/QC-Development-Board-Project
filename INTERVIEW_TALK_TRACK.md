@@ -12,7 +12,7 @@ models through QNN TFLite Delegate on HTP, and displays the enhanced result.
 The main engineering point was not just running a model. After QNN inference was
 down to 1-3ms, I profiled the app path and found the real bottleneck was camera
 frame conversion and output processing. I reduced live e2e latency from about
-63/65ms to about 19/24.7ms p50/p95, and used benchmark plus real-camera review
+63/65ms to about 15/19ms p50/p95 in the latest app smoke, and used benchmark plus real-camera review
 to decide that QuickSRNetSmall should be the live workhorse while Real-ESRGAN
 stays as the perceptual comparison and optional post-capture path.
 ```
@@ -34,9 +34,9 @@ path stable.
 After that, I profiled the real app path. QNN inference was already only a few
 milliseconds, but full-frame CameraX to Bitmap conversion at 4000x3000 was about
 41/43ms p50/p95. Reducing live ImageAnalysis to 1280x960 cut the live ROI path
-from about 63/65ms to about 22/25ms. Later buffer reuse and output Bitmap reuse
-reduced tail latency further; the current default QuickSR live path is about
-19.0/24.7ms p50/p95.
+from about 63/65ms to about 22/25ms. Later buffer reuse, output Bitmap reuse,
+and UINT8 output bulk-copy reduced the output path further; the latest default
+QuickSR live smoke is about 15/19ms p50/p95.
 
 I also compared model roles instead of treating PSNR as the only answer.
 QuickSRNetSmall is tiny and conservative, so it became the default live ROI
@@ -60,6 +60,8 @@ median, so I kept the default path and documented the boundary.
 | AI Hub QCS8550 float profile | 5.9ms, 74 ops on HTP, 0 fallback |
 | Old 4000x3000 live ROI app e2e | about 63/65ms p50/p95 |
 | Current default QuickSR live e2e after output reuse | 19.0/24.7ms p50/p95 |
+| Latest default QuickSR live e2e after UINT8 output bulk-copy | 15/19ms p50/p95 |
+| Latest 60s sustained QuickSR smoke | 15/20ms -> 16/21ms first/last p50/p95 |
 | 120s sustained default live | 20/25ms -> 21/26ms first/last p50/p95 |
 | Real-ESRGAN -> QuickSRNet switch | about 369ms |
 | QuickSRNetSmall W8A8 model size | about 43.7KB |
@@ -85,7 +87,8 @@ behind the live path.
 The biggest gain came from profiling the app path, not from changing the model.
 QNN inference was already a few milliseconds. The main bottleneck was full-frame
 ImageProxy.toBitmap at 4000x3000. Reducing live ImageAnalysis to 1280x960 cut
-the path from about 63/65ms to about 22/25ms.
+the path from about 63/65ms to about 22/25ms, and later output conversion work
+reduced the latest default live smoke to about 15/19ms.
 
 ### Did you implement zero-copy?
 

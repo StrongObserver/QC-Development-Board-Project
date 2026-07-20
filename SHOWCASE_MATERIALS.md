@@ -68,6 +68,8 @@ Evidence:
 ```text
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260718_p5_postprocess_samplecopy_w8a8_live_roi
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260718_p5_postprocess_samplecopy_quicksr_live_roi
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_e2e_schema_output_reuse_120f
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_e2e_schema_output_reuse_60s
 ```
 
 Message:
@@ -87,6 +89,15 @@ sampleCopy p50/p95: about 3/4ms -> 0/0ms
 default QuickSR live e2e p50/p95 after output reuse: 19.0 / 24.7ms
 120s sustained output-reuse QuickSR live e2e first/last 20% p50/p95:
 20.0 / 25.0ms -> 21.0 / 26.0ms
+latest UINT8 output bulk-copy smoke: postprocess 1 / 1ms, e2e 15 / 19ms
+latest 60s sustained smoke: e2e first/last 20% p50/p95 = 15/20ms -> 16/21ms
+```
+
+Boundary:
+
+```text
+The latest output bulk-copy result is app timing evidence only. It does not
+prove visual quality by itself and it is not true zero-copy.
 ```
 
 ## 4. Model Tradeoff
@@ -171,6 +182,32 @@ Boundary:
 
 ```text
 This is short-run stability, not full power/perf-watt proof.
+```
+
+## 6.5 Every-N Temporal Smoke
+
+Evidence:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_every_n3_live_roi_60s_final
+```
+
+Use numbers:
+
+```text
+everyN=3
+enhanced frames=85
+skipped frames=169
+effective enhanced FPS p50/p95=9.9/9.9
+per-enhanced-frame e2e p50/p95=22/25ms
+```
+
+Message:
+
+```text
+The every-N ImageAnalysis route is technically valid as a temporal/cadence
+probe. It reduces enhancement frequency, not the latency of each enhanced frame.
+Full CameraX VideoCapture remains a separate product/demo decision.
 ```
 
 ## 7. Real-Camera Showcase Set

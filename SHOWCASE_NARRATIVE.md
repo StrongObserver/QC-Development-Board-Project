@@ -25,8 +25,9 @@ The engineering story is:
 5. Reduced the dominant CameraX/ImageAnalysis conversion cost by changing live analysis from 4000x3000 to 1280x960.
 6. Compared Real-ESRGAN and QuickSRNetSmall as different quality/latency tradeoffs instead of ranking them by PSNR alone.
 7. Measured init, memory, and switch cost before rejecting automatic live dual-model routing as the default path.
-8. Collected a minimal real-camera showcase set and used visual review to keep the route decision caveated.
-9. Tested native/tensor-ready ROI variants and kept the Bitmap default because repeated live p50 did not improve.
+8. Optimized the UINT8 output conversion path and added EvalHub-compatible app e2e rows for live runs.
+9. Collected a minimal real-camera showcase set and used visual review to keep the route decision caveated.
+10. Tested native/tensor-ready ROI variants and kept the Bitmap default because repeated live p50 did not improve.
 ```
 
 ## Evidence Chain
@@ -37,6 +38,8 @@ The engineering story is:
 | Data path was the real live bottleneck | `20260718_app_qnn_delegate_live_roi_breakdown` | full-frame `ImageProxy.toBitmap()` p50/p95 41/43ms |
 | Data-path optimization mattered | `20260718_app_qnn_delegate_live_roi_1280x960` | app e2e 63/65ms -> 22/25ms |
 | QuickSRNet can run as live candidate | `20260718_app_quicksrnet_live_roi_1280x960` | e2e p50/p95 22/25ms, inference 2/2ms |
+| Output conversion was further reduced | `20260720_app_e2e_schema_output_reuse_120f` | postprocess p50/p95 1/1ms, e2e 15/19ms |
+| App e2e schema is now emitted | `20260720_app_e2e_schema_output_reuse_60s` | 60s sustained row under EvalHub app e2e shape |
 | Automatic switching is not free | `20260718_app_qnn_resource_probe` | Real-ESRGAN -> QuickSRNet switch about 369ms |
 | PSNR is not the only quality judge | `EVAL_METRIC_POLICY.md` and contact sheets | visual veto remains required |
 | Real-camera showcase is available | `20251110_045328_minimal_real_camera_set` | 8/8 scenes complete, accepted with caveats |
@@ -61,6 +64,8 @@ Old live ROI full 4000x3000 path: e2e about 63/65ms
 New live ROI 1280x960 path: e2e about 22/25ms
 QuickSRNet live ROI: inference about 2/2ms, e2e about 22/25ms
 Current default after output reuse: e2e about 19.0/24.7ms
+Latest default after UINT8 output bulk-copy: e2e about 15/19ms in 120-frame smoke
+Latest 60s sustained smoke: e2e first/last 20% 15/20ms -> 16/21ms
 120s sustained default run: e2e first/last 20% 20/25ms -> 21/26ms
 Real-ESRGAN -> QuickSRNet dynamic switch: about 369ms
 Real-camera showcase set: 8 scenes / 32 standard images, accepted with caveats
@@ -84,7 +89,9 @@ I profiled the actual live app path. The important finding was that NPU inferenc
 was already only a few milliseconds; the real bottleneck was full-frame CameraX
 to Bitmap conversion and later output postprocessing. So I reduced the live
 analysis size from 4000x3000 to 1280x960 and cut app e2e latency from about
-63ms to about 22ms.
+63ms to about 22ms. Later output-path work removed per-channel direct buffer
+reads in the UINT8 postprocess loop, bringing the latest default live smoke to
+about 15/19ms p50/p95.
 
 I also compared Real-ESRGAN and QuickSRNetSmall. Real-ESRGAN is more perceptual
 and sharper, while QuickSRNetSmall is much smaller and more conservative on
@@ -97,8 +104,8 @@ a small real-camera set to check that this route still makes sense outside fixed
 benchmarks; it supports the route with caveats rather than proving either model
 is globally better. I also tested native YUV ROI and tensor-ready input; they
 were technically valid, but repeated live timing did not justify replacing the
-default path, so I kept the simpler route and used output reuse for a small
-tail-latency improvement.
+default path, so I kept the simpler route and optimized the output conversion
+path instead.
 ```
 
 ## Current Showcase Boundary
@@ -118,5 +125,5 @@ Before making stronger claims, complete:
 
 ```text
 1. Longer power/perf-watt characterization if making sustained-use claims.
-2. Deeper output/postprocess work only if more live-path latency reduction is needed.
+2. Deeper tensor-ready or YUV ROI work only if more live-path latency reduction is needed.
 ```

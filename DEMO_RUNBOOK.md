@@ -68,15 +68,16 @@ RB5_SR_lab\.venv-eval\Scripts\python.exe RB5_SR_lab\run_app_live_roi_benchmark.p
 Reference result:
 
 ```text
-C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20251110_output_reuse_default_live_roi
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_e2e_schema_output_reuse_120f
 ```
 
 Current reference numbers:
 
 ```text
-app e2e p50/p95: 19.0 / 24.7 ms
-analyzer p50/p95: 21.0 / 26.0 ms
-QNN inference p50/p95: 1.0 / 1.0 ms
+app e2e p50/p95: 15.0 / 19.0 ms
+analyzer p50/p95: 16.0 / 21.0 ms
+QNN inference p50/p95: 1.0 / 2.0 ms
+postprocess p50/p95: 1.0 / 1.0 ms
 ```
 
 ## Short Sustained Check
@@ -147,6 +148,7 @@ Reason:
 ```text
 tensor-ready e2e p50/p95: 20.0 / 25.7 ms
 Bitmap default after output reuse: 19.0 / 24.7 ms
+Bitmap default after UINT8 output bulk-copy smoke: 15.0 / 19.0 ms
 ```
 
 ## What Not To Do

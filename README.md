@@ -28,7 +28,12 @@ Automatic dual-model live routing is intentionally not the default.
 | Full-frame Bitmap conversion was the live bottleneck | `ImageProxy.toBitmap()` p50/p95 was about `41/43ms` before the 1280x960 live analysis fix |
 | Default live ROI route | `QNN + QuickSRNetSmall W8A8` |
 | Default live ROI after output reuse | `19.0 / 24.7ms` e2e p50/p95 |
+| Latest live ROI after UINT8 output bulk-copy | `15 / 19ms` e2e p50/p95 in 120-frame app e2e smoke |
+| Latest app e2e schema output | `20260720_app_e2e_schema_output_reuse_120f/app_e2e_log.csv` |
 | 120s default live run | 3551 frames, e2e first/last 20% p50/p95 `20.0/25.0ms -> 21.0/26.0ms` |
+| 60s latest live run | 1763 frames, e2e first/last 20% p50/p95 `15.0/20.0ms -> 16.0/21.0ms` |
+| Every-N temporal smoke | `everyN=3`, effective enhanced FPS `9.9`, enhanced-frame e2e `22 / 25ms` |
+| Shared-memory feasibility | QNN Delegate C API supports shared memory, but current Java/Kotlin wrapper does not expose the needed custom allocation API |
 | Real-camera showcase | 8 scenes / 32 standard images, `accepted_with_caveats` |
 | Tensor-ready live experiment | valid, but not promoted: p50 e2e `20.0ms` vs Bitmap default `19.0ms` |
 
