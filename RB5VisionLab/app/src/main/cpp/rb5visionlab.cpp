@@ -694,6 +694,36 @@ int yuvToArgb(int y, int u, int v) {
             | (static_cast<unsigned int>(g) << 8) | static_cast<unsigned int>(b));
 }
 
+void yuvToRgb(int y, int u, int v, jbyte* out) {
+    const float yf = static_cast<float>(y);
+    const float uf = static_cast<float>(u) - 128.0f;
+    const float vf = static_cast<float>(v) - 128.0f;
+    out[0] = static_cast<jbyte>(clampToByte(yf + 1.402f * vf));
+    out[1] = static_cast<jbyte>(clampToByte(yf - 0.344136f * uf - 0.714136f * vf));
+    out[2] = static_cast<jbyte>(clampToByte(yf + 1.772f * uf));
+}
+
+int normalizeRotation(int rotation_degrees) {
+    int normalized = rotation_degrees % 360;
+    if (normalized < 0) {
+        normalized += 360;
+    }
+    return normalized;
+}
+
+int rotatedOutputIndex(int x, int y, int side, int rotation_degrees) {
+    switch (normalizeRotation(rotation_degrees)) {
+        case 90:
+            return x * side + (side - 1 - y);
+        case 180:
+            return (side - 1 - y) * side + (side - 1 - x);
+        case 270:
+            return (side - 1 - x) * side + y;
+        default:
+            return y * side + x;
+    }
+}
+
 }  // namespace
 
 extern "C"
@@ -969,13 +999,8 @@ Java_com_cyf_rb5visionlab_MainActivity_nativeYuvToRgbRoiBytes(
             const int y_value = static_cast<unsigned char>(y_bytes[y_base + src_x * y_pixel_stride]);
             const int u_value = static_cast<unsigned char>(u_bytes[u_base + uv_x * u_pixel_stride]);
             const int v_value = static_cast<unsigned char>(v_bytes[v_base + uv_x * v_pixel_stride]);
-            const float yf = static_cast<float>(y_value);
-            const float uf = static_cast<float>(u_value) - 128.0f;
-            const float vf = static_cast<float>(v_value) - 128.0f;
             const int out = (oy * output_side + ox) * 3;
-            rgb[out] = static_cast<jbyte>(clampToByte(yf + 1.402f * vf));
-            rgb[out + 1] = static_cast<jbyte>(clampToByte(yf - 0.344136f * uf - 0.714136f * vf));
-            rgb[out + 2] = static_cast<jbyte>(clampToByte(yf + 1.772f * uf));
+            yuvToRgb(y_value, u_value, v_value, rgb.data() + out);
         }
     }
 
@@ -984,5 +1009,81 @@ Java_com_cyf_rb5visionlab_MainActivity_nativeYuvToRgbRoiBytes(
     env->ReleaseByteArrayElements(u_data, u_bytes, JNI_ABORT);
     env->ReleaseByteArrayElements(v_data, v_bytes, JNI_ABORT);
     LOGD("nativeYuvToRgbRoiBytes width=%d height=%d crop=%d output=%d", width, height, crop_side, output_side);
+    return result;
+}
+
+extern "C"
+JNIEXPORT jbyteArray JNICALL
+Java_com_cyf_rb5visionlab_MainActivity_nativeYuvToRgbRoiBytesRotated(
+        JNIEnv* env,
+        jobject /* thiz */,
+        jbyteArray y_data,
+        jbyteArray u_data,
+        jbyteArray v_data,
+        jint width,
+        jint height,
+        jint y_row_stride,
+        jint y_pixel_stride,
+        jint u_row_stride,
+        jint u_pixel_stride,
+        jint v_row_stride,
+        jint v_pixel_stride,
+        jint output_side,
+        jint rotation_degrees) {
+    if (y_data == nullptr || u_data == nullptr || v_data == nullptr ||
+        width <= 0 || height <= 0 || output_side <= 0 ||
+        y_row_stride <= 0 || u_row_stride <= 0 || v_row_stride <= 0 ||
+        y_pixel_stride <= 0 || u_pixel_stride <= 0 || v_pixel_stride <= 0) {
+        return nullptr;
+    }
+
+    jbyte* y_bytes = env->GetByteArrayElements(y_data, nullptr);
+    jbyte* u_bytes = env->GetByteArrayElements(u_data, nullptr);
+    jbyte* v_bytes = env->GetByteArrayElements(v_data, nullptr);
+    if (y_bytes == nullptr || u_bytes == nullptr || v_bytes == nullptr) {
+        if (y_bytes != nullptr) env->ReleaseByteArrayElements(y_data, y_bytes, JNI_ABORT);
+        if (u_bytes != nullptr) env->ReleaseByteArrayElements(u_data, u_bytes, JNI_ABORT);
+        if (v_bytes != nullptr) env->ReleaseByteArrayElements(v_data, v_bytes, JNI_ABORT);
+        return nullptr;
+    }
+
+    const int crop_side = std::max(
+            output_side,
+            std::min({width * output_side / 640, width, height}));
+    const int left = (width - crop_side) / 2;
+    const int top = (height - crop_side) / 2;
+    const int byte_count = output_side * output_side * 3;
+    jbyteArray result = env->NewByteArray(byte_count);
+    if (result == nullptr) {
+        env->ReleaseByteArrayElements(y_data, y_bytes, JNI_ABORT);
+        env->ReleaseByteArrayElements(u_data, u_bytes, JNI_ABORT);
+        env->ReleaseByteArrayElements(v_data, v_bytes, JNI_ABORT);
+        return nullptr;
+    }
+
+    std::vector<jbyte> rgb(byte_count);
+    for (int oy = 0; oy < output_side; ++oy) {
+        const int src_y = top + (oy * crop_side + crop_side / (output_side * 2)) / output_side;
+        const int y_base = src_y * y_row_stride;
+        const int uv_y = src_y / 2;
+        const int u_base = uv_y * u_row_stride;
+        const int v_base = uv_y * v_row_stride;
+        for (int ox = 0; ox < output_side; ++ox) {
+            const int src_x = left + (ox * crop_side + crop_side / (output_side * 2)) / output_side;
+            const int uv_x = src_x / 2;
+            const int y_value = static_cast<unsigned char>(y_bytes[y_base + src_x * y_pixel_stride]);
+            const int u_value = static_cast<unsigned char>(u_bytes[u_base + uv_x * u_pixel_stride]);
+            const int v_value = static_cast<unsigned char>(v_bytes[v_base + uv_x * v_pixel_stride]);
+            const int out = rotatedOutputIndex(ox, oy, output_side, rotation_degrees) * 3;
+            yuvToRgb(y_value, u_value, v_value, rgb.data() + out);
+        }
+    }
+
+    env->SetByteArrayRegion(result, 0, byte_count, rgb.data());
+    env->ReleaseByteArrayElements(y_data, y_bytes, JNI_ABORT);
+    env->ReleaseByteArrayElements(u_data, u_bytes, JNI_ABORT);
+    env->ReleaseByteArrayElements(v_data, v_bytes, JNI_ABORT);
+    LOGD("nativeYuvToRgbRoiBytesRotated width=%d height=%d crop=%d output=%d rotation=%d",
+         width, height, crop_side, output_side, normalizeRotation(rotation_degrees));
     return result;
 }

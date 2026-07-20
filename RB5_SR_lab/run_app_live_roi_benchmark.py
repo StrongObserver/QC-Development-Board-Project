@@ -53,7 +53,7 @@ SKIP_RE = re.compile(
 TENSOR_LIVE_RE = re.compile(
     r"backend=(?P<backend>\w+) model=(?P<log_model>\w+) tensorLive crop=(?P<crop_side>\d+)->128->512 "
     r"frame=(?P<frame_width>\d+)x(?P<frame_height>\d+) "
-    r"nativeRgb=(?P<native_rgb_ms>\d+) rotate=(?P<rotate_ms>\d+) "
+    r"nativeRgb=(?P<native_rgb_ms>\d+) rotate=(?P<rotation_degrees>\d+) "
     r"pre=(?P<pre_ms>\d+) inf=(?P<inf_ms>\d+) post=(?P<post_ms>\d+) "
     r"enhanceWall=(?P<enhance_wall_ms>\d+) analyzer=(?P<analyzer_ms>\d+) e2e=(?P<e2e_ms>\d+)ms"
 )
@@ -146,7 +146,7 @@ def parse_skip_rows(log_text: str, session_id: str = "") -> list[dict[str, objec
         if not match:
             continue
         values = match.groupdict()
-        if session_id and not tensor_ready and values.get("session_id") != session_id:
+        if session_id and values.get("session_id") != session_id:
             continue
         rows.append(
             {
@@ -221,6 +221,7 @@ def collect_logcat(
     timeout_s: int,
     use_app_default: bool,
     tensor_ready: bool,
+    tensor_rotated_native: bool,
     every_n: int,
     duration_s: int,
     session_id: str,
@@ -232,7 +233,7 @@ def collect_logcat(
         "-n",
         APP_COMPONENT,
         "--ez",
-        "start_live_sr_tensor_ready" if tensor_ready else "start_live_sr",
+        "start_live_sr_tensor_rotated" if tensor_rotated_native else "start_live_sr_tensor_ready" if tensor_ready else "start_live_sr",
         "true",
         "--es",
         "sr_session_id",
@@ -434,6 +435,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model", default="QUICKSR_W8A8", choices=["W8A8", "QUICKSR_W8A8"])
     parser.add_argument("--use-app-default", action="store_true", help="Do not pass sr_backend/sr_model extras; validate the app's compiled default.")
     parser.add_argument("--tensor-ready", action="store_true", help="Run the isolated native-RGB tensor-ready live path.")
+    parser.add_argument("--tensor-rotated-native", action="store_true", help="Run the native-RGB tensor live path with rotation handled in native code.")
     parser.add_argument("--every-n", type=int, default=1, help="Enhance every Nth ImageAnalysis frame for temporal smoke.")
     parser.add_argument("--min-frames", type=int, default=120)
     parser.add_argument("--timeout-s", type=int, default=90)
@@ -449,7 +451,16 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    model_label = "TENSOR_READY_QUICKSR_W8A8" if args.tensor_ready else "APP_DEFAULT" if args.use_app_default else args.model
+    tensor_mode = args.tensor_ready or args.tensor_rotated_native
+    model_label = (
+        "TENSOR_ROTATED_NATIVE_QUICKSR_W8A8"
+        if args.tensor_rotated_native
+        else "TENSOR_READY_QUICKSR_W8A8"
+        if args.tensor_ready
+        else "APP_DEFAULT"
+        if args.use_app_default
+        else args.model
+    )
     run_id = args.run_id or datetime.now().strftime(f"%Y%m%d_%H%M%S_app_{model_label.lower()}_live_roi_1280x960")
     out_dir = RESULTS_ROOT / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -462,25 +473,26 @@ def main() -> None:
         raise SystemExit(f"[blocked] {expected} not found")
 
     every_n = max(1, args.every_n)
-    if args.tensor_ready and every_n > 1:
+    if tensor_mode and every_n > 1:
         raise SystemExit("[blocked] --every-n is only supported for the Bitmap live ROI path")
     log_text, frame_rows = collect_logcat(
         model_label,
         args.min_frames,
         args.timeout_s,
         args.use_app_default,
-        args.tensor_ready,
+        tensor_mode,
+        args.tensor_rotated_native,
         every_n,
         max(0, args.duration_s),
         run_id,
     )
-    if args.tensor_ready:
+    if tensor_mode:
         session_log_text = latest_session_log(log_text)
-        frame_rows = parse_live_rows(session_log_text, model_label, args.tensor_ready, "")
+        frame_rows = parse_live_rows(session_log_text, model_label, tensor_mode, "")
         skip_rows = []
     else:
         session_log_text = filter_session_lines(latest_session_log(log_text), run_id)
-        frame_rows = parse_live_rows(session_log_text, model_label, args.tensor_ready, run_id)
+        frame_rows = parse_live_rows(session_log_text, model_label, tensor_mode, run_id)
         skip_rows = parse_skip_rows(session_log_text, run_id)
     add_normalized_session_indices(frame_rows, skip_rows)
     (out_dir / "raw_logcat.txt").write_text(log_text, encoding="utf-8")

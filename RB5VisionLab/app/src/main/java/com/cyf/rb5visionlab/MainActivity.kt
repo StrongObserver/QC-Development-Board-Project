@@ -73,6 +73,7 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var tileModelVariant = SrModelVariant.W8A8
     @Volatile private var liveSr = false
     @Volatile private var liveSrTensorReady = false
+    @Volatile private var liveSrTensorRotatedNative = false
     @Volatile private var liveSrEveryN = 1
     @Volatile private var liveSrSessionId = "manual"
     @Volatile private var offlineEvalActive = false
@@ -227,6 +228,21 @@ class MainActivity : AppCompatActivity() {
         vPixelStride: Int,
         outputSide: Int,
     ): ByteArray
+    external fun nativeYuvToRgbRoiBytesRotated(
+        yData: ByteArray,
+        uData: ByteArray,
+        vData: ByteArray,
+        width: Int,
+        height: Int,
+        yRowStride: Int,
+        yPixelStride: Int,
+        uRowStride: Int,
+        uPixelStride: Int,
+        vRowStride: Int,
+        vPixelStride: Int,
+        outputSide: Int,
+        rotationDegrees: Int,
+    ): ByteArray
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -254,6 +270,7 @@ class MainActivity : AppCompatActivity() {
         val autoRunQnnFixed = boolIntentExtra("run_qnn_fixed")
         val autoStartLiveSr = boolIntentExtra("start_live_sr")
         val autoStartTensorReadyLiveSr = boolIntentExtra("start_live_sr_tensor_ready")
+        val autoStartTensorRotatedLiveSr = boolIntentExtra("start_live_sr_tensor_rotated")
         val autoRunResourceProbe = boolIntentExtra("run_resource_probe")
         val autoRunQnnSharedMemoryProbe = boolIntentExtra("run_qnn_shared_memory_probe")
         val autoRunQnnSharedTensorProbe = boolIntentExtra("run_qnn_shared_tensor_probe")
@@ -279,6 +296,7 @@ class MainActivity : AppCompatActivity() {
             "RB5_SR",
             "intent probes run_qnn_fixed=$autoRunQnnFixed start_live_sr=$autoStartLiveSr " +
                 "start_live_sr_tensor_ready=$autoStartTensorReadyLiveSr " +
+                "start_live_sr_tensor_rotated=$autoStartTensorRotatedLiveSr " +
                 "run_tile_still=$autoRunTileStill tile_model=${tileModelVariant.label} " +
                 "run_tile_compare=$autoRunTileCompare " +
                 "save_demo_relation=$pendingDemoRelationCapture " +
@@ -318,6 +336,8 @@ class MainActivity : AppCompatActivity() {
             pendingAutoTileCompare = true
         } else if (autoStartTensorReadyLiveSr) {
             pendingProbeMode = "tensor_live"
+        } else if (autoStartTensorRotatedLiveSr || requestedProbeMode == "tensor_rotated_live") {
+            pendingProbeMode = "tensor_rotated_live"
         } else if (requestedProbeMode == "yuv_roi" || autoRunYuvRoiProbe) {
             pendingProbeMode = "yuv_roi"
         } else if (requestedProbeMode == "tensor_ready" || autoRunTensorReadyProbe) {
@@ -567,6 +587,7 @@ class MainActivity : AppCompatActivity() {
     private fun startLiveSrFromIntent() {
         liveSr = true
         liveSrTensorReady = false
+        liveSrTensorRotatedNative = false
         offlineEvalActive = false
         showLiveSrOutput()
         findViewById<Button>(R.id.sr_button).text = "停止实时超分"
@@ -579,18 +600,21 @@ class MainActivity : AppCompatActivity() {
         Log.d("RB5_SR", "auto live SR from intent backend=${srBackend.label} model=${srModelVariant.label} session=$liveSrSessionId everyN=$liveSrEveryN")
     }
 
-    private fun startTensorReadyLiveSrFromIntent() {
+    private fun startTensorReadyLiveSrFromIntent(rotatedNative: Boolean = false) {
         liveSr = false
         liveSrTensorReady = true
+        liveSrTensorRotatedNative = rotatedNative
         offlineEvalActive = false
         showLiveSrOutput()
         findViewById<Button>(R.id.sr_button).text = "停止 Tensor Live"
         if (demoMode) {
-            demoOverlayView.text = "RB5 Gen2 Tensor Live\nQNN / QUICKSR_W8A8\nStarting..."
+            val pathLabel = if (rotatedNative) "rotated native RGB" else "Kotlin rotate"
+            demoOverlayView.text = "RB5 Gen2 Tensor Live\nQNN / QUICKSR_W8A8\n$pathLabel\nStarting..."
         } else {
-            statusTextView.text = "Tensor-ready live ROI SR starting with QNN/QUICKSR_W8A8..."
+            val pathLabel = if (rotatedNative) "rotated native RGB" else "Kotlin rotate"
+            statusTextView.text = "Tensor-ready live ROI SR starting with QNN/QUICKSR_W8A8 ($pathLabel)..."
         }
-        Log.d("RB5_SR_TENSOR", "auto tensor-ready live SR from intent backend=QNN model=QUICKSR_W8A8")
+        Log.d("RB5_SR_TENSOR", "auto tensor-ready live SR from intent backend=QNN model=QUICKSR_W8A8 tensorPath=${if (rotatedNative) "rotatedNative" else "kotlinRotate"}")
     }
 
     private fun tileButtonText(): String = "整图 Tile (${tileModelVariant.label})"
@@ -1215,8 +1239,12 @@ class MainActivity : AppCompatActivity() {
             val side = 128
             val degrees = imageProxy.imageInfo.rotationDegrees
             val tRgbStart = System.nanoTime()
-            var rgbBytes = nativeYuv420ToRgbCenterRoiBytes(imageProxy, side)
-            if (degrees != 0) {
+            var rgbBytes = if (liveSrTensorRotatedNative) {
+                nativeYuv420ToRgbCenterRoiBytesRotated(imageProxy, side, degrees)
+            } else {
+                nativeYuv420ToRgbCenterRoiBytes(imageProxy, side)
+            }
+            if (!liveSrTensorRotatedNative && degrees != 0) {
                 val nativeBitmap = rgbBytesToBitmap(rgbBytes, side)
                 val matrix = Matrix().apply { postRotate(degrees.toFloat()) }
                 val rotated = Bitmap.createBitmap(nativeBitmap, 0, 0, side, side, matrix, true)
@@ -1234,13 +1262,14 @@ class MainActivity : AppCompatActivity() {
                 "backend=QNN model=QUICKSR_W8A8 tensorLive crop=256->128->512 " +
                     "frame=${imageProxy.width}x${imageProxy.height} nativeRgb=$nativeRgbMs rotate=$degrees " +
                     "pre=${timing.preprocessMs} inf=${timing.inferenceMs} post=${timing.postprocessMs} " +
-                    "enhanceWall=$enhanceWallMs analyzer=$analyzerWallMs e2e=${e2eMs}ms"
+                    "enhanceWall=$enhanceWallMs analyzer=$analyzerWallMs e2e=${e2eMs}ms " +
+                    "tensorPath=${if (liveSrTensorRotatedNative) "rotatedNative" else "kotlinRotate"}"
             )
             runOnUiThread {
                 srResultView.setImageBitmap(out)
                 statusTextView.text =
                     "Tensor-ready live ROI SR (QNN/QUICKSR_W8A8)\n" +
-                        "frame ${imageProxy.width}x${imageProxy.height} | ROI 128\n" +
+                        "frame ${imageProxy.width}x${imageProxy.height} | ROI 128 | ${if (liveSrTensorRotatedNative) "native rotated" else "Kotlin rotated"}\n" +
                         "native RGB ${nativeRgbMs} ms | preprocess ${timing.preprocessMs} ms\n" +
                         "inference ${timing.inferenceMs} ms | postprocess ${timing.postprocessMs} ms\n" +
                         "end-to-end ~${e2eMs} ms"
@@ -1729,6 +1758,12 @@ class MainActivity : AppCompatActivity() {
             val nativeRgbMs = (System.nanoTime() - tRgb0) / 1_000_000
             Log.d("RB5_TENSOR_READY", "after native rgb nativeRgbMs=$nativeRgbMs bytes=${rgbBytes.size}")
 
+            val tRotatedNativeRgb0 = System.nanoTime()
+            val rotatedNativeRgbBytes = nativeYuv420ToRgbCenterRoiBytesRotated(imageProxy, side, degrees)
+            val rotatedNativeRgbMs = (System.nanoTime() - tRotatedNativeRgb0) / 1_000_000
+            val rotatedNativeInput = rgbBytesToBitmap(rotatedNativeRgbBytes, side)
+            Log.d("RB5_TENSOR_READY", "after rotated native rgb rotatedNativeRgbMs=$rotatedNativeRgbMs bytes=${rotatedNativeRgbBytes.size}")
+
             Log.d("RB5_TENSOR_READY", "creating resolver")
             resolver = SuperResolver(
                 this,
@@ -1744,33 +1779,48 @@ class MainActivity : AppCompatActivity() {
             val rgbResult = resolver.enhanceRgbBytes(rgbBytes)
             val rgbEnhanceWallMs = (System.nanoTime() - tRgbEnhance0) / 1_000_000
             Log.d("RB5_TENSOR_READY", "after rgb enhance wall=$rgbEnhanceWallMs")
+            val tRotatedNativeEnhance0 = System.nanoTime()
+            val rotatedNativeResult = resolver.enhanceRgbBytes(rotatedNativeRgbBytes)
+            val rotatedNativeEnhanceWallMs = (System.nanoTime() - tRotatedNativeEnhance0) / 1_000_000
+            Log.d("RB5_TENSOR_READY", "after rotated native enhance wall=$rotatedNativeEnhanceWallMs")
             val outputMad = meanAbsDiff(bitmapResult.first, rgbResult.first)
             val inputMad = meanAbsDiff(bitmapRoi, rgbBytesToBitmap(rgbBytes, side))
+            val rotatedNativeInputMad = meanAbsDiff(bitmapRoi, rotatedNativeInput)
+            val rotatedNativeOutputMad = meanAbsDiff(bitmapResult.first, rotatedNativeResult.first)
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
             val prefix = "TENSOR_READY_PROBE_${timestamp}"
             val saved = listOf(
                 savePngToPictures(bitmapRoi, "${prefix}_bitmap_input_128.png"),
                 savePngToPictures(rgbBytesToBitmap(rgbBytes, side), "${prefix}_native_rgb_input_128.png"),
+                savePngToPictures(rotatedNativeInput, "${prefix}_native_rotated_rgb_input_128.png"),
                 savePngToPictures(bitmapResult.first, "${prefix}_bitmap_sr_512.png"),
                 savePngToPictures(rgbResult.first, "${prefix}_rgbbytes_sr_512.png"),
-                savePngToPictures(makeHorizontalSheet(listOf(bitmapResult.first, rgbResult.first)), "${prefix}_sr_side_by_side.png"),
+                savePngToPictures(rotatedNativeResult.first, "${prefix}_native_rotated_rgbbytes_sr_512.png"),
+                savePngToPictures(makeHorizontalSheet(listOf(bitmapRoi, rgbBytesToBitmap(rgbBytes, side), rotatedNativeInput)), "${prefix}_input_side_by_side.png"),
+                savePngToPictures(makeHorizontalSheet(listOf(bitmapResult.first, rgbResult.first, rotatedNativeResult.first)), "${prefix}_sr_side_by_side.png"),
             )
             val bitmapPathMs = bitmapMs + bitmapCropMs + bitmapEnhanceWallMs
             val rgbPathMs = nativeRgbMs + rgbEnhanceWallMs
+            val rotatedNativePathMs = rotatedNativeRgbMs + rotatedNativeEnhanceWallMs
             Log.d(
                 "RB5_TENSOR_READY",
                 "probe frame=${imageProxy.width}x${imageProxy.height} rotation=$degrees " +
-                    "bitmapMs=$bitmapMs bitmapCropMs=$bitmapCropMs nativeRgbMs=$nativeRgbMs " +
+                    "bitmapMs=$bitmapMs bitmapCropMs=$bitmapCropMs nativeRgbMs=$nativeRgbMs rotatedNativeRgbMs=$rotatedNativeRgbMs " +
                     "bitmapPre=${bitmapResult.second.preprocessMs} bitmapInf=${bitmapResult.second.inferenceMs} bitmapPost=${bitmapResult.second.postprocessMs} bitmapEnhanceWall=$bitmapEnhanceWallMs bitmapPath=$bitmapPathMs " +
                     "rgbPre=${rgbResult.second.preprocessMs} rgbInf=${rgbResult.second.inferenceMs} rgbPost=${rgbResult.second.postprocessMs} rgbEnhanceWall=$rgbEnhanceWallMs rgbPath=$rgbPathMs " +
-                    "inputMad=${"%.2f".format(Locale.US, inputMad)} outputMad=${"%.2f".format(Locale.US, outputMad)} saved=${saved.joinToString()}"
+                    "rotatedNativePre=${rotatedNativeResult.second.preprocessMs} rotatedNativeInf=${rotatedNativeResult.second.inferenceMs} rotatedNativePost=${rotatedNativeResult.second.postprocessMs} " +
+                    "rotatedNativeEnhanceWall=$rotatedNativeEnhanceWallMs rotatedNativePath=$rotatedNativePathMs " +
+                    "inputMad=${"%.2f".format(Locale.US, inputMad)} outputMad=${"%.2f".format(Locale.US, outputMad)} " +
+                    "rotatedNativeInputMad=${"%.2f".format(Locale.US, rotatedNativeInputMad)} rotatedNativeOutputMad=${"%.2f".format(Locale.US, rotatedNativeOutputMad)} " +
+                    "saved=${saved.joinToString()}"
             )
             runOnUiThread {
                 offlineEvalActive = false
                 statusTextView.text =
                     "Tensor-ready probe saved\n" +
-                        "bitmap path $bitmapPathMs ms | rgb path $rgbPathMs ms\n" +
-                        "input MAD ${"%.2f".format(Locale.US, inputMad)} | output MAD ${"%.2f".format(Locale.US, outputMad)}\n" +
+                        "bitmap path $bitmapPathMs ms | rgb path $rgbPathMs ms | rotated native path $rotatedNativePathMs ms\n" +
+                        "input MAD ${"%.2f".format(Locale.US, inputMad)} / ${"%.2f".format(Locale.US, rotatedNativeInputMad)} | " +
+                        "output MAD ${"%.2f".format(Locale.US, outputMad)} / ${"%.2f".format(Locale.US, rotatedNativeOutputMad)}\n" +
                         saved.joinToString("\n")
                 Toast.makeText(this, "Tensor-ready probe saved", Toast.LENGTH_LONG).show()
             }
@@ -1974,6 +2024,33 @@ class MainActivity : AppCompatActivity() {
             v.rowStride,
             v.pixelStride,
             outputSide,
+        )
+    }
+
+    private fun nativeYuv420ToRgbCenterRoiBytesRotated(imageProxy: ImageProxy, outputSide: Int, rotationDegrees: Int): ByteArray {
+        val y = imageProxy.planes[0]
+        val u = imageProxy.planes[1]
+        val v = imageProxy.planes[2]
+        val yBytes = ByteArray(y.buffer.remaining())
+        val uBytes = ByteArray(u.buffer.remaining())
+        val vBytes = ByteArray(v.buffer.remaining())
+        y.buffer.duplicate().get(yBytes)
+        u.buffer.duplicate().get(uBytes)
+        v.buffer.duplicate().get(vBytes)
+        return nativeYuvToRgbRoiBytesRotated(
+            yBytes,
+            uBytes,
+            vBytes,
+            imageProxy.width,
+            imageProxy.height,
+            y.rowStride,
+            y.pixelStride,
+            u.rowStride,
+            u.pixelStride,
+            v.rowStride,
+            v.pixelStride,
+            outputSide,
+            rotationDegrees,
         )
     }
 
@@ -2214,6 +2291,11 @@ class MainActivity : AppCompatActivity() {
                         previewView.postDelayed({ startTensorReadyLiveSrFromIntent() }, 500)
                         Log.d("RB5_SR_TENSOR", "pending tensor-ready live armed")
                     }
+                    "tensor_rotated_live" -> {
+                        pendingProbeMode = ""
+                        previewView.postDelayed({ startTensorReadyLiveSrFromIntent(rotatedNative = true) }, 500)
+                        Log.d("RB5_SR_TENSOR", "pending tensor-ready rotated native live armed")
+                    }
                 }
                 if (pendingAutoLiveSr) {
                     pendingAutoLiveSr = false
@@ -2245,6 +2327,7 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         liveSr = false
         liveSrTensorReady = false
+        liveSrTensorRotatedNative = false
         offlineEvalActive = false
         liveOutputBitmap = null
         tensorLiveOutputBitmap = null
