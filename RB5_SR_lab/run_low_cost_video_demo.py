@@ -303,9 +303,12 @@ def pull_demo_relation_files(run_id: str, out_dir: Path) -> list[Path]:
     ]
     if not remote_files:
         return []
-    selected = [path for path in remote_files if run_id[:8] in Path(path).name]
-    if not selected:
-        selected = remote_files[-8:]
+    sheet_files = [path for path in remote_files if Path(path).name.endswith("_relation_sheet.png")]
+    if not sheet_files:
+        return []
+    latest_sheet = sorted(sheet_files)[-1]
+    prefix = Path(latest_sheet).name.removesuffix("_relation_sheet.png")
+    selected = [path for path in remote_files if Path(path).name.startswith(prefix)]
     pulled: list[Path] = []
     for remote_path in selected:
         local_path = relation_dir / Path(remote_path).name

@@ -1296,11 +1296,15 @@ class MainActivity : AppCompatActivity() {
         try {
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
             val prefix = "DEMOREL_${timestamp}_${sample.backend.label}_${srModelVariant.label}_crop${sample.cropSide}"
-            val sheet = makeLabeledDemoRelationSheet(sample.display, sample.input, sample.sr)
+            val alignedInput = alignToDisplayOrientation(sample.input, sample.display)
+            val alignedSr = alignToDisplayOrientation(sample.sr, sample.display)
+            val sheet = makeLabeledDemoRelationSheet(sample.display, alignedInput, alignedSr)
             val saved = listOf(
                 savePngToPictures(sample.display, "${prefix}_wide_preview.png"),
-                savePngToPictures(sample.input, "${prefix}_model_input_128.png"),
-                savePngToPictures(sample.sr, "${prefix}_sr_output_512.png"),
+                savePngToPictures(sample.input, "${prefix}_model_input_128_raw.png"),
+                savePngToPictures(sample.sr, "${prefix}_sr_output_512_raw.png"),
+                savePngToPictures(alignedInput, "${prefix}_model_input_128_display_aligned.png"),
+                savePngToPictures(alignedSr, "${prefix}_sr_output_512_display_aligned.png"),
                 savePngToPictures(sheet, "${prefix}_relation_sheet.png"),
             )
             Log.d(
@@ -2037,6 +2041,16 @@ class MainActivity : AppCompatActivity() {
         return out
     }
 
+    private fun alignToDisplayOrientation(bitmap: Bitmap, display: Bitmap): Bitmap {
+        val bitmapLandscape = bitmap.width >= bitmap.height
+        val displayLandscape = display.width >= display.height
+        if (bitmapLandscape == displayLandscape) {
+            return bitmap
+        }
+        val matrix = Matrix().apply { postRotate(90f) }
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    }
+
     private fun makeLabeledDemoRelationSheet(display: Bitmap, input: Bitmap, sr: Bitmap): Bitmap {
         val tileSide = 360
         val headerHeight = 44
@@ -2045,8 +2059,8 @@ class MainActivity : AppCompatActivity() {
         val srTile = Bitmap.createScaledBitmap(sr, tileSide, tileSide, true)
         val tiles = listOf(
             Pair("Wide preview display", displayTile),
-            Pair("Model input 128", inputTile),
-            Pair("QNN SR output 512", srTile),
+            Pair("Input 128 aligned", inputTile),
+            Pair("QNN SR 512 aligned", srTile),
         )
         val out = Bitmap.createBitmap(tileSide * tiles.size, tileSide + headerHeight, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(out)
