@@ -68,7 +68,7 @@ original project design unless there is concrete evidence that it cannot work.
 
 ## Current Closeout Task
 
-Current active task: `video-demo-and-realsr-mini-review`.
+Current active task: `low-cost-video-demo-protocol`.
 
 Current open work is no longer tile, D8-config, output postprocess, app e2e
 schema bring-up, or every-N smoke. Those lanes have evidence and should be
@@ -76,7 +76,9 @@ treated as closed unless a regression appears. QNN shared-memory Phase 1 has
 validated custom allocation and invoke timing. AIMET trigger search found
 concrete W8A8-vs-float local regression candidates, but native Windows remains
 blocked for actual AIMET execution. TextZoom/OCR mini evaluation is now a
-diagnostic-only text-fidelity tool, not a hard quality gate.
+diagnostic-only text-fidelity tool, not a hard quality gate. RealSR 10-case
+mini review is now a real-degradation lifecycle sanity check, not a replacement
+for `RB5_SR_Benchmark_v1`.
 
 Current evidence to preserve:
 
@@ -101,6 +103,9 @@ C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\aimet_tri
 
 TextZoom OCR mini diagnostic:
 C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\textzoom_ocr\20260720_textzoom_ocr_mini_v2
+
+RealSR mini lifecycle sanity:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\evalhub_data\derived_runs\evalhub_realsr_mini_10cases_20260720_v2
 ```
 
 Current route boundaries:
@@ -124,6 +129,9 @@ Current route boundaries:
 6. TextZoom/OCR is diagnostic-only: the mini run showed very low OCR similarity
    even on HR references, so it can flag text-readability questions but cannot
    replace human visual review.
+7. RealSR mini review is host LiteRT sanity only: it covers Canon/Nikon 5+5
+   cases and shows real-degradation metrics can disagree with sharpness, but it
+   is not RB5 QNN/app evidence and cannot replace the 24-case main gate.
 ```
 
 Power/perf-watt:

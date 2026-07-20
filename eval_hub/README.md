@@ -53,8 +53,8 @@ every question:
 | --- | --- | --- |
 | `core_sr_fixed` | Stable 128->512 SR regression for float/W8A8/QNN/backend comparison | Existing `RB5_SR_Benchmark_v1`; keep as main gate |
 | `sr_standard_public` | Wider synthetic SR sanity using known SR benchmarks | Register first; download only selected sets |
-| `real_degradation_sr` | Real camera degradation and non-bicubic downsampling | Missing; RealSR/DRealSR-style data needed before real-camera claims |
-| `text_fidelity` | Text/signage readability and character deformation | Missing; TextZoom/TPGSR-style data should be added if text category fails or app demo needs text proof |
+| `real_degradation_sr` | Real camera degradation and non-bicubic downsampling | RealSR V3 x4 Test present; 10-case host sanity run exists |
+| `text_fidelity` | Text/signage readability and character deformation | TextZoom test splits present; OCR mini diagnostic exists |
 | `iqa_artificial` | Artificial distortion IQA calibration and metric sanity | CSIQ is easy to fetch; TID/LIVE/KADID are optional/larger |
 | `iqa_authentic_mobile` | Real-world photo quality/no-reference IQA | Missing; KonIQ/SPAQ/LIVE Challenge are optional lifecycle additions |
 | `device_app_e2e` | Android app end-to-end latency, memory, power, temperature | Schema active; live ROI app e2e rows exist; fixed manifest replay is still future |
@@ -214,11 +214,22 @@ RB5_SR_lab\.venv-eval\Scripts\python.exe -B eval_hub\scripts\validate_sr_manifes
 RB5_SR_lab\.venv-eval\Scripts\python.exe -B eval_hub\scripts\validate_sr_manifest.py evalhub_data\derived\realsr_v3_x4_test_128x4_v1\manifest.csv --check-size
 RB5_SR_lab\.venv-eval\Scripts\python.exe -B eval_hub\scripts\validate_sr_manifest.py evalhub_data\derived\textzoom_test_128x4_v1\manifest.csv --check-size
 RB5_SR_lab\.venv-eval\Scripts\python.exe -B eval_hub\scripts\eval_sr_manifest.py --manifest evalhub_data\derived\set14_128x4_v1\manifest.csv --limit 2 --runs 1
+RB5_SR_lab\.venv-eval\Scripts\python.exe -B eval_hub\scripts\eval_sr_manifest.py --manifest evalhub_data\derived\realsr_v3_x4_test_128x4_v1\manifest.csv --per-category 5 --runs 1
 python -B eval_hub\scripts\evalhub_status.py
 ```
 
 `eval_sr_manifest.py` is the generic host-side EvalHub runner. It can run any
 manifest with `case_id, category, dataset, source_id, lr_128, bicubic_512,
 hr_512` columns and writes results under `evalhub_data/derived_runs/`. It is a
-host LiteRT sanity runner, not RB5 QNN or Android app e2e evidence.
+host LiteRT sanity runner, not RB5 QNN or Android app e2e evidence. Use
+`--per-category N` when a mini-review should cover each manifest category rather
+than only the first N rows.
+
+Recent RealSR mini-review:
+
+```text
+evalhub_data/derived_runs/evalhub_realsr_mini_10cases_20260720_v2
+Canon/Nikon 5+5 host LiteRT sanity.
+Boundary: not a replacement for RB5_SR_Benchmark_v1 and not RB5 QNN/app e2e.
+```
 

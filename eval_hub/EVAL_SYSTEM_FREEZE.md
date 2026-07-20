@@ -114,6 +114,7 @@ Smoke host sanity runs exist under:
 evalhub_data\derived_runs\evalhub_smoke_set14_2cases
 evalhub_data\derived_runs\evalhub_smoke_realsr_2cases
 evalhub_data\derived_runs\evalhub_smoke_textzoom_2cases
+evalhub_data\derived_runs\evalhub_realsr_mini_10cases_20260720_v2
 ```
 
 These are host LiteRT sanity checks only, not RB5 QNN/app e2e evidence.

@@ -148,21 +148,72 @@ def write_overview(rows: list[dict[str, str]], out_path: Path) -> None:
         cv2.imwrite(str(out_path), np.vstack(thumbs))
 
 
+def mean_field(rows: list[dict[str, str]], field: str) -> float:
+    values = [float(row[field]) for row in rows]
+    return sum(values) / len(values) if values else 0.0
+
+
+def summary_table(rows: list[dict[str, str]]) -> list[str]:
+    groups: list[tuple[str, list[dict[str, str]]]] = [("all", rows)]
+    for category in sorted({row["category"] for row in rows}):
+        groups.append((category, [row for row in rows if row["category"] == category]))
+
+    lines = [
+        "| group | cases | bicubic PSNR | float PSNR | W8A8 PSNR | bicubic SSIM | float SSIM | W8A8 SSIM | float ms | W8A8 ms |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for name, group_rows in groups:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    name,
+                    str(len(group_rows)),
+                    f"{mean_field(group_rows, 'psnr_bicubic_vs_hr'):.2f}",
+                    f"{mean_field(group_rows, 'psnr_float_vs_hr'):.2f}",
+                    f"{mean_field(group_rows, 'psnr_w8a8_vs_hr'):.2f}",
+                    f"{mean_field(group_rows, 'ssim_bicubic_vs_hr'):.4f}",
+                    f"{mean_field(group_rows, 'ssim_float_vs_hr'):.4f}",
+                    f"{mean_field(group_rows, 'ssim_w8a8_vs_hr'):.4f}",
+                    f"{mean_field(group_rows, 'float_mean_ms'):.1f}",
+                    f"{mean_field(group_rows, 'w8a8_mean_ms'):.1f}",
+                ]
+            )
+            + " |"
+        )
+    return lines
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--run-id", default="")
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--per-category", type=int, default=0)
     parser.add_argument("--warmup", type=int, default=1)
     parser.add_argument("--runs", type=int, default=3)
     return parser.parse_args()
 
 
+def select_rows(rows: list[dict[str, str]], limit: int, per_category: int) -> list[dict[str, str]]:
+    if per_category:
+        counts: dict[str, int] = {}
+        selected = []
+        for row in rows:
+            category = row["category"]
+            if counts.get(category, 0) >= per_category:
+                continue
+            selected.append(row)
+            counts[category] = counts.get(category, 0) + 1
+        return selected
+    if limit:
+        return rows[:limit]
+    return rows
+
+
 def main() -> int:
     args = parse_args()
-    rows_in = read_csv(args.manifest)
-    if args.limit:
-        rows_in = rows_in[: args.limit]
+    rows_in = select_rows(read_csv(args.manifest), args.limit, args.per_category)
     sr_lab = REPO_ROOT / "RB5_SR_lab"
     float_model = sr_lab / "export_assets" / "real_esrgan_general_x4v3-tflite-float" / "real_esrgan_general_x4v3.tflite"
     w8a8_model = REPO_ROOT / "RB5VisionLab" / "app" / "src" / "main" / "assets" / "real_esrgan_general_x4v3_w8a8.tflite"
@@ -233,8 +284,7 @@ def main() -> int:
     }]
     write_csv(out_root / "run_log.csv", run_log)
     write_overview(rows[: min(40, len(rows))], out_root / "contact_sheet.png")
-    (out_root / "SUMMARY.md").write_text(
-        "\n".join([
+    summary_lines = [
             "# EvalHub SR Manifest Summary",
             "",
             f"- run_id: {run_id}",
@@ -243,11 +293,14 @@ def main() -> int:
             f"- metrics: `{out_root / 'metrics.csv'}`",
             f"- contact sheet: `{out_root / 'contact_sheet.png'}`",
             "",
+            "## Averages",
+            "",
+            *summary_table(rows),
+            "",
             "Boundary: host LiteRT sanity only, not RB5 QNN/app e2e.",
             "",
-        ]),
-        encoding="utf-8",
-    )
+    ]
+    (out_root / "SUMMARY.md").write_text("\n".join(summary_lines), encoding="utf-8")
     print(f"[ok] wrote {out_root}")
     return 0
 

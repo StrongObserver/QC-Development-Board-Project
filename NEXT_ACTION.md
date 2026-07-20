@@ -31,6 +31,7 @@ Nutstore long-term context updated with final closeout and full-scope ledger
 QNN shared-memory Phase 1 tensor binding + invoke timing probe
 AIMET trigger crop search
 TextZoom OCR mini diagnostic
+RealSR 10-case lifecycle mini review
 ```
 
 ## Highest Priority
@@ -38,15 +39,16 @@ TextZoom OCR mini diagnostic
 Next priority:
 
 ```text
-The project is past the clean archive checkpoint and has completed three bounded
-exploration steps: QNN shared-memory Phase 1, AIMET trigger search, and TextZoom
-OCR mini diagnostics. Continue the loop with the remaining low-cost lanes:
+The project is past the clean archive checkpoint and has completed four bounded
+exploration steps: QNN shared-memory Phase 1, AIMET trigger search, TextZoom
+OCR mini diagnostics, and RealSR lifecycle mini review. Continue the loop with
+the remaining low-cost lanes:
 1. a concrete W8A8-vs-float failure crop appears -> AIMET/CLE or mixed precision;
 2. visual review conflicts with PSNR/SSIM or a text-readability claim is needed -> LPIPS/NIQE/OCR diagnostics;
 3. shared-memory Phase 1 passed -> compare timing and output validity against the Kotlin/TFLite default path;
 4. the user wants a video demo/product path -> CameraX VideoCapture/Recorder protocol and implementation.
-5. RealSR lifecycle data exists -> run a mini review before making real-camera
-   robustness claims.
+5. low-cost video demo protocol -> only if it can reuse existing app/device
+   evidence without destabilizing the archived deliverable.
 ```
 
 Do not reopen as unfinished:
@@ -254,6 +256,20 @@ boundary: diagnostic-only; OCR is weak even on HR references, so human visual
 review still owns final text-readability decisions.
 ```
 
+RealSR lifecycle mini review:
+
+```text
+C:\Users\Admin\Desktop\QC-Development-Board-Project\evalhub_data\derived_runs\evalhub_realsr_mini_10cases_20260720_v2
+cases: 10 RealSR V3 x4 Test samples, Canon/Nikon 5+5
+host LiteRT averages:
+  all bicubic/float/W8A8 PSNR: 22.98 / 20.56 / 20.96
+  all bicubic/float/W8A8 SSIM: 0.7393 / 0.7563 / 0.7465
+  float/W8A8 mean latency: 673.3 / 386.0 ms
+boundary: host sanity only; not RB5 QNN/app evidence and not a replacement for
+the 24-case main gate. Real-degradation PSNR can penalize sharper SR output, so
+contact sheet review owns any real-camera robustness claim.
+```
+
 ## Next Engineering Choices
 
 Recommended order:
@@ -269,6 +285,6 @@ Recommended order:
 5. Keep LPIPS/NIQE/OCR diagnostic-only unless calibrated against visual review.
 6. Do the low-cost video demo protocol next if it can reuse existing app/device
    paths without destabilizing the archived deliverable.
-7. Do a RealSR mini-review next to classify whether real-degradation lifecycle
-   evidence changes the current model story.
+7. Keep RealSR as lifecycle sanity until a reviewed real-camera robustness claim
+   is needed.
 ```
