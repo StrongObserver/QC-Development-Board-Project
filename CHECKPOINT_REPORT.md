@@ -16,7 +16,7 @@ CameraX live ROI
 Local and remote state:
 
 ```text
-main is synced to origin/main at c43f013
+main is synced to origin/main at e3768c9
 working tree is clean
 ```
 
@@ -69,6 +69,8 @@ e7c36b5 docs(route): record app e2e and temporal boundaries
 fd78911 docs(showcase): refresh RB5 demo evidence
 0a3a8cb docs(eval): record app e2e lifecycle evidence
 c43f013 docs(loop): close full-scope trigger gates
+be8c35d docs(report): add RB5 checkpoint report
+e3768c9 docs(showcase): add RB5 oral interview script
 ```
 
 ## Verification
