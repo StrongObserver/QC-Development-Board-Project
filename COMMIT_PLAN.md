@@ -1,6 +1,94 @@
 # Commit Plan
 
-Updated: 2026-07-19
+Updated: 2026-07-20
+
+## Current Local Closeout Plan
+
+The current worktree contains a verified follow-up after the pushed
+`93e6d07 docs(loop): close RB5 long-loop queue` checkpoint.
+
+Current logical commit split:
+
+```text
+1. perf(android): optimize live SR output and cadence logging
+2. test(sr-lab): export app e2e logs and temporal state
+3. docs(route): record app e2e and temporal boundaries
+4. docs(showcase): refresh RB5 demo evidence
+5. docs(eval): record app e2e lifecycle evidence
+```
+
+Explicit path groups:
+
+```text
+Commit 1:
+RB5VisionLab/app/src/main/java/com/cyf/rb5visionlab/MainActivity.kt
+RB5VisionLab/app/src/main/java/com/cyf/rb5visionlab/SuperResolver.kt
+
+Commit 2:
+RB5_SR_lab/app_e2e_export.py
+RB5_SR_lab/run_app_live_roi_benchmark.py
+RB5_SR_lab/run_app_sustained_live_roi.py
+
+Commit 3:
+AIMET_DECISION.md
+APP_DEFAULT_MODEL_DECISION.md
+HARNESS_LOOP_ENGINEERING.md
+LOOP_TASK_QUEUE.md
+METRIC_EXTENSION_DECISION.md
+MODEL_ROUTE_DECISION.md
+NATIVE_YUV_ROI_PLAN.md
+NEXT_ACTION.md
+PROJECT_ENTRYPOINTS.md
+PROJECT_FULL_SCOPE_LEDGER.md
+ROADMAP_NEXT.md
+ROUTE_DECISION.md
+
+Commit 4:
+README.md
+DEMO_RUNBOOK.md
+INTERVIEW_TALK_TRACK.md
+RESUME_PROJECT_DRAFT.md
+SHOWCASE_INDEX.md
+SHOWCASE_MATERIALS.md
+SHOWCASE_NARRATIVE.md
+
+Commit 5:
+eval_hub/README.md
+eval_hub/EVAL_SYSTEM_FREEZE.md
+```
+
+Verification already run for this closeout:
+
+```bat
+RB5_SR_lab\.venv-eval\Scripts\python.exe -m py_compile RB5_SR_lab\app_e2e_export.py RB5_SR_lab\run_app_live_roi_benchmark.py RB5_SR_lab\run_app_sustained_live_roi.py RB5_SR_lab\run_app_resource_probe.py
+git diff --check
+cd RB5VisionLab && gradlew.bat --no-daemon :app:assembleDebug
+adb -s ff5d3ab4 install -r RB5VisionLab\app\build\outputs\apk\debug\app-debug.apk
+RB5_SR_lab\.venv-eval\Scripts\python.exe RB5_SR_lab\run_app_live_roi_benchmark.py --use-app-default --every-n 3 --min-frames 12 --duration-s 8 --timeout-s 30 --run-id 20260720_every_n3_runner_state_fix_smoke
+```
+
+Device smoke result:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_every_n3_runner_state_fix_smoke
+status: temporal_cadence_validated
+parsed_frames: 79
+skipped_frames: 158
+every_n: 3
+```
+
+Do not stage:
+
+```text
+.state/
+RB5_SR_lab/__pycache__/
+RB5VisionLab/.gradle/
+RB5VisionLab/app/build/
+evalhub_data/
+external result folders under C:\Users\Admin\Videos\
+```
+
+## Historical Plan
 
 This file records how the large RB5 checkpoint was split. The split has already
 been committed and pushed. Keep this file as a rollback/staging reference for

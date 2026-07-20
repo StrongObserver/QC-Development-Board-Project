@@ -178,6 +178,16 @@ QuickSRNetSmall sampleCopy p50/p95: 3/4ms -> 0/0ms
 QuickSRNetSmall e2e p50/p95: 22/25ms -> 19/24ms
 ```
 
+2026-07-20 follow-up:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_e2e_schema_output_reuse_120f
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_e2e_schema_output_reuse_60s
+
+QuickSRNetSmall UINT8 output bulk-copy smoke: postprocess 1/1ms, e2e 15/19ms
+60s sustained smoke: e2e first/last 20% p50/p95 15/20ms -> 16/21ms
+```
+
 Boundary:
 
 ```text
@@ -185,6 +195,10 @@ This is a real but modest app-path optimization. FrameBitmap timing varied in
 the P5 runs, so do not claim the whole live path improved by the full
 postprocess delta. The strongest supported claim is: postprocess and sample-copy
 overhead were reduced, while total e2e improved modestly.
+
+The 2026-07-20 follow-up is stronger for the default QuickSR path: it validates
+that UINT8 output bulk-copy reduces postprocess to about 1/1ms in app timing.
+This is still not true zero-copy and not visual quality evidence.
 ```
 
 ## P9: Showcase Material

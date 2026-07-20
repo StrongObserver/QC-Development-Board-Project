@@ -307,3 +307,22 @@ Reusing the live output Bitmap does not improve p50, but it improves tail
 latency and is low risk. Keep the output-reuse change. The default path remains
 Bitmap input + QuickSRNetSmall/QNN; tensor-ready live remains experimental.
 ```
+
+UINT8 output bulk-copy follow-up:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_e2e_schema_output_reuse_120f
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_e2e_schema_output_reuse_60s
+120-frame smoke: postprocess p50/p95 1.0 / 1.0 ms, e2e p50/p95 15.0 / 19.0 ms
+60s sustained smoke: e2e first/last 20% p50/p95 15.0/20.0 ms -> 16.0/21.0 ms
+```
+
+Interpretation:
+
+```text
+The previous "reduce output/postprocess cost" follow-up has now produced a
+valid improvement for the default QuickSR/QNN path. Do not reopen output
+postprocess as the next performance task unless a regression appears. Any future
+YUV ROI or tensor-ready experiment must beat the new 15/19ms app e2e smoke
+baseline and preserve visual alignment.
+```

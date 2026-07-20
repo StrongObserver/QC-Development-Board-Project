@@ -26,7 +26,7 @@ Current roles:
 | --- | --- | --- |
 | Deployment milestone | Real-ESRGAN W8A8 + QNN TFLite Delegate / HTP | Keep as the proven QNN/HTP app milestone and optional perceptual enhancement path |
 | Live ROI workhorse candidate | QuickSRNetSmall W8A8 | Keep as the strongest current live ROI candidate after P5/P6 timing and resource probes |
-| Current top optimization target | App postprocess/output path | Data-path optimization already cut frame conversion; postprocess is now the largest live stage |
+| Current top optimization target | App e2e record + next route boundary | Output UINT8 bulk-copy has reduced the live postprocess slice; do not reopen postprocess unless a regression appears |
 | Not current default | Automatic Real-ESRGAN vs QuickSRNet live routing | Mainline gate only: do not enable by default yet; bounded routing experiments remain allowed with hypothesis, metric, budget, rollback, and baseline |
 
 ## Why
@@ -182,15 +182,17 @@ The memory result has an important caveat: after closing both interpreters, PSS
 did not return to the start value. Treat this as QNN/runtime cache and process
 memory behavior, not as proof that `close()` fully releases all resources.
 
-## Next Data-Path Work
+## Data-Path Status
 
-The next bottleneck is output/postprocess bitmap generation around 14/16ms
-p50/p95. If more live ROI speed is needed, investigate in this order:
+The previous bottleneck was output/postprocess bitmap generation around 14/16ms
+p50/p95. That has now been reduced for the default W8A8/QuickSRNet live path.
+If more live ROI speed is needed, investigate in this order:
 
-1. Avoid unnecessary sample-copy work during live preview unless the user is saving evidence.
-2. Optimize output conversion from TFLite buffer to `Bitmap`.
-3. Consider YUV ROI conversion only for the ROI instead of full-frame `Bitmap`.
-4. Keep high-resolution still-sample capture as a separate path if it is still needed.
+1. Keep the current output UINT8 bulk-copy path unless a regression appears.
+2. Consider YUV ROI or deeper tensor-ready work only as isolated experiments,
+   because prior tensor-ready repeated live did not beat the default p50 before
+   this output-path improvement.
+3. Keep high-resolution still-sample capture as a separate path if it is still needed.
 
 Do not start AHardwareBuffer, DMA-BUF, or true zero-copy work in the mainline
 until the simpler ROI/data-path options are exhausted. This is an
@@ -215,6 +217,90 @@ Key result:
 The change also reduced live evidence `sampleCopy` p50/p95 to `0/0ms` by no
 longer copying saveable evidence on every frame. This is a modest but real app
 path improvement. Do not over-claim it as a full zero-copy pipeline.
+
+## Output UINT8 Bulk-Copy Result
+
+2026-07-20 follow-up: the W8A8/QuickSRNet live output path now bulk-copies the
+UINT8 TFLite output buffer into a reusable byte array before ARGB conversion.
+This removes per-channel direct `ByteBuffer.get()` calls in the hot
+postprocess loop without changing model input, model output, quantization, app
+UI, or route selection.
+
+Evidence:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_e2e_schema_output_reuse_120f
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_e2e_schema_output_reuse_60s
+```
+
+Key result:
+
+| Run | Frames / duration | Postprocess p50/p95 | E2E p50/p95 | Boundary |
+| --- | ---: | ---: | ---: | --- |
+| 120-frame smoke | 163 frames | `1 / 1ms` | `15 / 19ms` | app timing, not visual review |
+| 60s sustained smoke | 1763 frames | `1 / 2ms` | `16 / 21ms` | battery temp coarse signal `24.0C -> 24.0C` |
+
+Interpretation:
+
+```text
+This is a valid performance-lane improvement for the current default
+QNN/QuickSRNetSmall live ROI path. It is still not true zero-copy: the app still
+uses CameraX ImageAnalysis, CPU-side ROI/preprocess, TFLite output readback,
+and Bitmap display.
+```
+
+## Every-N Temporal Smoke
+
+2026-07-20 follow-up: the app now supports a temporal smoke mode via
+`sr_every_n`. This keeps the current ImageAnalysis path and runs SR only every
+N frames, without adding CameraX VideoCapture/Recorder.
+
+Evidence:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_every_n3_live_roi_60s_final
+```
+
+Key result:
+
+```text
+everyN=3
+enhanced frames=85
+skipped frames=169
+effective enhanced FPS p50/p95=9.9/9.9
+per-enhanced-frame e2e p50/p95=22/25ms
+```
+
+Interpretation:
+
+```text
+The every-N path is technically valid and useful as a cadence/product probe. It
+does not reduce the latency of enhanced frames versus the current every-frame
+default; it reduces how often enhancement is performed.
+```
+
+## Shared-Memory Feasibility
+
+Local QAIRT evidence confirms that shared memory exists, but the viable route is
+not a direct Kotlin `SuperResolver` patch:
+
+```text
+QNN TFLite Delegate C API:
+  TfLiteQnnDelegateAllocCustomMem / TfLiteQnnDelegateFreeCustomMem
+  TFLite C++ Interpreter::SetCustomAllocationForTensor
+
+Native QNN sample:
+  SampleAppSharedBuffer
+  libcdsprpc.so / rpcmem / QnnMem_register
+```
+
+Boundary:
+
+```text
+The current Java/Kotlin QnnDelegate wrapper does not expose equivalent custom
+tensor allocation APIs. A shared-memory experiment should be a separate C++ TFLite
+Delegate or native QNN probe, not a replacement for the current stable default.
+```
 
 ## Short Sustained Run Result
 

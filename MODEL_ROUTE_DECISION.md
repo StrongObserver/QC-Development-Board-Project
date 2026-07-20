@@ -41,7 +41,7 @@ workhorse candidate:
 | --- | --- |
 | Android fixed sample through QNN Delegate | pass |
 | App-vs-host output alignment | PSNR 46.92dB, MAD 0.939 on same input |
-| 1280x960 live ROI | p50/p95 e2e about 22/25ms before P5, 19/24ms after P5 |
+| 1280x960 live ROI | p50/p95 e2e about 22/25ms before P5, 19/24ms after P5, 15/19ms after UINT8 output bulk-copy smoke |
 | QNN inference | about 1-2ms in recent live runs |
 | 5-minute sustained run | no meaningful e2e drift, coarse battery temp 24.0C -> 24.0C |
 | Model size | about 43.7KB |

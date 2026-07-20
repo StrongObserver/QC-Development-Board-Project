@@ -15,6 +15,14 @@ Status:
 AIMET: deferred_with_trigger
 ```
 
+2026-07-20 recheck:
+
+```text
+The latest app work changed output-buffer handling and app e2e logging only.
+It did not introduce a new W8A8-vs-float visual failure crop. Therefore AIMET
+remains deferred_with_trigger.
+```
+
 ## Why
 
 AIMET should fix quantization degradation inside one model family. It should not

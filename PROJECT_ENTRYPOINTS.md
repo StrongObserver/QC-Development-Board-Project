@@ -173,6 +173,10 @@ C:\Users\Admin\Desktop\QC-Development-Board-Project\eval_hub\registries\metric_p
 C:\Users\Admin\Desktop\QC-Development-Board-Project\eval_hub\registries\lifecycle_matrix.md
 ```
 
+For zero-copy or video/temporal boundary decisions, do not create prompt
+Markdown files. Generate concise Qualcomm/internal-AI prompts directly in chat
+when user action is required.
+
 Large downloaded datasets and derived artifacts stay in `evalhub_data\`, which
 is ignored by Git. Do not commit raw datasets. Do not let EvalHub replace
 `RB5_SR_Benchmark_v1` silently; promote a new source only after it has a stable

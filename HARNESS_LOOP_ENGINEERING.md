@@ -201,8 +201,9 @@ Current route decisions mean:
 QuickSRNetSmall is the current live ROI workhorse candidate.
 Real-ESRGAN remains the QNN/HTP milestone and perceptual comparison path.
 Automatic dual-model live routing is not justified as the default path yet.
-YUV ROI, perceptual metrics, AIMET, and real-camera expansion remain valid
-future exploration lanes when their triggers are met.
+every-N ImageAnalysis is a valid cadence/product probe, not a per-frame latency win.
+QNN shared memory is a C++ delegate/native probe lane, not a direct Kotlin wrapper patch.
+YUV ROI, perceptual metrics, AIMET, shared-memory probes, and real-camera or video expansion remain valid future exploration lanes when their triggers are met.
 ```
 
 They do not mean:
@@ -212,4 +213,6 @@ Stop exploring new models.
 Stop optimizing the data path.
 Stop evaluating AIMET forever.
 Stay only with the current stable demo.
+Treat every-N as proof of lower single-frame latency.
+Treat shared-memory support as already integrated into the current Kotlin path.
 ```

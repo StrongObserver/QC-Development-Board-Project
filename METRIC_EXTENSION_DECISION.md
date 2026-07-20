@@ -18,6 +18,15 @@ LPIPS / DISTS: planned diagnostic
 human contact-sheet review: visual veto
 ```
 
+2026-07-20 recheck:
+
+```text
+The latest app e2e work added schema-compatible latency rows and improved the
+output conversion path. It did not create a visual/metric conflict and did not
+make a text-readability claim. LPIPS / DISTS / NIQE / OCR remain diagnostic-only
+and should not be added to the mainline until a trigger below appears.
+```
+
 ## Environment Check
 
 Current eval venv:

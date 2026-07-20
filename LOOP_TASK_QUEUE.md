@@ -59,8 +59,8 @@ original project design unless there is concrete evidence that it cannot work.
 | 5 | d8-config | done | Quantization configuration comparison | at least two quantization/calibration variants compared on fixed inputs | toolchain blocked or comparison complete |
 | 6 | aimet-trigger | done | AIMET CLE/Bias Correction trigger check | exact W8A8-vs-float failure crop found, or AIMET remains deferred_with_trigger | no trigger, blocked, or recovery evidence complete |
 | 7 | eval-diagnostic | done | LPIPS/NIQE/OCR diagnostic metrics | diagnostic metrics added only for a visual/metric conflict or text claim | calibrated enough for diagnostic use or deferred |
-| 8 | zero-copy-probe | blocked_needs_user | True zero-copy feasibility research/probe | AHardwareBuffer/DMA-BUF/QNN tensor-memory path classified with evidence | not viable, blocked, or bounded probe complete |
-| 9 | video-temporal-plan | blocked_needs_user | Video/every-N-frame enhancement protocol | evaluation protocol exists before video implementation starts | protocol complete or user input needed |
+| 8 | zero-copy-probe | blocked_technical | True zero-copy feasibility research/probe | AHardwareBuffer/DMA-BUF/QNN tensor-memory path classified with evidence | C++ shared-memory probe needed before implementation |
+| 9 | video-temporal-plan | in_progress | Video/every-N-frame enhancement protocol | every-N ImageAnalysis smoke exists before video implementation starts | decide product value or run stronger temporal validation |
 | 10 | power-perf-watt | done | Real power/perf-watt characterization | current/power evidence exists if making an efficiency claim | hardware/tooling blocked or evidence complete |
 | 11 | diff-audit | done | Audit current uncommitted changes and artifact boundaries | explicit source/doc/script files vs generated artifacts are separated | audit complete |
 | 12 | commit-boundary-plan | done | Split current work into logical commits | staging paths are explicit and generated artifacts excluded | plan complete |
@@ -68,119 +68,49 @@ original project design unless there is concrete evidence that it cannot work.
 
 ## Current Closeout Task
 
-Current active task: `post-closeout-handoff`.
+Current active task: `diff-review-and-milestone-closeout`.
 
-Host-side tile technical gates are complete. Multi-scene tile evaluation has
-been generated and now needs user visual review before promoting one tile model
-as the post-capture quality default. Minimal Android app tile entry has been
-implemented, build-verified, installed on RB5, and validated with saved output.
+Current open work is no longer tile, D8-config, output postprocess, or app e2e
+schema bring-up. Those lanes have evidence and should be treated as closed unless
+a regression appears. The current local diff should be reviewed, split, and
+committed before adding new feature work.
 
-Current evidence:
+Current evidence to preserve:
 
 ```text
-QuickSR:
-C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\tile_mvp\20260720_tile_mvp_quicksr_structure_edges
+Latest app e2e output-path smoke:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_e2e_schema_output_reuse_120f
 
-Real-ESRGAN:
-C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\tile_mvp\20260720_tile_eval_realesrgan_structure_edges
+Latest app e2e 60s sustained smoke:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_e2e_schema_output_reuse_60s
 
-Android app tile entry:
-RB5VisionLab app has a new `整图 Tile` button. It captures a 512x512 still ROI,
-runs 16 QNN tiles, stitches a 2048x2048 result, and saves input, bicubic, tile
-SR, and comparison PNGs to `/sdcard/Pictures/RB5VisionLab`. Short press runs
-the selected tile model; long press switches QuickSR / Real-ESRGAN. Intent
-automation supports `--es tile_model QUICKSR` and `--es tile_model REALESRGAN`.
-Verification so far: `:app:assembleDebug` passes; device runs saved
-`TILE_STILL_20251110_091057_QUICKSR_QNN_*` and
-`TILE_STILL_20251110_100948_REALESRGAN_QNN_*`. Pulled evidence is under
-`RB5_SR_lab\results\tile_app\20251110_091057_quicksr_qnn` and
-`RB5_SR_lab\results\tile_app\20251110_100948_realesrgan_qnn`.
+Every-N temporal smoke:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_every_n3_live_roi_60s_final
+```
 
-Same-frame app tile compare:
-The old app-side QuickSR/Real-ESRGAN comparison was invalid for quality because
-the two modes used different camera inputs. This has been fixed with
-`--ez run_tile_compare true`, which runs QuickSR and Real-ESRGAN on the same
-512x512 frame. Device evidence was saved as `TILE_COMPARE_20251110_102602_QNN_*`
-and pulled to
-`RB5_SR_lab\results\tile_app\20251110_102602_same_frame_compare`, including a
-`review_pack` with 1x/2x/4x crops and difference heatmaps.
+Current route boundaries:
 
-Multi-scene tile eval:
-C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\tile_eval\20260720_tile_eval_smoke_quicksr_vs_realesrgan
-
-Zoom-friendly review packs:
-C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\tile_eval\20260720_tile_eval_smoke_quicksr_vs_realesrgan\review_packs
-
-Use `center_crop_1x.png`, `center_crop_2x.png`, `detail_patch_4x.png`, and
-`difference_heatmaps.png` per case. Low-light color statistics confirm QuickSR
-is brighter than Real-ESRGAN on `low_light_div2k0852`; other categories have
-small color/luma deltas. Do not decide tile model quality from shrunken overview
-thumbnails alone.
-
-User visual review result:
-Real-ESRGAN tile is accepted as better than QuickSR tile across the reviewed
-six smoke scenes. The user saw higher sharpness without obvious fake texture or
-oversharpening. Continue by making Android app tile support Real-ESRGAN mode.
-
-Tile route decision:
-Real-ESRGAN tile is the post-capture quality-priority route. QuickSR tile stays
-as the speed/conservative baseline. App same-frame comparison evidence confirms
-the fair comparison path: `run_tile_compare` saves input, bicubic, QuickSR, and
-Real-ESRGAN outputs from the same 512x512 frame.
-
-Next non-visual task:
-Start `d8-config` planning and feasibility check while tile visual review is
-pending. Do not claim a tile quality winner until the overview images are
-reviewed.
-
-D8-config feasibility:
-Real-ESRGAN export exposes `--num-calibration-samples` and `--quantize-options`.
-Confirmed safe candidate variables are calibration sample count and
-`--range_scheme min_max`. No explicit Real-ESRGAN export support was found for
-per-channel/per-tensor switching. Running the comparison needs user approval
-because it submits Qualcomm AI Hub remote quantize/export jobs using the local
-AI Hub configuration.
-Prompt policy: do not create prompt Markdown files unless the user asks. Output
-Qualcomm/internal-AI prompts directly in chat.
-D8-config first run:
-AI Hub TFLite W8A8 exports completed for `calib10_default` and
-`calib10_minmax`. Host smoke comparison is under
-`RB5_SR_lab\results\d8_config_compare\20260720_d8_config_smoke`. `minmax`
-performed worse on average; `calib10_default` was very close to current app
-W8A8, so there is no evidence-based reason to replace the app model yet.
-
-AIMET trigger:
-Current W8A8-vs-float evidence does not show a blocking quantization-only
-failure. Keep AIMET as `deferred_with_trigger`; do not start CLE/Bias Correction
-until a concrete failure crop shows float preserving detail that W8A8 loses.
-
-Eval diagnostic:
-Low-cost tile diagnostics were added for the smoke tile comparison under
-`RB5_SR_lab\results\tile_eval\20260720_tile_eval_smoke_quicksr_vs_realesrgan`.
-They support the observation that Real-ESRGAN is sharper, but remain diagnostic
-only and do not replace visual review.
-
-Zero-copy:
-Existing native/tensor-ready probes are valid but repeated live did not beat
-the default path on p50. Local and public references did not provide a direct
-CameraX AHardwareBuffer/DMA-BUF -> QNN TFLite Delegate input path. This needs
-Qualcomm/internal confirmation before deeper implementation.
-Prompt policy: output Qualcomm/internal-AI prompts directly in chat.
-
-Video/temporal:
-The current app has no CameraX VideoCapture/Recorder path. Adding video changes
-product scope; next step needs a concrete choice between recording real video,
-processing every N ImageAnalysis frames, or only writing an evaluation protocol.
+```text
+1. Output postprocess is no longer the next target unless a regression appears.
+2. every-N ImageAnalysis is a valid cadence/product probe, not a per-frame
+   latency win: everyN=3 gives about 9.9 effective enhanced FPS, while each
+   enhanced frame remains about 22/25ms e2e.
+3. QNN shared memory is a C++ delegate/native probe lane:
+   TfLiteQnnDelegateAllocCustomMem + SetCustomAllocationForTensor, or
+   SampleAppSharedBuffer with libcdsprpc/rpcmem/QnnMem_register. The current
+   Java/Kotlin QnnDelegate wrapper does not expose the custom allocation API.
+4. Full CameraX VideoCapture/Recorder remains a separate product/demo decision.
+5. Prompts for Qualcomm/internal AI must be output directly in chat, not written
+   to Markdown files, unless the user explicitly asks for a file.
+```
 
 Power/perf-watt:
 `dumpsys battery` exposes voltage/temperature/level, but ordinary adb shell is
 denied access to `/sys/class/power_supply/battery/*`, including `current_now`.
-Without current or an external power meter, the project cannot claim real
-perf/watt. Next step needs user approval for rooted device reads or external
-measurement hardware.
-User approved root read. `adb root` works; root shell can read
-`current_now` and `voltage_now`. `power_now` is 0, so power is computed from
-absolute current times voltage. Smoke outputs:
+User approved root read. `adb root` works; root shell can read `current_now`
+and `voltage_now`. `power_now` is 0, so power is computed from absolute current
+times voltage. This supports board-level power/energy estimates only; it must
+not be reported as external-meter perf/watt precision. Smoke outputs:
 `RB5_SR_lab\results\power_probe\20260720_power_idle_smoke`
 and
 `RB5_SR_lab\results\power_probe\20260720_power_live_quicksr_smoke`.
@@ -198,25 +128,46 @@ about 6.98 W; QuickSR tile once about 29.8 J; Real-ESRGAN tile once about
 evidence.
 
 Current source-control task:
-The 2026-07-20 oral template asked for project closeout, high-signal context
-maintenance, and commit/push if the current progress was suitable. Diff audit
-and logical commits are complete: keep generated outputs under `RB5_SR_lab\results` and
-`RB5_SR_lab\export_assets` out of git. Candidate tracked files are entrypoint /
-loop docs, app code, layout, tools README, token policy, queue, full-scope
-ledger, and host scripts.
-Diff audit:
-Generated outputs under `RB5_SR_lab\results` are ignored. D8 exported model
-assets are ignored by `RB5_SR_lab/export_assets/d8_config_*/`. Candidate tracked
-paths are `.gitignore`, `PROJECT_ENTRYPOINTS.md`, `HARNESS_LOOP_ENGINEERING.md`,
-`PROJECT_FULL_SCOPE_LEDGER.md`, `TOKEN_DISCLOSURE_POLICY.md`,
-`LOOP_TASK_QUEUE.md`, `tools/README.md`,
-`tools/rb5_progressive_onboarding.ps1`, Android app tile changes, and host
-scripts under `RB5_SR_lab`.
+The current worktree contains a new accumulated diff after app e2e schema export,
+UINT8 output bulk-copy, every-N ImageAnalysis smoke, shared-memory feasibility
+classification, and related handoff updates. Before adding new functionality,
+review and split this diff into current logical commits. Keep generated evidence
+under `RB5_SR_lab\results` and `evalhub_data` out of git.
+```
 
-Suggested logical commits for this closeout:
-1. `docs(loop): add progressive RB5 loop onboarding`
-2. `feat(android): add post-capture tile SR comparison`
-3. `test(sr): add tile and quantization comparison scripts`
-4. `test(power): add RB5 battery power probe`
-5. `chore(repo): ignore generated D8 config assets`
+2026-07-20 app e2e / output-path follow-up:
+
+```text
+App e2e schema output:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_e2e_schema_output_reuse_120f\app_e2e_log.csv
+C:\Users\Admin\Desktop\QC-Development-Board-Project\evalhub_data\derived\app_e2e\20260720_app_e2e_schema_output_reuse_120f\app_e2e_log.csv
+
+60s sustained schema output:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_e2e_schema_output_reuse_60s\app_e2e_log.csv
+C:\Users\Admin\Desktop\QC-Development-Board-Project\evalhub_data\derived\app_e2e\20260720_app_e2e_schema_output_reuse_60s\app_e2e_log.csv
+```
+
+Current result:
+
+```text
+`RB5_SR_lab\run_app_live_roi_benchmark.py` and
+`RB5_SR_lab\run_app_sustained_live_roi.py` now emit EvalHub-compatible
+`app_e2e_log.csv` rows and mirror them to ignored `evalhub_data\derived\app_e2e`.
+`SuperResolver` now bulk-copies UINT8 TFLite output into a reusable byte array
+before ARGB conversion.
+120-frame default app live ROI smoke: postprocess 1/1ms, e2e 15/19ms.
+60s sustained QuickSR smoke: 1763 frames, e2e first/last 20% 15/20ms -> 16/21ms,
+battery temperature coarse signal 24.0C -> 24.0C.
+```
+
+Boundary:
+
+```text
+This is app timing and schema evidence, not visual quality evidence and not true
+zero-copy. Do not reopen output postprocess as the next task unless a regression
+appears. The remaining non-terminal routes are C++ shared-memory probe only if
+needed, deciding whether every-N is useful as a product/display cadence, and
+AIMET/perceptual metrics only when their trigger conditions appear.
+Prompts for Qualcomm/internal AI must be output directly in chat, not written to
+Markdown files, unless the user explicitly asks for a file.
 ```

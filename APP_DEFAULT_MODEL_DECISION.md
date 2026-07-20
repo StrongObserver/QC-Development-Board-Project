@@ -56,6 +56,7 @@ Verification:
 
 ```text
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20251110_app_default_quicksr_live_roi_smoke
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_e2e_schema_output_reuse_120f
 ```
 
 Result:
@@ -65,6 +66,7 @@ started with --ez start_live_sr true only
 resolved frame model: QUICKSR_W8A8
 QNN inference p50/p95: 1.0 / 1.0 ms
 app e2e p50/p95: 19.0 / 26.3 ms
+latest app e2e after UINT8 output bulk-copy: 15.0 / 19.0 ms
 ```
 
 Why this is allowed:
