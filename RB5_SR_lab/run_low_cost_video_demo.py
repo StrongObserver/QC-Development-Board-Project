@@ -46,6 +46,14 @@ LIVE_RE = re.compile(
     r"(?: everyN=(?P<every_n>\d+) frameIndex=(?P<frame_index>\d+) "
     r"enhancedIndex=(?P<enhanced_index>\d+) effectiveEnhancedFps=(?P<effective_enhanced_fps>[\d.]+))?"
 )
+TENSOR_LIVE_RE = re.compile(
+    r"backend=(?P<backend>\w+) model=(?P<log_model>\w+) tensorLive crop=(?P<crop_side>\d+)->128->512 "
+    r"frame=(?P<frame_width>\d+)x(?P<frame_height>\d+) "
+    r"nativeRgb=(?P<native_rgb_ms>\d+) rotate=(?P<rotation_degrees>\d+) "
+    r"pre=(?P<pre_ms>\d+) inf=(?P<inf_ms>\d+) post=(?P<post_ms>\d+) "
+    r"enhanceWall=(?P<enhance_wall_ms>\d+) analyzer=(?P<analyzer_ms>\d+) e2e=(?P<e2e_ms>\d+)ms"
+    r".*optimizedTensor=true"
+)
 
 
 def run(cmd: list[str], *, check: bool = True, timeout: int | None = None) -> subprocess.CompletedProcess[str]:
@@ -61,6 +69,13 @@ def run(cmd: list[str], *, check: bool = True, timeout: int | None = None) -> su
 
 def adb(*args: str, check: bool = True, timeout: int | None = None) -> subprocess.CompletedProcess[str]:
     return run(["adb", "-s", DEVICE_SERIAL, *args], check=check, timeout=timeout)
+
+
+def prepare_device_interactive() -> None:
+    adb("shell", "input", "keyevent", "KEYCODE_WAKEUP", check=False)
+    adb("shell", "wm", "dismiss-keyguard", check=False)
+    adb("shell", "cmd", "statusbar", "collapse", check=False)
+    time.sleep(0.3)
 
 
 def write_csv(path: Path, rows: list[dict[str, object]]) -> None:
@@ -107,16 +122,18 @@ def parse_live_rows(log_text: str, model: str, session_id: str) -> list[dict[str
     rows: list[dict[str, object]] = []
     for line in log_text.splitlines():
         match = LIVE_RE.search(line)
-        if not match:
+        tensor_match = None if match else TENSOR_LIVE_RE.search(line)
+        if not match and not tensor_match:
             continue
-        values = match.groupdict()
-        if values.get("session_id") != session_id:
+        values = match.groupdict() if match else tensor_match.groupdict()
+        if match and values.get("session_id") != session_id:
             continue
         log_model = values.pop("log_model") or model
+        parsed_session_id = session_id if tensor_match else values.pop("session_id") or ""
         row: dict[str, object] = {
             "index": len(rows) + 1,
             "model": log_model,
-            "session_id": values.pop("session_id") or "",
+            "session_id": parsed_session_id,
             "raw_log_prefix": line[:18],
         }
         for key, value in values.items():
@@ -128,6 +145,11 @@ def parse_live_rows(log_text: str, model: str, session_id: str) -> list[dict[str
                 row[key] = float(value)
             else:
                 row[key] = int(value)
+        if tensor_match:
+            row["cap_ms"] = row["native_rgb_ms"]
+            row["frame_bitmap_ms"] = 0
+            row["roi_ms"] = row["native_rgb_ms"]
+            row["sample_copy_ms"] = 0
         rows.append(row)
     return rows
 
@@ -232,6 +254,7 @@ def collect_demo(
 ) -> tuple[str, Path, str]:
     remote_video = f"/sdcard/Movies/{run_id}.mp4"
     local_video = out_dir / f"{run_id}.mp4"
+    prepare_device_interactive()
     adb("shell", "am", "force-stop", PACKAGE_NAME, check=False)
     adb("logcat", "-c", check=False)
     start_cmd = [
@@ -259,6 +282,7 @@ def collect_demo(
         start_cmd.extend(["--ez", "save_demo_relation", "true"])
     if every_n > 1:
         start_cmd.extend(["--ei", "sr_every_n", str(every_n)])
+    prepare_device_interactive()
     adb(*start_cmd)
     time.sleep(max(0.0, pre_record_wait_s))
     screen_cmd = [

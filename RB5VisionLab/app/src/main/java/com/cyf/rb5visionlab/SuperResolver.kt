@@ -74,6 +74,7 @@ class SuperResolver(
     private val outputPixels = IntArray(outputSize * outputSize)
     private val outputUint8Lookup: IntArray?
     private val outputUint8Bytes: ByteArray?
+    private val canBulkCopyUint8Input: Boolean
 
     init {
         // Read the whole .tflite from assets into a direct ByteBuffer (works whether
@@ -99,6 +100,7 @@ class SuperResolver(
                         setSkelLibraryDir(context.applicationInfo.nativeLibraryDir)
                         setHtpPerformanceMode(QnnDelegate.Options.HtpPerformanceMode.HTP_PERFORMANCE_HIGH_PERFORMANCE)
                         setHtpPdSession(QnnDelegate.Options.HtpPdSession.HTP_PD_SESSION_UNSIGNED)
+                        setProfiling(QnnDelegate.Options.ProfilingOptions.BASIC_PROFILING)
                         setLogLevel(QnnDelegate.Options.LogLevel.LOG_LEVEL_INFO)
                     }
                     qnnDelegate = QnnDelegate(qnnOptions)
@@ -133,6 +135,11 @@ class SuperResolver(
         } else {
             null
         }
+        canBulkCopyUint8Input =
+            inputType == DataType.UINT8 &&
+                inputLayout == SrInputLayout.NHWC &&
+                inputZeroPoint == 0 &&
+                kotlin.math.abs(inputScale - (1.0f / 255.0f)) < 1e-6f
     }
 
     /**
@@ -223,8 +230,12 @@ class SuperResolver(
         inputBuffer.clear()
         when (inputLayout) {
             SrInputLayout.NHWC -> {
-                for (i in inputRgb.indices) {
-                    putUnitByte(inputBuffer, inputRgb[i].toInt() and 0xFF)
+                if (canBulkCopyUint8Input) {
+                    inputBuffer.put(inputRgb)
+                } else {
+                    for (i in inputRgb.indices) {
+                        putUnitByte(inputBuffer, inputRgb[i].toInt() and 0xFF)
+                    }
                 }
             }
             SrInputLayout.NHCW -> {
@@ -279,6 +290,17 @@ class SuperResolver(
         gpuDelegate = null
         qnnDelegate?.close()
         qnnDelegate = null
+    }
+
+    fun qnnProfilingSummary(): String {
+        val delegate = qnnDelegate as? QnnDelegate ?: return "profile=unavailable reason=not_qnn_delegate"
+        return try {
+            val data = delegate.profilingResult ?: ByteArray(0)
+            val prefix = data.take(16).joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+            "profileBytes=${data.size} profileHex16=$prefix"
+        } catch (e: Throwable) {
+            "profile=unavailable reason=${e.javaClass.simpleName}:${e.message}"
+        }
     }
 
     private fun putRgb(buffer: ByteBuffer, pixel: Int) {

@@ -64,6 +64,8 @@ def model_name(model_label: str) -> str:
 
 def model_variant(model_label: str) -> str:
     normalized = model_label.lower()
+    if "optimized_tensor" in normalized:
+        return "quicksr_w8a8_qnn_optimized_tensor_default"
     if "tensor_rotated" in normalized:
         return "quicksr_w8a8_qnn_tensor_rotated_native_probe"
     if "tensor_ready" in normalized:

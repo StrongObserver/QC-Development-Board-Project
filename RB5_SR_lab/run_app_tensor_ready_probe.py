@@ -43,6 +43,13 @@ def adb(*args: str, check: bool = True, timeout: int | None = None) -> subproces
     return run(["adb", "-s", DEVICE_SERIAL, *args], check=check, timeout=timeout)
 
 
+def prepare_device_interactive() -> None:
+    adb("shell", "input", "keyevent", "KEYCODE_WAKEUP", check=False)
+    adb("shell", "wm", "dismiss-keyguard", check=False)
+    adb("shell", "cmd", "statusbar", "collapse", check=False)
+    time.sleep(0.3)
+
+
 def write_csv(path: Path, rows: list[dict[str, object]]) -> None:
     if not rows:
         return
@@ -78,9 +85,11 @@ def parse_probe_rows(log_text: str) -> list[dict[str, object]]:
 
 
 def collect_probe(timeout_s: int) -> tuple[str, list[dict[str, object]]]:
+    prepare_device_interactive()
     adb("shell", "am", "force-stop", PACKAGE_NAME, check=False)
     time.sleep(0.5)
     adb("logcat", "-c", check=False)
+    prepare_device_interactive()
     started = adb(
         "shell",
         "am",

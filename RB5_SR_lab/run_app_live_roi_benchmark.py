@@ -99,6 +99,13 @@ def wait_package_stopped(timeout_s: float = 5.0) -> bool:
     return False
 
 
+def prepare_device_interactive() -> None:
+    adb("shell", "input", "keyevent", "KEYCODE_WAKEUP", check=False)
+    adb("shell", "wm", "dismiss-keyguard", check=False)
+    adb("shell", "cmd", "statusbar", "collapse", check=False)
+    time.sleep(0.3)
+
+
 def write_csv(path: Path, rows: list[dict[str, object]]) -> None:
     if not rows:
         return
@@ -195,6 +202,21 @@ def parse_live_rows(log_text: str, model: str, tensor_ready: bool, session_id: s
     return rows
 
 
+def parse_live_rows_with_optimized_fallback(
+    log_text: str, model: str, session_id: str
+) -> tuple[list[dict[str, object]], bool]:
+    rows = parse_live_rows(filter_session_lines(log_text, session_id), model, False, session_id)
+    if rows:
+        return rows, False
+    tensor_rows = parse_live_rows(log_text, f"OPTIMIZED_TENSOR_{model}", True, "")
+    optimized_rows = [
+        row
+        for row in tensor_rows
+        if row.get("model") == "QUICKSR_W8A8"
+    ]
+    return optimized_rows, bool(optimized_rows)
+
+
 def add_normalized_session_indices(rows: list[dict[str, object]], skip_rows: list[dict[str, object]]) -> None:
     frame_indices = [
         int(row["frame_index"])
@@ -243,12 +265,14 @@ def collect_logcat(
         start_cmd.extend(["--es", "sr_backend", "QNN", "--es", "sr_model", model])
     if every_n > 1 and not tensor_ready:
         start_cmd.extend(["--ei", "sr_every_n", str(every_n)])
+    prepare_device_interactive()
     adb("shell", "am", "force-stop", PACKAGE_NAME, check=False)
     time.sleep(0.5)
     adb("shell", "am", "force-stop", PACKAGE_NAME, check=False)
     if not wait_package_stopped():
         raise RuntimeError(f"{PACKAGE_NAME} did not stop cleanly before collection")
     adb("logcat", "-c")
+    prepare_device_interactive()
     started = adb(*start_cmd, check=False)
     if started.returncode != 0:
         raise RuntimeError(started.stdout)
@@ -275,7 +299,10 @@ def collect_logcat(
             )
             final_log = dump.stdout
             parse_source = final_log if tensor_ready else latest_session_log(final_log)
-            final_rows = parse_live_rows(parse_source, model, tensor_ready, session_id)
+            if tensor_ready:
+                final_rows = parse_live_rows(parse_source, model, True, session_id)
+            else:
+                final_rows, _ = parse_live_rows_with_optimized_fallback(parse_source, model, session_id)
             duration_done = duration_s <= 0 or time.time() >= duration_deadline
             if len(final_rows) >= min_frames and duration_done:
                 break
@@ -486,13 +513,15 @@ def main() -> None:
         max(0, args.duration_s),
         run_id,
     )
+    optimized_tensor_fallback = False
     if tensor_mode:
         session_log_text = latest_session_log(log_text)
         frame_rows = parse_live_rows(session_log_text, model_label, tensor_mode, "")
         skip_rows = []
     else:
-        session_log_text = filter_session_lines(latest_session_log(log_text), run_id)
-        frame_rows = parse_live_rows(session_log_text, model_label, tensor_mode, run_id)
+        full_session_log_text = latest_session_log(log_text)
+        frame_rows, optimized_tensor_fallback = parse_live_rows_with_optimized_fallback(full_session_log_text, model_label, run_id)
+        session_log_text = full_session_log_text if optimized_tensor_fallback else filter_session_lines(full_session_log_text, run_id)
         skip_rows = parse_skip_rows(session_log_text, run_id)
     add_normalized_session_indices(frame_rows, skip_rows)
     (out_dir / "raw_logcat.txt").write_text(log_text, encoding="utf-8")
@@ -536,6 +565,7 @@ def main() -> None:
                 "app_component": APP_COMPONENT,
                 "backend": "QNN",
                 "model": model_label,
+            "optimized_tensor_fallback": optimized_tensor_fallback,
                 "parsed_frames": len(frame_rows),
                 "skipped_frames": len(skip_rows),
                 "every_n": every_n,
@@ -579,7 +609,7 @@ def main() -> None:
             "android_version": "Android 13",
             "app_commit": git_commit_label(REPO_ROOT),
             "model_name": model_name(model_label),
-            "model_variant": model_variant(model_label),
+            "model_variant": model_variant(f"OPTIMIZED_TENSOR_{model_label}" if optimized_tensor_fallback else model_label),
             "backend": "QNN TFLite Delegate / HTP",
             "input_source": "camera_roi_live",
             "input_size": "128x128",
@@ -595,7 +625,7 @@ def main() -> None:
             "fallback_code": "none" if not blocked_by else "live_roi_log_collection_failed",
             "failure_code": "none" if not blocked_by else "too_few_frames",
             "human_decision": "not_reviewed",
-            "notes": f"App live ROI e2e schema row derived from RB5_SR logcat timings; everyN={every_n}; skipped={len(skip_rows)}; duration_s={args.duration_s}; not visual quality evidence.",
+            "notes": f"App live ROI e2e schema row derived from {'RB5_SR_TENSOR optimized tensor' if optimized_tensor_fallback else 'RB5_SR'} logcat timings; everyN={every_n}; skipped={len(skip_rows)}; duration_s={args.duration_s}; not visual quality evidence.",
         },
     )
     app_e2e_mirror = mirror_app_e2e_log(REPO_ROOT, run_id, app_e2e_path)

@@ -53,6 +53,7 @@ class MainActivity : AppCompatActivity() {
         private const val CAMERA_TAG = "RB5_CAMERA"
         private const val LEGACY_ANALYSIS_WIDTH = 640
         private const val LIVE_SAMPLE_CAPTURE_INTERVAL = 30
+        private const val LIVE_MODEL_INPUT_SIDE = 128
         private val LIVE_ANALYSIS_TARGET_SIZE = Size(1280, 960)
 
         init {
@@ -74,12 +75,14 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var liveSr = false
     @Volatile private var liveSrTensorReady = false
     @Volatile private var liveSrTensorRotatedNative = false
+    @Volatile private var liveSrOptimizedTensor = false
     @Volatile private var liveSrEveryN = 1
     @Volatile private var liveSrSessionId = "manual"
     @Volatile private var offlineEvalActive = false
     @Volatile private var liveSrSeenFrames = 0
     @Volatile private var liveSrEnhancedFrames = 0
     @Volatile private var liveSrStartNs = 0L
+    private var lastStrategyRgbBytes: ByteArray? = null
     private lateinit var srResultView: ImageView
     private lateinit var demoOverlayView: TextView
     private lateinit var controlBarView: View
@@ -136,6 +139,20 @@ class MainActivity : AppCompatActivity() {
         val runtimeFreeKb: Long,
         val runtimeMaxKb: Long,
     )
+
+    private data class StrategyShadow(
+        val meanLuma: Double,
+        val sharpness: Double,
+        val motionMad: Double,
+        val decision: String,
+    ) {
+        fun toLogFields(): String {
+            return "shadowLuma=${"%.2f".format(Locale.US, meanLuma)} " +
+                "shadowSharp=${"%.2f".format(Locale.US, sharpness)} " +
+                "shadowMotionMad=${"%.2f".format(Locale.US, motionMad)} " +
+                "shadowDecision=$decision"
+        }
+    }
 
     private data class ProbeResolverInit(
         val resolver: SuperResolver,
@@ -421,20 +438,30 @@ class MainActivity : AppCompatActivity() {
         }
         // Toggle live super-resolution on the camera's center ROI.
         srButton.setOnClickListener {
-            liveSr = !liveSr
-            if (liveSr) {
-                liveSrTensorReady = false
+            val currentlyRunning = liveSr || liveSrTensorReady
+            if (!currentlyRunning) {
+                val useOptimizedTensor = shouldUseOptimizedTensorLivePath()
+                liveSr = !useOptimizedTensor
+                liveSrTensorReady = useOptimizedTensor
+                liveSrTensorRotatedNative = useOptimizedTensor
+                liveSrOptimizedTensor = useOptimizedTensor
                 offlineEvalActive = false
                 liveSrEveryN = 1
                 resetLiveSrCadenceCounters()
                 showLiveSrOutput()
                 srButton.text = "停止实时超分"
                 if (demoMode) {
-                    demoOverlayView.text = "RB5 Gen2 Live SR\n${srBackend.label} / ${srModelVariant.label}\nStarting..."
+                    val path = if (useOptimizedTensor) "optimized tensor" else "bitmap"
+                    demoOverlayView.text = "RB5 Gen2 Live SR\n${srBackend.label} / ${srModelVariant.label}\n$path\nStarting..."
                 } else {
-                    statusTextView.text = "Live ROI SR starting with ${srBackend.label} backend..."
+                    val path = if (useOptimizedTensor) "optimized tensor" else "bitmap"
+                    statusTextView.text = "Live ROI SR starting with ${srBackend.label}/${srModelVariant.label} ($path)..."
                 }
             } else {
+                liveSr = false
+                liveSrTensorReady = false
+                liveSrTensorRotatedNative = false
+                liveSrOptimizedTensor = false
                 offlineEvalActive = false
                 hideLiveSrOutput()
                 srButton.text = startButtonText()
@@ -585,25 +612,30 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startLiveSrFromIntent() {
-        liveSr = true
-        liveSrTensorReady = false
-        liveSrTensorRotatedNative = false
+        val useOptimizedTensor = shouldUseOptimizedTensorLivePath()
+        liveSr = !useOptimizedTensor
+        liveSrTensorReady = useOptimizedTensor
+        liveSrTensorRotatedNative = useOptimizedTensor
+        liveSrOptimizedTensor = useOptimizedTensor
         offlineEvalActive = false
         showLiveSrOutput()
         findViewById<Button>(R.id.sr_button).text = "停止实时超分"
         if (demoMode) {
-            demoOverlayView.text = "RB5 Gen2 Live SR\n${srBackend.label} / ${srModelVariant.label}\nStarting..."
+            val path = if (useOptimizedTensor) "optimized tensor" else "bitmap"
+            demoOverlayView.text = "RB5 Gen2 Live SR\n${srBackend.label} / ${srModelVariant.label}\n$path\nStarting..."
         } else {
-            statusTextView.text = "Live ROI SR starting with ${srBackend.label}/${srModelVariant.label} from intent..."
+            val path = if (useOptimizedTensor) "optimized tensor" else "bitmap"
+            statusTextView.text = "Live ROI SR starting with ${srBackend.label}/${srModelVariant.label} ($path) from intent..."
         }
         resetLiveSrCadenceCounters()
-        Log.d("RB5_SR", "auto live SR from intent backend=${srBackend.label} model=${srModelVariant.label} session=$liveSrSessionId everyN=$liveSrEveryN")
+        Log.d("RB5_SR", "auto live SR from intent backend=${srBackend.label} model=${srModelVariant.label} session=$liveSrSessionId everyN=$liveSrEveryN optimizedTensor=$useOptimizedTensor")
     }
 
     private fun startTensorReadyLiveSrFromIntent(rotatedNative: Boolean = false) {
         liveSr = false
         liveSrTensorReady = true
         liveSrTensorRotatedNative = rotatedNative
+        liveSrOptimizedTensor = false
         offlineEvalActive = false
         showLiveSrOutput()
         findViewById<Button>(R.id.sr_button).text = "停止 Tensor Live"
@@ -615,6 +647,10 @@ class MainActivity : AppCompatActivity() {
             statusTextView.text = "Tensor-ready live ROI SR starting with QNN/QUICKSR_W8A8 ($pathLabel)..."
         }
         Log.d("RB5_SR_TENSOR", "auto tensor-ready live SR from intent backend=QNN model=QUICKSR_W8A8 tensorPath=${if (rotatedNative) "rotatedNative" else "kotlinRotate"}")
+    }
+
+    private fun shouldUseOptimizedTensorLivePath(): Boolean {
+        return srBackend == SrBackend.QNN && srModelVariant == SrModelVariant.QUICKSR_W8A8
     }
 
     private fun tileButtonText(): String = "整图 Tile (${tileModelVariant.label})"
@@ -654,8 +690,11 @@ class MainActivity : AppCompatActivity() {
                     modelAsset = fixedVariant.assetName,
                     backend = SrBackend.QNN,
                 )
+                var profileSummary = "profile=not_collected"
                 val (qnnBitmap, timing) = try {
-                    qnnResolver.enhance(modelInput)
+                    val result = qnnResolver.enhance(modelInput)
+                    profileSummary = qnnResolver.qnnProfilingSummary()
+                    result
                 } finally {
                     qnnResolver.close()
                 }
@@ -679,13 +718,14 @@ class MainActivity : AppCompatActivity() {
                         e2eMs = timing.totalMs,
                     )
                 }
-                Log.d("RB5_QNN", "fixed sample QNN Delegate OK model=${fixedVariant.label} asset=$fixedAsset pre=${timing.preprocessMs} inf=${timing.inferenceMs} post=${timing.postprocessMs} total=${timing.totalMs} saved=${saved.joinToString()}")
+                Log.d("RB5_QNN", "fixed sample QNN Delegate OK model=${fixedVariant.label} asset=$fixedAsset pre=${timing.preprocessMs} inf=${timing.inferenceMs} post=${timing.postprocessMs} total=${timing.totalMs} $profileSummary saved=${saved.joinToString()}")
                 runOnUiThread {
                     offlineEvalActive = false
                     srResultView.setImageBitmap(qnnBitmap)
                     statusTextView.text =
                         "QNN fixed sample OK (${fixedVariant.label}, $fixedAsset)\n" +
                             "pre ${timing.preprocessMs} ms | inference ${timing.inferenceMs} ms | post ${timing.postprocessMs} ms | total ${timing.totalMs} ms\n" +
+                            "$profileSummary\n" +
                             saved.joinToString("\n")
                     Toast.makeText(this, "QNN 固定样张已保存", Toast.LENGTH_LONG).show()
                 }
@@ -989,6 +1029,8 @@ class MainActivity : AppCompatActivity() {
         offlineResolver = null
         liveOutputBitmap = null
         tensorLiveOutputBitmap = null
+        lastStrategyRgbBytes = null
+        liveSrOptimizedTensor = false
         cameraExecutor.execute { oldResolver?.close() }
         srExecutor.execute { oldOfflineResolver?.close() }
         Log.d("RB5_SR", "SR model switched to ${srModelVariant.label}")
@@ -1007,6 +1049,8 @@ class MainActivity : AppCompatActivity() {
         offlineResolver = null
         liveOutputBitmap = null
         tensorLiveOutputBitmap = null
+        lastStrategyRgbBytes = null
+        liveSrOptimizedTensor = false
         cameraExecutor.execute {
             oldResolver?.close()
         }
@@ -1251,32 +1295,42 @@ class MainActivity : AppCompatActivity() {
                 rgbBytes = bitmapToRgbBytes(rotated)
             }
             val nativeRgbMs = (System.nanoTime() - tRgbStart) / 1_000_000
+            val strategyShadow = computeStrategyShadow(rgbBytes)
             val tEnhanceStart = System.nanoTime()
             val (out, timing) = resolver!!.enhanceRgbBytesInto(rgbBytes, tensorLiveOutputBitmap)
             tensorLiveOutputBitmap = out
             val enhanceWallMs = (System.nanoTime() - tEnhanceStart) / 1_000_000
             val e2eMs = nativeRgbMs + timing.totalMs
             val analyzerWallMs = nativeRgbMs + enhanceWallMs
+            val profileSummary = if (frameCount % LIVE_SAMPLE_CAPTURE_INTERVAL == 0) {
+                resolver!!.qnnProfilingSummary()
+            } else {
+                ""
+            }
             Log.d(
                 tag,
                 "backend=QNN model=QUICKSR_W8A8 tensorLive crop=256->128->512 " +
                     "frame=${imageProxy.width}x${imageProxy.height} nativeRgb=$nativeRgbMs rotate=$degrees " +
                     "pre=${timing.preprocessMs} inf=${timing.inferenceMs} post=${timing.postprocessMs} " +
                     "enhanceWall=$enhanceWallMs analyzer=$analyzerWallMs e2e=${e2eMs}ms " +
-                    "tensorPath=${if (liveSrTensorRotatedNative) "rotatedNative" else "kotlinRotate"}"
+                    "tensorPath=${if (liveSrTensorRotatedNative) "rotatedNative" else "kotlinRotate"} optimizedTensor=$liveSrOptimizedTensor " +
+                    strategyShadow.toLogFields() +
+                    if (profileSummary.isNotEmpty()) " $profileSummary" else ""
             )
             runOnUiThread {
                 srResultView.setImageBitmap(out)
                 statusTextView.text =
-                    "Tensor-ready live ROI SR (QNN/QUICKSR_W8A8)\n" +
+                    "${if (liveSrOptimizedTensor) "Optimized" else "Tensor-ready"} live ROI SR (QNN/QUICKSR_W8A8)\n" +
                         "frame ${imageProxy.width}x${imageProxy.height} | ROI 128 | ${if (liveSrTensorRotatedNative) "native rotated" else "Kotlin rotated"}\n" +
                         "native RGB ${nativeRgbMs} ms | preprocess ${timing.preprocessMs} ms\n" +
+                        "shadow ${strategyShadow.decision} | Y ${"%.1f".format(Locale.US, strategyShadow.meanLuma)} | sharp ${"%.1f".format(Locale.US, strategyShadow.sharpness)}\n" +
                         "inference ${timing.inferenceMs} ms | postprocess ${timing.postprocessMs} ms\n" +
                         "end-to-end ~${e2eMs} ms"
             }
         } catch (e: Throwable) {
             Log.e(tag, "tensor-ready live SR failed", e)
             liveSrTensorReady = false
+            liveSrOptimizedTensor = false
             tensorLiveOutputBitmap = null
             runOnUiThread {
                 srResultView.visibility = View.GONE
@@ -2080,6 +2134,55 @@ class MainActivity : AppCompatActivity() {
         return rgb
     }
 
+    private fun computeStrategyShadow(rgb: ByteArray): StrategyShadow {
+        val side = LIVE_MODEL_INPUT_SIDE
+        val pixels = side * side
+        var lumaSum = 0.0
+        var gradSum = 0.0
+        var motionSum = 0L
+        val previous = lastStrategyRgbBytes
+        for (i in 0 until pixels) {
+            val base = i * 3
+            val r = rgb[base].toInt() and 0xFF
+            val g = rgb[base + 1].toInt() and 0xFF
+            val b = rgb[base + 2].toInt() and 0xFF
+            val y = 0.299 * r + 0.587 * g + 0.114 * b
+            lumaSum += y
+            if ((i + 1) % side != 0) {
+                val right = base + 3
+                val rr = rgb[right].toInt() and 0xFF
+                val rg = rgb[right + 1].toInt() and 0xFF
+                val rb = rgb[right + 2].toInt() and 0xFF
+                val ry = 0.299 * rr + 0.587 * rg + 0.114 * rb
+                gradSum += kotlin.math.abs(y - ry)
+            }
+            if (i < pixels - side) {
+                val down = base + side * 3
+                val dr = rgb[down].toInt() and 0xFF
+                val dg = rgb[down + 1].toInt() and 0xFF
+                val db = rgb[down + 2].toInt() and 0xFF
+                val dy = 0.299 * dr + 0.587 * dg + 0.114 * db
+                gradSum += kotlin.math.abs(y - dy)
+            }
+            if (previous != null && previous.size == rgb.size) {
+                motionSum += kotlin.math.abs(r - (previous[base].toInt() and 0xFF))
+                motionSum += kotlin.math.abs(g - (previous[base + 1].toInt() and 0xFF))
+                motionSum += kotlin.math.abs(b - (previous[base + 2].toInt() and 0xFF))
+            }
+        }
+        lastStrategyRgbBytes = rgb.copyOf()
+        val meanLuma = lumaSum / pixels
+        val sharpness = gradSum / (pixels * 2.0)
+        val motionMad = if (previous == null || previous.size != rgb.size) 0.0 else motionSum.toDouble() / (pixels * 3.0)
+        val decision = when {
+            meanLuma < 30.0 && sharpness < 5.0 -> "shadow_defer_lowlight_soft"
+            motionMad > 18.0 -> "shadow_consider_skip_motion"
+            sharpness > 18.0 -> "shadow_enhance_structure"
+            else -> "shadow_enhance_default"
+        }
+        return StrategyShadow(meanLuma, sharpness, motionMad, decision)
+    }
+
     private fun yuvToArgb(y: Int, u: Int, v: Int): Int {
         val yf = y.toFloat()
         val uf = u.toFloat() - 128f
@@ -2328,9 +2431,11 @@ class MainActivity : AppCompatActivity() {
         liveSr = false
         liveSrTensorReady = false
         liveSrTensorRotatedNative = false
+        liveSrOptimizedTensor = false
         offlineEvalActive = false
         liveOutputBitmap = null
         tensorLiveOutputBitmap = null
+        lastStrategyRgbBytes = null
         // Close the interpreter on the same single-thread executor so it cannot run
         // concurrently with an in-flight enhance() (closing during run() can crash).
         // Submitting before shutdown() queues it after any pending SR task (FIFO).

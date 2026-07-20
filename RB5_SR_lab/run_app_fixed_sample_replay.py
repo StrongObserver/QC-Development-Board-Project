@@ -24,7 +24,9 @@ REMOTE_PICTURES_DIR = "/sdcard/Pictures/RB5VisionLab"
 FIXED_RE = re.compile(
     r"fixed sample QNN Delegate OK model=(?P<model>\w+) asset=(?P<asset>\S+) "
     r"pre=(?P<pre_ms>\d+) inf=(?P<inf_ms>\d+) post=(?P<post_ms>\d+) "
-    r"total=(?P<total_ms>\d+) saved=(?P<saved>.*)"
+    r"total=(?P<total_ms>\d+) "
+    r"(?:profileBytes=(?P<profile_bytes>\d+) profileHex16=(?P<profile_hex16>[0-9a-fA-F]*) )?"
+    r"saved=(?P<saved>.*)"
 )
 
 
@@ -34,6 +36,13 @@ def run(cmd: list[str], *, check: bool = True, timeout: int | None = None) -> su
 
 def adb(*args: str, check: bool = True, timeout: int | None = None) -> subprocess.CompletedProcess[str]:
     return run(["adb", "-s", DEVICE_SERIAL, *args], check=check, timeout=timeout)
+
+
+def prepare_device_interactive() -> None:
+    adb("shell", "input", "keyevent", "KEYCODE_WAKEUP", check=False)
+    adb("shell", "wm", "dismiss-keyguard", check=False)
+    adb("shell", "cmd", "statusbar", "collapse", check=False)
+    time.sleep(0.3)
 
 
 def write_csv(path: Path, rows: list[dict[str, object]]) -> None:
@@ -67,6 +76,8 @@ def parse_fixed_rows(log_text: str) -> list[dict[str, object]]:
                 "inf_ms": int(values["inf_ms"]),
                 "post_ms": int(values["post_ms"]),
                 "total_ms": int(values["total_ms"]),
+                "profile_bytes": int(values["profile_bytes"]) if values.get("profile_bytes") else "",
+                "profile_hex16": values.get("profile_hex16") or "",
                 "saved_paths": "|".join(saved_paths),
                 "raw_log_prefix": line[:18],
             }
@@ -75,8 +86,10 @@ def parse_fixed_rows(log_text: str) -> list[dict[str, object]]:
 
 
 def collect_fixed_sample(asset: str, model: str, timeout_s: int) -> tuple[str, list[dict[str, object]]]:
+    prepare_device_interactive()
     adb("shell", "am", "force-stop", PACKAGE_NAME, check=False)
     adb("logcat", "-c", check=False)
+    prepare_device_interactive()
     started = adb(
         "shell",
         "am",
@@ -184,15 +197,16 @@ def write_summary(out_dir: Path, run_id: str, rows: list[dict[str, object]], pul
         f"- run_id: `{run_id}`",
         f"- cases: {len(rows)}",
         f"- pulled images: {len(pulled_rows)}",
+        f"- max profile bytes: {max((int(row.get('profile_bytes') or 0) for row in rows), default=0)}",
         "- boundary: Android app fixed-sample replay evidence, not live camera visual quality",
         "",
         "## Timing",
         "",
-        "| asset | model | pre ms | inf ms | post ms | total ms |",
-        "| --- | --- | ---: | ---: | ---: | ---: |",
+        "| asset | model | pre ms | inf ms | post ms | total ms | profile bytes |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in rows:
-        lines.append(f"| `{row['asset']}` | `{row['model']}` | {row['pre_ms']} | {row['inf_ms']} | {row['post_ms']} | {row['total_ms']} |")
+        lines.append(f"| `{row['asset']}` | `{row['model']}` | {row['pre_ms']} | {row['inf_ms']} | {row['post_ms']} | {row['total_ms']} | {row.get('profile_bytes', '')} |")
     lines.extend(
         [
             "",
@@ -286,6 +300,7 @@ def main() -> None:
                 "pulled_images": len(pulled_rows),
                 "contact_sheet": contact_sheet,
                 "status": "app_fixed_sample_replay_collected" if all_rows else "environment_blocked",
+                "max_profile_bytes": max((int(row.get("profile_bytes") or 0) for row in all_rows), default=0),
             }
         ],
     )
@@ -301,6 +316,8 @@ def main() -> None:
                 "requires_human_review": bool(all_rows),
                 "cases": len(all_rows),
                 "pulled_images": len(pulled_rows),
+                "max_profile_bytes": max((int(row.get("profile_bytes") or 0) for row in all_rows), default=0),
+                "boundary": "QNN Delegate profile buffer presence confirms app-side profiling API access; format is raw delegate bytes and is not yet per-op decoded.",
             },
             ensure_ascii=False,
             indent=2,
