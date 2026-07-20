@@ -347,7 +347,10 @@ Recommended order:
    Further zero-copy work must target CameraX/native data-path integration, not
    another small shared tensor probe.
 4. Keep AIMET and mixed precision behind the candidate-crop/toolchain boundary:
-   trigger exists, but native Windows AIMET execution is blocked.
+   trigger exists; Win11 check found no matching `aimet-onnx` distribution for
+   the current Python 3.12 environment, and PyPI's latest aimet-onnx wheel is
+   Linux manylinux. AIMET-Torch remains a separate possibility only if a PyTorch
+   FP source model path is confirmed.
 5. Keep LPIPS/NIQE/OCR diagnostic-only unless calibrated against visual review.
 6. Human-review the low-cost MP4 for framing/readability before treating it as
    a showcase artifact.

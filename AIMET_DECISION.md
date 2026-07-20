@@ -83,6 +83,47 @@ Start AIMET feasibility validation if one of these is true:
    the blocking issue.
 ```
 
+## Windows Feasibility Check
+
+2026-07-20 recheck on the current Win11 host:
+
+```text
+RB5_SR_lab\.venv-eval\Scripts\python.exe --version
+Python 3.12.10
+
+RB5_SR_lab\.venv-eval\Scripts\python.exe -m pip index versions aimet-onnx
+ERROR: No matching distribution found for aimet-onnx
+
+PyPI aimet-onnx 2.35.1 file:
+aimet_onnx-2.35.1-cp310-abi3-manylinux_2_34_x86_64.whl
+
+RB5_SR_lab\.venv-eval\Scripts\python.exe -m pip install --dry-run aimet-torch==2.35.1
+Would install aimet-torch-2.35.1
+```
+
+Interpretation:
+
+```text
+Native Windows is not a supported path for the ONNX AIMET package needed for a
+TFLite/ONNX-style PTQ flow: the available aimet-onnx wheel is Linux manylinux,
+and pip finds no matching Windows distribution in the current Python 3.12
+environment.
+
+aimet-torch being visible to pip is not enough to start the current deployment
+flow, because the Android model path is TFLite/QNN and the project currently
+needs a quantization-recovery workflow around the FP/ONNX or export pipeline.
+Use aimet-torch only if a PyTorch FP source model and export path are confirmed.
+```
+
+Current action:
+
+```text
+Keep AIMET-CLE as blocked_needs_user for the current Windows-only environment.
+Next valid step is one of:
+1. provide WSL/Linux or another supported AIMET environment for aimet-onnx; or
+2. confirm a PyTorch FP source model path and then assess aimet-torch separately.
+```
+
 ## If AIMET Starts Later
 
 Use the lightest path first:
