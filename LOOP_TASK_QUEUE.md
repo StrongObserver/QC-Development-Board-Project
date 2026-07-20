@@ -84,9 +84,9 @@ through `adb screenrecord` on the live ROI UI; it is not a true VideoCapture SR
 pipeline.
 
 The current loop can stop under exit condition 2/3: remaining progress needs
-either user/toolchain input (AIMET on WSL/Linux or supported environment),
-human visual review (low-cost MP4 framing/readability), or a new larger scoped
-CameraX/native data-path integration experiment.
+either user/toolchain input (AIMET on WSL/Linux or supported environment), a new
+larger scoped CameraX/native data-path integration experiment, or an explicit
+product decision to build a full CameraX VideoCapture/Recorder route.
 
 Current evidence to preserve:
 
@@ -192,9 +192,10 @@ evidence.
 
 Current source-control task:
 The app e2e schema export, UINT8 output bulk-copy, every-N ImageAnalysis smoke,
-shared-memory feasibility classification, and related handoff updates have been
-reviewed, verified, and split into logical commits. Keep generated evidence
-under `RB5_SR_lab\results` and `evalhub_data` out of git.
+shared-memory feasibility classification, Demo Mode relation fix, app fixed
+replay, AIMET feasibility evidence, and related handoff updates have been
+reviewed, verified, pushed, and sealed. Keep generated evidence under
+`RB5_SR_lab\results` and `evalhub_data` out of git.
 ```
 
 2026-07-20 app e2e / output-path follow-up:

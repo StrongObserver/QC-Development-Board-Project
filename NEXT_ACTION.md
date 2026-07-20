@@ -4,8 +4,9 @@
 
 Current checkpoint has advanced beyond the previous closeout. The app e2e
 schema export, output-path optimization, every-N smoke, shared-memory feasibility
-classification, and related handoff updates have been reviewed, verified, and
-split into logical commits on local `main`.
+classification, Demo Mode evidence, app fixed-sample replay, AIMET feasibility
+evidence, and relation-sheet orientation fix have been reviewed, verified,
+pushed, and sealed on `origin/main`.
 
 The stable deliverable is archived as:
 
@@ -46,13 +47,15 @@ Next priority:
 The project is past the clean archive checkpoint and has completed bounded
 exploration steps: QNN shared-memory Phase 0/1/2, AIMET trigger search,
 TextZoom OCR mini diagnostics, RealSR lifecycle mini review, and a Demo Mode
-live ROI screenrecord demo. Continue the loop with the remaining bounded lanes:
+live ROI screenrecord demo with accepted display-aligned relation evidence.
+Continue the loop only when one of the remaining bounded lanes is explicitly
+unblocked:
 1. AIMET/CLE can continue only after WSL/Linux or another supported AIMET
    toolchain is available.
-2. human review is needed -> watch the low-cost MP4 and decide whether the
-   framing/readability is acceptable as demo evidence.
-3. if continuing data-path engineering -> design a larger CameraX/native
+2. if continuing data-path engineering -> design a larger CameraX/native
    integration path; invoke-level shared-memory probing itself is complete.
+3. if continuing video/product work -> start a full CameraX VideoCapture/Recorder
+   route only after the product/demo need is explicit.
 ```
 
 Do not reopen as unfinished:
@@ -353,11 +356,11 @@ Recommended order:
    Linux manylinux. AIMET-Torch remains a separate possibility only if a PyTorch
    FP source model path is confirmed.
 5. Keep LPIPS/NIQE/OCR diagnostic-only unless calibrated against visual review.
-6. Human-review the low-cost MP4 for framing/readability before treating it as
-   a showcase artifact.
+6. Treat the Demo Mode MP4 and accepted relation sheet as demo evidence with the
+   documented boundary: screenrecorded live ROI UI, not full VideoCapture SR.
 7. Keep RealSR as lifecycle sanity until a reviewed real-camera robustness claim
    is needed.
 8. If continuing engineering without human review, either scope a larger
    CameraX/native data-path integration experiment or stop because the remaining
-   open items need WSL/Linux AIMET support or human visual review.
+   open items need WSL/Linux AIMET support or a new explicit product scope.
 ```
