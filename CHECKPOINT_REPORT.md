@@ -18,6 +18,7 @@ Local and remote state:
 ```text
 working tree should be clean after the latest push
 use `git log --oneline -n 10` for the current commit list
+stable rollback tag: rb5-stable-20260720
 ```
 
 ## What Is Proven
@@ -72,6 +73,13 @@ c43f013 docs(loop): close full-scope trigger gates
 be8c35d docs(report): add RB5 checkpoint report
 e3768c9 docs(showcase): add RB5 oral interview script
 b8f7664 docs(showcase): add final interview package
+```
+
+Rollback anchor:
+
+```text
+preferred: git revert later exploration commits, then keep main history linear
+last resort: reset main to rb5-stable-20260720 only after explicit approval
 ```
 
 ## Verification

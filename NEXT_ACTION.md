@@ -7,6 +7,14 @@ schema export, output-path optimization, every-N smoke, shared-memory feasibilit
 classification, and related handoff updates have been reviewed, verified, and
 split into logical commits on local `main`.
 
+The stable deliverable is archived as:
+
+```text
+rb5-stable-20260720
+```
+
+Future exploration should keep this tag as the rollback anchor.
+
 ```text
 real-camera capture support
 accepted real-camera showcase set
