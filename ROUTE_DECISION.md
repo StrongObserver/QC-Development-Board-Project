@@ -310,6 +310,47 @@ Do not start it unless the experiment has a concrete target beyond the current
 15/19ms default app e2e smoke and a rollback path back to Kotlin/TFLite.
 ```
 
+## Shared-Memory Phase 0 Result
+
+2026-07-20 follow-up:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_qnn_shared_memory_phase0
+```
+
+Result:
+
+```text
+status=pass
+stage=alloc_free
+inputBytes=49152
+outputBytes=786432
+inputPtr=non_null
+outputPtr=non_null
+inputAligned=true
+outputAligned=true
+alignment=64
+```
+
+Interpretation:
+
+```text
+The app process can dlopen libQnnTFLiteDelegate.so, resolve
+TfLiteQnnDelegateAllocCustomMem / TfLiteQnnDelegateFreeCustomMem, and allocate
+shared buffers sized for the current 128x128 input and 512x512 output tensors.
+This validates the next C++ probe step. It is still not tensor binding, not
+CameraX buffer binding, and not true zero-copy.
+```
+
+Next:
+
+```text
+Build a Phase 1 C++ TFLite Interpreter probe that loads the same TFLite asset,
+creates the QNN Delegate through the C API, binds input and/or output via
+SetCustomAllocationForTensor, calls AllocateTensors and ModifyGraphWithDelegate,
+then compares output validity and timing against the Kotlin/TFLite default path.
+```
+
 ## Short Sustained Run Result
 
 P4 short sustained validation is complete:

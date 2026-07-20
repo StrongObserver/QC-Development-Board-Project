@@ -3,6 +3,7 @@
 #include <dlfcn.h>
 #include <vector>
 #include <algorithm>
+#include <cstdint>
 #include <android/log.h>
 #include <opencv2/core.hpp>
 
@@ -44,6 +45,73 @@ std::string checkLibrary(const char* library_name, const char* required_symbol) 
         }
     }
     dlclose(handle);
+    return result;
+}
+
+using QnnDelegateAllocCustomMemFn = void* (*)(size_t, size_t);
+using QnnDelegateFreeCustomMemFn = void (*)(void*);
+
+std::string qnnDelegateSharedMemoryProbe(size_t input_bytes, size_t output_bytes) {
+    constexpr size_t kTfLiteDefaultTensorAlignment = 64;
+    dlerror();
+    void* handle = dlopen("libQnnTFLiteDelegate.so", RTLD_NOW | RTLD_LOCAL);
+    const char* open_error = dlerror();
+    if (handle == nullptr) {
+        std::string result = "status=blocked stage=dlopen library=libQnnTFLiteDelegate.so";
+        if (open_error != nullptr) {
+            result += " error=";
+            result += open_error;
+        }
+        return result;
+    }
+
+    auto alloc_fn = reinterpret_cast<QnnDelegateAllocCustomMemFn>(
+            dlsym(handle, "TfLiteQnnDelegateAllocCustomMem"));
+    const char* alloc_error = dlerror();
+    auto free_fn = reinterpret_cast<QnnDelegateFreeCustomMemFn>(
+            dlsym(handle, "TfLiteQnnDelegateFreeCustomMem"));
+    const char* free_error = dlerror();
+    if (alloc_fn == nullptr || free_fn == nullptr) {
+        std::string result = "status=blocked stage=dlsym";
+        if (alloc_error != nullptr) {
+            result += " alloc_error=";
+            result += alloc_error;
+        }
+        if (free_error != nullptr) {
+            result += " free_error=";
+            result += free_error;
+        }
+        dlclose(handle);
+        return result;
+    }
+
+    void* input_ptr = alloc_fn(input_bytes, kTfLiteDefaultTensorAlignment);
+    void* output_ptr = alloc_fn(output_bytes, kTfLiteDefaultTensorAlignment);
+    const bool input_aligned =
+            reinterpret_cast<uintptr_t>(input_ptr) % kTfLiteDefaultTensorAlignment == 0;
+    const bool output_aligned =
+            reinterpret_cast<uintptr_t>(output_ptr) % kTfLiteDefaultTensorAlignment == 0;
+    if (input_ptr != nullptr) {
+        free_fn(input_ptr);
+    }
+    if (output_ptr != nullptr) {
+        free_fn(output_ptr);
+    }
+    dlclose(handle);
+
+    char result[512];
+    snprintf(result, sizeof(result),
+             "status=%s stage=alloc_free inputBytes=%zu outputBytes=%zu inputPtr=%s outputPtr=%s "
+             "inputAligned=%s outputAligned=%s alignment=%zu",
+             (input_ptr != nullptr && output_ptr != nullptr && input_aligned && output_aligned)
+                     ? "pass" : "blocked",
+             input_bytes,
+             output_bytes,
+             input_ptr != nullptr ? "non_null" : "null",
+             output_ptr != nullptr ? "non_null" : "null",
+             input_aligned ? "true" : "false",
+             output_aligned ? "true" : "false",
+             kTfLiteDefaultTensorAlignment);
     return result;
 }
 
@@ -96,6 +164,23 @@ Java_com_cyf_rb5visionlab_MainActivity_qnnRuntimePreflight(JNIEnv* env, jobject 
     message = std::string(all_loaded ? "QNN preflight OK" : "QNN preflight blocked") + message.substr(13);
     LOGD("%s", message.c_str());
     return env->NewStringUTF(message.c_str());
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_com_cyf_rb5visionlab_MainActivity_qnnSharedMemoryProbe(
+        JNIEnv* env,
+        jobject /* thiz */,
+        jint input_bytes,
+        jint output_bytes) {
+    if (input_bytes <= 0 || output_bytes <= 0) {
+        return env->NewStringUTF("status=blocked stage=argument error=non_positive_tensor_bytes");
+    }
+    const std::string result = qnnDelegateSharedMemoryProbe(
+            static_cast<size_t>(input_bytes),
+            static_cast<size_t>(output_bytes));
+    LOGD("qnnSharedMemoryProbe %s", result.c_str());
+    return env->NewStringUTF(result.c_str());
 }
 
 extern "C"
