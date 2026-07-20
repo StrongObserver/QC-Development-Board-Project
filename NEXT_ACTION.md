@@ -35,6 +35,7 @@ TextZoom OCR mini diagnostic
 RealSR 10-case lifecycle mini review
 Demo Mode live ROI screenrecord demo
 Demo Mode wide-preview / model-input / SR-output relation evidence
+App fixed-sample replay evidence
 ```
 
 ## Highest Priority
@@ -317,6 +318,17 @@ relation sheet: wide preview display / model input 128 / QNN SR output 512
 purpose: explains why the demo main visual uses a clear wide preview while
 QNN/SR still runs on the 128 input and reports real timing.
 boundary: this is explanatory evidence, not a new quality benchmark.
+```
+
+App fixed-sample replay:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_fixed_replay_quicksr_3assets
+assets: offline_text_edge_128.png, case_text_signage_urban076.png, case_people_scene_div2k0832.png
+model/backend: QUICKSR_W8A8 through Android app QNN TFLite Delegate / HTP
+outputs: 9 pulled images plus contact_sheet.png
+timing: total 17 / 18 / 17 ms; QNN inference 3 / 3 / 3 ms
+boundary: fixed app replay evidence, not live camera visual quality.
 ```
 
 ## Next Engineering Choices

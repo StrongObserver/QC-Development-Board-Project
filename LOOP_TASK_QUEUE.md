@@ -123,6 +123,9 @@ C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_demo_mode_wi
 
 Demo Mode relation evidence:
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_demo_relation_smoke\demo_relation
+
+App fixed-sample replay:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_fixed_replay_quicksr_3assets
 ```
 
 Current route boundaries:
@@ -158,6 +161,9 @@ Current route boundaries:
    bar. The relation sheet preserves wide preview / 128 input / 512 SR output
    evidence so the display boundary is explainable. It still does not prove
    temporal consistency or true per-frame video SR.
+9. App fixed-sample replay is now a small regression layer: it runs fixed assets
+   through the Android QNN path, pulls input/baseline/SR outputs, and writes an
+   app_e2e row. It supports repeatability but is not live-camera quality proof.
 ```
 
 Power/perf-watt:
