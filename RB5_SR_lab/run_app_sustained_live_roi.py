@@ -11,8 +11,20 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from app_e2e_export import (
+    first_last_temperature_c,
+    git_commit_label,
+    last_temperature_c,
+    mirror_app_e2e_log,
+    model_name,
+    model_variant,
+    stage_value,
+    write_app_e2e_log,
+)
+
 
 RESULTS_ROOT = Path(r"C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results")
+REPO_ROOT = Path(__file__).resolve().parents[1]
 DEVICE_SERIAL = "ff5d3ab4"
 APP_COMPONENT = "com.cyf.rb5visionlab/.MainActivity"
 PACKAGE_NAME = "com.cyf.rb5visionlab"
@@ -116,6 +128,7 @@ def stage_summary(run_id: str, model: str, rows: list[dict[str, object]], fracti
     summary: list[dict[str, object]] = []
     for key, label in [
         ("frame_bitmap_ms", "frameBitmap"),
+        ("pre_ms", "pre"),
         ("inf_ms", "inf"),
         ("post_ms", "post"),
         ("analyzer_ms", "analyzer"),
@@ -203,9 +216,9 @@ def make_loop_state(run_id: str, out_dir: Path, rows: list[dict[str, object]], d
         "schema_version": 1,
         "run_id": run_id,
         "output_dir": str(out_dir),
-        "status": "ready_for_postprocess_optimization" if passed else "environment_blocked",
+        "status": "sustained_live_roi_validated" if passed else "environment_blocked",
         "stop_reason": "sustained_live_roi_collected" if passed else "too_few_live_roi_frames",
-        "next_priority_task": "P5 optimize postprocess/output bitmap path"
+        "next_priority_task": "Use this as sustained app e2e evidence; do not reopen output postprocess unless a regression appears."
         if passed
         else "rerun sustained live ROI with stable camera/app state",
         "duration_s": duration_s,
@@ -223,6 +236,8 @@ def write_summary(
     metrics: list[dict[str, object]],
     thermal_rows: list[dict[str, object]],
     loop_state: dict[str, object],
+    app_e2e_path: Path,
+    app_e2e_mirror: Path,
 ) -> None:
     def find(segment: str, stage: str, field: str) -> str:
         for row in metrics:
@@ -248,13 +263,14 @@ def write_summary(
         "- backend: QNN TFLite Delegate / HTP",
         "- boundary: battery temperature is a coarse system signal, not a full power measurement",
         f"- loop_status: `{loop_state['status']}`",
+        f"- next_priority_task: `{loop_state['next_priority_task']}`",
         "",
         "## Timing Drift",
         "",
         "| stage | first 20% p50/p95 ms | last 20% p50/p95 ms |",
         "| --- | ---: | ---: |",
     ]
-    for stage in ["frameBitmap", "inf", "post", "analyzer", "e2e"]:
+    for stage in ["frameBitmap", "pre", "inf", "post", "analyzer", "e2e"]:
         lines.append(
             f"| `{stage}` | {find('0_20', stage, 'p50_ms')} / {find('0_20', stage, 'p95_ms')} | "
             f"{find('80_100', stage, 'p50_ms')} / {find('80_100', stage, 'p95_ms')} |"
@@ -271,6 +287,8 @@ def write_summary(
             "",
             f"- per-frame timings: `{out_dir / 'frame_metrics.csv'}`",
             f"- stage metrics: `{out_dir / 'metrics.csv'}`",
+            f"- EvalHub app e2e row: `{app_e2e_path}`",
+            f"- EvalHub ignored mirror: `{app_e2e_mirror}`",
             f"- thermal snapshots: `{out_dir / 'thermal_metrics.csv'}`",
             f"- raw logcat: `{out_dir / 'raw_logcat.txt'}`",
             f"- loop state: `{out_dir / 'loop_state.json'}`",
@@ -307,12 +325,13 @@ def main() -> None:
     write_csv(out_dir / "frame_metrics.csv", rows)
     write_csv(out_dir / "metrics.csv", metrics)
     write_csv(out_dir / "thermal_metrics.csv", thermal_rows)
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M +0800")
     write_csv(
         out_dir / "run_log.csv",
         [
             {
                 "run_id": run_id,
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M +0800"),
+                "timestamp": timestamp,
                 "model": args.model,
                 "backend": "QNN",
                 "duration_s": args.duration_s,
@@ -323,14 +342,66 @@ def main() -> None:
             }
         ],
     )
-    (out_dir / "loop_state.json").write_text(json.dumps(loop_state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (out_dir / "loop_state.json").write_text(json.dumps(loop_state, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")
     (out_dir / "NEXT_ACTION.md").write_text(
         "# Next Action\n\n"
         f"- status: `{loop_state['status']}`\n"
         f"- next_priority_task: `{loop_state['next_priority_task']}`\n",
         encoding="utf-8",
     )
-    write_summary(out_dir, run_id, args.model, args.duration_s, rows, metrics, thermal_rows, loop_state)
+    all_segment_metrics = [row for row in metrics if row.get("segment") == "0_100"]
+    last_segment_metrics = [row for row in metrics if row.get("segment") == "80_100"]
+    temp_trend = first_last_temperature_c(thermal_rows)
+    app_e2e_path = out_dir / "app_e2e_log.csv"
+    write_app_e2e_log(
+        app_e2e_path,
+        {
+            "run_id": run_id,
+            "timestamp": timestamp,
+            "device": "RB5 Gen2 QCS8550",
+            "android_version": "Android 13",
+            "app_commit": git_commit_label(REPO_ROOT),
+            "model_name": model_name(args.model),
+            "model_variant": model_variant(args.model),
+            "backend": "QNN TFLite Delegate / HTP",
+            "input_source": "camera_roi_live_sustained",
+            "input_size": "128x128",
+            "output_size": "512x512",
+            "preprocess_ms": stage_value(all_segment_metrics, "pre", "p50_ms"),
+            "inference_ms": stage_value(all_segment_metrics, "inf", "p50_ms"),
+            "postprocess_ms": stage_value(all_segment_metrics, "post", "p50_ms"),
+            "e2e_ms": stage_value(all_segment_metrics, "e2e", "p50_ms"),
+            "steady_state_window": f"{args.duration_s}s run; all frames and last 20% tracked",
+            "p50_e2e_ms": stage_value(all_segment_metrics, "e2e", "p50_ms"),
+            "p95_e2e_ms": stage_value(all_segment_metrics, "e2e", "p95_ms"),
+            "npu_or_dsp_note": "QNN Delegate configured for HTP backend; sustained run uses app logcat timings",
+            "skin_temp_c": last_temperature_c(thermal_rows),
+            "thermal_status": "coarse_battery_temperature_only",
+            "fallback_code": "none" if loop_state["status"] != "environment_blocked" else "too_few_frames",
+            "failure_code": "none" if loop_state["status"] != "environment_blocked" else "too_few_frames",
+            "human_decision": "not_reviewed",
+            "notes": (
+                "Sustained app live ROI e2e row. Last-20% e2e p50/p95="
+                f"{stage_value(last_segment_metrics, 'e2e', 'p50_ms')}/"
+                f"{stage_value(last_segment_metrics, 'e2e', 'p95_ms')} ms. "
+                f"Battery temperature trend={temp_trend or 'n/a'} C. "
+                "Temperature is coarse battery signal, not external thermal instrumentation."
+            ),
+        },
+    )
+    app_e2e_mirror = mirror_app_e2e_log(REPO_ROOT, run_id, app_e2e_path)
+    write_summary(
+        out_dir,
+        run_id,
+        args.model,
+        args.duration_s,
+        rows,
+        metrics,
+        thermal_rows,
+        loop_state,
+        app_e2e_path,
+        app_e2e_mirror,
+    )
     print(f"[ok] wrote {out_dir}")
 
 
