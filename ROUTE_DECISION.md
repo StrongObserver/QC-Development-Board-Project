@@ -376,6 +376,9 @@ inputBound=true
 outputBound=true
 inputTensorBytes=49152
 outputTensorBytes=786432
+50-run timing follow-up:
+delegate prepare: 375,619 us
+invoke avg/min/max: 1,051 / 1,010 / 1,436 us
 ```
 
 Interpretation:
@@ -386,8 +389,10 @@ to QNN Delegate shared-memory allocations, delegate the graph to QNN, and invoke
 the model successfully. This is a real step beyond alloc/free.
 
 It is still not CameraX buffer binding and not true zero-copy for the full app
-pipeline. The next useful question is timing and output comparison against the
-current Kotlin/TFLite path.
+pipeline. The 50-run invoke timing is close to the current Kotlin path's QNN
+inference slice, while delegate prepare remains a visible cold cost. The next
+useful question is whether this C API path can reduce total app e2e once
+CameraX/ROI/output display costs are included.
 ```
 
 ## Short Sustained Run Result

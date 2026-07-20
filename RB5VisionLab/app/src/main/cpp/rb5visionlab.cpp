@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <numeric>
+#include <chrono>
 #include <android/log.h>
 #include <android/asset_manager.h>
 #include <android/asset_manager_jni.h>
@@ -193,7 +194,8 @@ std::string qnnDelegateSharedTensorProbe(
         JNIEnv* env,
         jobject asset_manager,
         const char* model_asset,
-        intptr_t delegate_handle) {
+        intptr_t delegate_handle,
+        int repeats) {
     constexpr size_t kTfLiteDefaultTensorAlignment = 64;
     constexpr size_t kInputBytes = 128 * 128 * 3;
     constexpr size_t kOutputBytes = 512 * 512 * 3;
@@ -294,14 +296,29 @@ std::string qnnDelegateSharedTensorProbe(
     const bool output_bound = output_tensor != nullptr && tensor_data(output_tensor) == output_ptr;
     const size_t input_tensor_bytes = input_tensor != nullptr ? tensor_byte_size(input_tensor) : 0;
     const size_t output_tensor_bytes = output_tensor != nullptr ? tensor_byte_size(output_tensor) : 0;
+    const auto delegate_start = std::chrono::steady_clock::now();
     const TfLiteStatus delegate_status =
             modify_graph(interpreter, reinterpret_cast<TfLiteOpaqueDelegate*>(delegate_handle));
+    const auto delegate_end = std::chrono::steady_clock::now();
 
     uint8_t* input_bytes = reinterpret_cast<uint8_t*>(input_ptr);
     for (size_t i = 0; i < kInputBytes; ++i) {
         input_bytes[i] = static_cast<uint8_t>((i * 17 + 31) & 0xFF);
     }
-    const TfLiteStatus invoke_status = delegate_status == 0 ? invoke(interpreter) : delegate_status;
+    int invoke_status = delegate_status;
+    std::vector<int64_t> invoke_times_us;
+    if (delegate_status == 0) {
+        for (int i = 0; i < repeats; ++i) {
+            const auto invoke_start = std::chrono::steady_clock::now();
+            invoke_status = invoke(interpreter);
+            const auto invoke_end = std::chrono::steady_clock::now();
+            invoke_times_us.push_back(std::chrono::duration_cast<std::chrono::microseconds>(
+                    invoke_end - invoke_start).count());
+            if (invoke_status != 0) {
+                break;
+            }
+        }
+    }
     const uint8_t* output_bytes = reinterpret_cast<const uint8_t*>(output_ptr);
     uint32_t checksum = 0;
     uint8_t min_value = 255;
@@ -313,21 +330,35 @@ std::string qnnDelegateSharedTensorProbe(
         max_value = std::max(max_value, value);
     }
 
+    const bool passed = input_alloc_status == 0 && output_alloc_status == 0 &&
+                        allocate_status == 0 && delegate_status == 0 && invoke_status == 0 &&
+                        input_bound && output_bound &&
+                        input_tensor_bytes <= kInputBytes && output_tensor_bytes <= kOutputBytes;
+    const int64_t delegate_us = std::chrono::duration_cast<std::chrono::microseconds>(
+            delegate_end - delegate_start).count();
+    const int64_t invoke_min_us = invoke_times_us.empty()
+            ? -1
+            : *std::min_element(invoke_times_us.begin(), invoke_times_us.end());
+    const int64_t invoke_max_us = invoke_times_us.empty()
+            ? -1
+            : *std::max_element(invoke_times_us.begin(), invoke_times_us.end());
+    const int64_t invoke_avg_us = invoke_times_us.empty()
+            ? -1
+            : std::accumulate(invoke_times_us.begin(), invoke_times_us.end(), int64_t{0}) /
+                    static_cast<int64_t>(invoke_times_us.size());
+
     interpreter_delete(interpreter);
     model_delete(model);
     free_mem(input_ptr);
     free_mem(output_ptr);
 
-    const bool passed = input_alloc_status == 0 && output_alloc_status == 0 &&
-                        allocate_status == 0 && delegate_status == 0 && invoke_status == 0 &&
-                        input_bound && output_bound &&
-                        input_tensor_bytes <= kInputBytes && output_tensor_bytes <= kOutputBytes;
     char result[768];
     snprintf(result, sizeof(result),
              "status=%s stage=tensor_bind_invoke modelBytes=%zu inputIndex=%d outputIndex=%d "
              "inputAlloc=%d outputAlloc=%d allocate=%d delegate=%d invoke=%d "
              "inputBound=%s outputBound=%s inputTensorBytes=%zu outputTensorBytes=%zu "
-             "checksum=%u sampledMin=%u sampledMax=%u",
+             "checksum=%u sampledMin=%u sampledMax=%u repeats=%d completedRuns=%zu "
+             "delegateUs=%lld invokeAvgUs=%lld invokeMinUs=%lld invokeMaxUs=%lld",
              passed ? "pass" : "blocked",
              model_bytes.size(),
              input_tensor_index,
@@ -343,7 +374,13 @@ std::string qnnDelegateSharedTensorProbe(
              output_tensor_bytes,
              checksum,
              static_cast<unsigned int>(min_value),
-             static_cast<unsigned int>(max_value));
+             static_cast<unsigned int>(max_value),
+             repeats,
+             invoke_times_us.size(),
+             static_cast<long long>(delegate_us),
+             static_cast<long long>(invoke_avg_us),
+             static_cast<long long>(invoke_min_us),
+             static_cast<long long>(invoke_max_us));
     return result;
 }
 
@@ -422,7 +459,8 @@ Java_com_cyf_rb5visionlab_MainActivity_qnnSharedMemoryTensorProbe(
         jobject /* thiz */,
         jobject asset_manager,
         jstring model_asset,
-        jlong delegate_handle) {
+        jlong delegate_handle,
+        jint repeats) {
     if (asset_manager == nullptr || model_asset == nullptr || delegate_handle == 0) {
         return env->NewStringUTF("status=blocked stage=argument error=null_input");
     }
@@ -434,7 +472,8 @@ Java_com_cyf_rb5visionlab_MainActivity_qnnSharedMemoryTensorProbe(
             env,
             asset_manager,
             model_asset_chars,
-            static_cast<intptr_t>(delegate_handle));
+            static_cast<intptr_t>(delegate_handle),
+            std::max(1, static_cast<int>(repeats)));
     env->ReleaseStringUTFChars(model_asset, model_asset_chars);
     LOGD("qnnSharedMemoryTensorProbe %s", result.c_str());
     return env->NewStringUTF(result.c_str());

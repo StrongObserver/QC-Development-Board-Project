@@ -182,7 +182,7 @@ class MainActivity : AppCompatActivity() {
     external fun stringFromJNI(): String
     external fun qnnRuntimePreflight(): String
     external fun qnnSharedMemoryProbe(inputBytes: Int, outputBytes: Int): String
-    external fun qnnSharedMemoryTensorProbe(assetManager: AssetManager, modelAsset: String, delegateHandle: Long): String
+    external fun qnnSharedMemoryTensorProbe(assetManager: AssetManager, modelAsset: String, delegateHandle: Long, repeats: Int): String
     external fun processYPlane(yData: ByteArray, width: Int, height: Int, rowStride: Int): String
     external fun nativeYuvToRgbRoi(
         yData: ByteArray,
@@ -580,6 +580,7 @@ class MainActivity : AppCompatActivity() {
     private fun runQnnSharedMemoryTensorProbeOnWorker() {
         val tag = "RB5_QNN_SHARED"
         val modelAsset = SrModelVariant.QUICKSR_W8A8.assetName
+        val repeats = intIntentExtra("shared_tensor_repeats", 20).coerceAtLeast(1)
         runOnUiThread {
             offlineEvalActive = true
             statusTextView.text = "QNN shared-memory tensor probe running..."
@@ -587,7 +588,7 @@ class MainActivity : AppCompatActivity() {
         var delegate: QnnDelegate? = null
         try {
             delegate = createQnnDelegateForProbe()
-            val result = qnnSharedMemoryTensorProbe(assets, modelAsset, delegate.getNativeHandle())
+            val result = qnnSharedMemoryTensorProbe(assets, modelAsset, delegate.getNativeHandle(), repeats)
             Log.d(tag, "tensor probe result $result")
             runOnUiThread {
                 offlineEvalActive = false

@@ -96,7 +96,7 @@ def make_loop_state(run_id: str, out_dir: Path, row: dict[str, object], phase: s
     }
 
 
-def collect_probe_log(timeout_s: int, phase: str) -> str:
+def collect_probe_log(timeout_s: int, phase: str, repeats: int) -> str:
     adb("shell", "am", "force-stop", PACKAGE_NAME, check=False)
     adb("logcat", "-c")
     started = adb(
@@ -108,6 +108,9 @@ def collect_probe_log(timeout_s: int, phase: str) -> str:
         "--ez",
         "run_qnn_shared_tensor_probe" if phase == "phase1" else "run_qnn_shared_memory_probe",
         "true",
+        "--ei",
+        "shared_tensor_repeats",
+        str(repeats),
         check=False,
     )
     if started.returncode != 0:
@@ -172,6 +175,12 @@ def write_summary(out_dir: Path, run_id: str, row: dict[str, object], loop_state
         "checksum",
         "sampledMin",
         "sampledMax",
+        "repeats",
+        "completedRuns",
+        "delegateUs",
+        "invokeAvgUs",
+        "invokeMinUs",
+        "invokeMaxUs",
     ]
     for key in keys:
         if key not in row:
@@ -198,6 +207,7 @@ def write_summary(out_dir: Path, run_id: str, row: dict[str, object], loop_state
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--phase", choices=["phase0", "phase1"], default="phase0")
+    parser.add_argument("--repeats", type=int, default=20)
     parser.add_argument("--run-id", default="")
     parser.add_argument("--timeout-s", type=int, default=20)
     return parser.parse_args()
@@ -213,7 +223,7 @@ def main() -> None:
     if expected not in devices:
         raise SystemExit(f"[blocked] {expected} not found")
 
-    log_text = collect_probe_log(args.timeout_s, args.phase)
+    log_text = collect_probe_log(args.timeout_s, args.phase, max(1, args.repeats))
     row = parse_probe_result(log_text)
     loop_state = make_loop_state(run_id, out_dir, row, args.phase)
     (out_dir / "raw_logcat.txt").write_text(log_text, encoding="utf-8")

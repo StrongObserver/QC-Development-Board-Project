@@ -224,11 +224,13 @@ Shared-memory Phase 1:
 
 ```text
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_qnn_shared_memory_phase1
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_qnn_shared_memory_phase1_timing
 status: shared_memory_tensor_bind_validated
 inputBound: true
 outputBound: true
 delegate: 0
 invoke: 0
+invoke avg/min/max: 1,051 / 1,010 / 1,436 us over 50 runs
 boundary: tensor binding + invoke only; not CameraX buffer binding
 ```
 
@@ -239,8 +241,9 @@ Recommended order:
 ```text
 1. Do not reopen app output postprocess unless a regression appears.
 2. Treat every-N as a completed cadence boundary: valid, but not a latency win.
-3. Continue shared memory with timing and output-validity comparison against the
-   Kotlin/TFLite default path, keeping rb5-stable-20260720 as rollback anchor.
+3. Decide whether to build a bounded C API e2e comparison path around
+   CameraX/ROI/output after Phase 1 showed ~1.05ms invoke timing, keeping
+   rb5-stable-20260720 as rollback anchor.
 4. Keep AIMET, mixed precision, LPIPS/NIQE/OCR behind their documented triggers.
 5. Full VideoCapture/Recorder waits for an explicit demo/product need.
 ```

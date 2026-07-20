@@ -43,7 +43,7 @@ later, but it must not disappear.
 | eval-perceptual | LPIPS / NIQE / OCR diagnostic metrics | blocked_needs_user | Low-cost tile diagnostics exist; LPIPS/NIQE/OCR remain uncalibrated diagnostic-only tools; no current visual/metric conflict or text-readability claim requires them | Reopen when visual review conflicts with PSNR/SSIM or a text/OCR claim is needed |
 | native-preprocess | native YUV ROI / RGB preprocessing | in_progress | Kotlin YUV correct but slow; native ROI faster single-frame; tensor-ready repeated live not default; output UINT8 bulk-copy now reduces postprocess to about 1/1ms in app e2e smoke | Future attempts should target deeper tensor-ready/YUV ROI only as isolated experiments |
 | buffer-reuse | buffer / object reuse | done | TFLite buffers, pixel arrays, sample-copy reduction, output Bitmap reuse, and reusable UINT8 output byte buffer | Maintain only |
-| zero-copy | true zero-copy CameraX -> NPU | in_progress | Phase 1 shared-memory tensor probe passed: TFLite C API interpreter uses QNN Delegate, input/output custom allocations are bound to shared buffers, and one invoke succeeds; this is still not CameraX buffer binding | Compare C API tensor-binding timing against Kotlin/TFLite default path |
+| zero-copy | true zero-copy CameraX -> NPU | in_progress | Phase 1 shared-memory tensor probe passed: TFLite C API interpreter uses QNN Delegate, input/output custom allocations are bound to shared buffers, 50 invokes average about 1.05ms; this is still not CameraX buffer binding | Decide whether to integrate a bounded C API e2e comparison path or stop at probe evidence |
 | mixed-precision | w8a16 mixed precision | blocked_needs_user | No current W8A8 quality blocker or layer-level sensitivity evidence | Reopen only with quantization failure evidence |
 | temporal | frame skip / temporal reuse / double buffering | done | `sr_every_n=3` ImageAnalysis smoke is implemented and validated; effective enhanced FPS is about 9.4-9.9, while each enhanced frame remains about 21/25ms e2e | Treat as a cadence/product boundary; do not claim lower per-frame latency |
 | tile | post-capture whole-image tile enhancement | done | Host MVP, host multi-scene comparison, and Android app tile entry are implemented; same-frame QuickSR vs Real-ESRGAN app evidence exists | Real-ESRGAN tile is the quality-priority post-capture route; QuickSR tile stays speed/conservative baseline |
@@ -61,8 +61,9 @@ design still has unfinished required lanes:
 2. `eval-perceptual`: blocked until visual review conflicts with PSNR/SSIM, or a
    text/OCR claim needs calibrated diagnostic evidence.
 3. `zero-copy`: Java/Kotlin route remains blocked, but Phase 1 C API tensor
-   binding is validated. Next is timing and output-validity comparison against
-   the current Kotlin/TFLite route; it must keep rollback to `rb5-stable-20260720`.
+   binding and invoke timing are validated. Next decision is whether to build a
+   bounded C API e2e comparison path around CameraX/ROI/output, while keeping
+   rollback to `rb5-stable-20260720`.
 4. `video`: full CameraX VideoCapture/Recorder still needs explicit demo/product
    need from the user; every-N ImageAnalysis is already classified as cadence
    evidence, not a latency win.
