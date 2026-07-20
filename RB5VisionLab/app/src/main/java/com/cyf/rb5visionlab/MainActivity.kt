@@ -3,6 +3,7 @@ package com.cyf.rb5visionlab
 import android.Manifest
 import android.content.ContentValues
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.res.AssetManager
 import android.graphics.Bitmap
@@ -19,6 +20,7 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
@@ -33,6 +35,7 @@ import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.qualcomm.qti.QnnDelegate
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -74,6 +77,9 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var liveSrEnhancedFrames = 0
     @Volatile private var liveSrStartNs = 0L
     private lateinit var srResultView: ImageView
+    private lateinit var demoOverlayView: TextView
+    private lateinit var controlBarView: View
+    private var demoMode = false
     private val srSampleLock = Any()
     private var latestSrSample: SrSample? = null
     private var liveOutputBitmap: Bitmap? = null
@@ -229,6 +235,9 @@ class MainActivity : AppCompatActivity() {
 
         statusTextView = findViewById(R.id.textView)
         statusTextView.text = "$nativeMessage\n\n$qnnPreflightMessage"
+        demoOverlayView = findViewById(R.id.demo_overlay)
+        controlBarView = findViewById(R.id.control_bar)
+        demoMode = boolIntentExtra("demo_mode")
 
         cameraExecutor = Executors.newSingleThreadExecutor()
         srExecutor = Executors.newSingleThreadExecutor()
@@ -263,7 +272,7 @@ class MainActivity : AppCompatActivity() {
                 "start_live_sr_tensor_ready=$autoStartTensorReadyLiveSr " +
                 "run_tile_still=$autoRunTileStill tile_model=${tileModelVariant.label} " +
                 "run_tile_compare=$autoRunTileCompare " +
-                "run_yuv_roi_probe=$autoRunYuvRoiProbe run_tensor_ready_probe=$autoRunTensorReadyProbe " +
+                "run_yuv_roi_probe=$autoRunYuvRoiProbe run_tensor_ready_probe=$autoRunTensorReadyProbe demo_mode=$demoMode " +
                 "probe_mode=$requestedProbeMode sr_every_n=$liveSrEveryN sr_session_id=$liveSrSessionId"
         )
         if (autoRunResourceProbe) {
@@ -321,6 +330,8 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         applyIntentSrOverrides()
+        demoMode = boolIntentExtra("demo_mode")
+        applyDemoModeUi()
         liveSrEveryN = intIntentExtra("sr_every_n", 1).coerceAtLeast(1)
         liveSrSessionId = intent.getStringExtra("sr_session_id")?.trim().orEmpty().ifEmpty { "manual" }
         if (boolIntentExtra("start_live_sr")) {
@@ -338,6 +349,7 @@ class MainActivity : AppCompatActivity() {
         val tileStillButton = findViewById<Button>(R.id.tile_still_button)
         srResultView = findViewById(R.id.sr_result)
         val previewView = findViewById<PreviewView>(R.id.previewView)
+        applyDemoModeUi()
         srButton.text = startButtonText()
         offlineEvalButton.text = offlineButtonText()
         realCameraButton.text = realCameraButtonText()
@@ -385,14 +397,16 @@ class MainActivity : AppCompatActivity() {
                 offlineEvalActive = false
                 liveSrEveryN = 1
                 resetLiveSrCadenceCounters()
-                previewView.visibility = View.GONE
-                srResultView.visibility = View.VISIBLE
+                showLiveSrOutput()
                 srButton.text = "停止实时超分"
-                statusTextView.text = "Live ROI SR starting with ${srBackend.label} backend..."
+                if (demoMode) {
+                    demoOverlayView.text = "RB5 Gen2 Live SR\n${srBackend.label} / ${srModelVariant.label}\nStarting..."
+                } else {
+                    statusTextView.text = "Live ROI SR starting with ${srBackend.label} backend..."
+                }
             } else {
                 offlineEvalActive = false
-                srResultView.visibility = View.GONE
-                previewView.visibility = View.VISIBLE
+                hideLiveSrOutput()
                 srButton.text = startButtonText()
             }
         }
@@ -412,6 +426,71 @@ class MainActivity : AppCompatActivity() {
         liveSrSeenFrames = 0
         liveSrEnhancedFrames = 0
         liveSrStartNs = System.nanoTime()
+    }
+
+    private fun applyDemoModeUi() {
+        if (!::srResultView.isInitialized || !::demoOverlayView.isInitialized || !::controlBarView.isInitialized) {
+            return
+        }
+        if (demoMode) {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            WindowInsetsControllerCompat(window, window.decorView).hide(WindowInsetsCompat.Type.systemBars())
+            controlBarView.visibility = View.GONE
+            statusTextView.visibility = View.GONE
+            demoOverlayView.visibility = View.VISIBLE
+            demoOverlayView.text = "RB5 VisionLab\nQNN / HTP\nLive ROI demo"
+            srResultView.scaleType = ImageView.ScaleType.CENTER_CROP
+            (srResultView.layoutParams as? ConstraintLayout.LayoutParams)?.let { params ->
+                params.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+                params.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+                params.bottomToTop = ConstraintLayout.LayoutParams.UNSET
+                srResultView.layoutParams = params
+            }
+        } else {
+            WindowInsetsControllerCompat(window, window.decorView).show(WindowInsetsCompat.Type.systemBars())
+            controlBarView.visibility = View.VISIBLE
+            statusTextView.visibility = View.VISIBLE
+            demoOverlayView.visibility = View.GONE
+            srResultView.scaleType = ImageView.ScaleType.FIT_CENTER
+            (srResultView.layoutParams as? ConstraintLayout.LayoutParams)?.let { params ->
+                params.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+                params.bottomToBottom = ConstraintLayout.LayoutParams.UNSET
+                params.bottomToTop = R.id.control_bar
+                srResultView.layoutParams = params
+            }
+        }
+    }
+
+    private fun showLiveSrOutput() {
+        findViewById<PreviewView>(R.id.previewView).visibility = View.GONE
+        srResultView.visibility = View.VISIBLE
+        if (demoMode) {
+            statusTextView.visibility = View.GONE
+            demoOverlayView.visibility = View.VISIBLE
+        }
+    }
+
+    private fun hideLiveSrOutput() {
+        srResultView.visibility = View.GONE
+        findViewById<PreviewView>(R.id.previewView).visibility = View.VISIBLE
+        if (demoMode) {
+            demoOverlayView.visibility = View.GONE
+        }
+    }
+
+    private fun liveDemoOverlayText(
+        timing: SrTiming,
+        e2eMs: Long,
+        effectiveEnhancedFps: Double,
+        frameWidth: Int,
+        frameHeight: Int,
+        everyN: Int,
+    ): String {
+        return "RB5 Gen2 Live SR\n" +
+            "${srBackend.label} / ${srModelVariant.label}\n" +
+            "E2E ${e2eMs} ms  |  NPU ${timing.inferenceMs} ms\n" +
+            "FPS ${"%.1f".format(Locale.US, effectiveEnhancedFps)}  |  everyN $everyN\n" +
+            "Frame ${frameWidth}x${frameHeight}"
     }
 
     private fun applyIntentSrOverrides() {
@@ -472,10 +551,13 @@ class MainActivity : AppCompatActivity() {
         liveSr = true
         liveSrTensorReady = false
         offlineEvalActive = false
-        findViewById<PreviewView>(R.id.previewView).visibility = View.GONE
-        srResultView.visibility = View.VISIBLE
+        showLiveSrOutput()
         findViewById<Button>(R.id.sr_button).text = "停止实时超分"
-        statusTextView.text = "Live ROI SR starting with ${srBackend.label}/${srModelVariant.label} from intent..."
+        if (demoMode) {
+            demoOverlayView.text = "RB5 Gen2 Live SR\n${srBackend.label} / ${srModelVariant.label}\nStarting..."
+        } else {
+            statusTextView.text = "Live ROI SR starting with ${srBackend.label}/${srModelVariant.label} from intent..."
+        }
         resetLiveSrCadenceCounters()
         Log.d("RB5_SR", "auto live SR from intent backend=${srBackend.label} model=${srModelVariant.label} session=$liveSrSessionId everyN=$liveSrEveryN")
     }
@@ -484,10 +566,13 @@ class MainActivity : AppCompatActivity() {
         liveSr = false
         liveSrTensorReady = true
         offlineEvalActive = false
-        findViewById<PreviewView>(R.id.previewView).visibility = View.GONE
-        srResultView.visibility = View.VISIBLE
+        showLiveSrOutput()
         findViewById<Button>(R.id.sr_button).text = "停止 Tensor Live"
-        statusTextView.text = "Tensor-ready live ROI SR starting with QNN/QUICKSR_W8A8..."
+        if (demoMode) {
+            demoOverlayView.text = "RB5 Gen2 Tensor Live\nQNN / QUICKSR_W8A8\nStarting..."
+        } else {
+            statusTextView.text = "Tensor-ready live ROI SR starting with QNN/QUICKSR_W8A8..."
+        }
         Log.d("RB5_SR_TENSOR", "auto tensor-ready live SR from intent backend=QNN model=QUICKSR_W8A8")
     }
 
@@ -1041,21 +1126,31 @@ class MainActivity : AppCompatActivity() {
             )
             runOnUiThread {
                 srResultView.setImageBitmap(out)
-                statusTextView.text =
-                    "Live ROI SR (TFLite ${srBackend.label}/${srModelVariant.label})\n" +
-                        "frame ${full.width}x${full.height} | ROI ${cropSide}->128\n" +
-                        "everyN $everyN | enhanced $liveSrEnhancedFrames/$liveSrSeenFrames\n" +
-                        "capture+crop ${captureMs} ms | preprocess ${t.preprocessMs} ms\n" +
-                        "inference ${t.inferenceMs} ms | postprocess ${t.postprocessMs} ms\n" +
-                        "end-to-end ~${e2eMs} ms"
+                if (demoMode) {
+                    demoOverlayView.text = liveDemoOverlayText(
+                        t,
+                        e2eMs,
+                        effectiveEnhancedFps,
+                        full.width,
+                        full.height,
+                        everyN,
+                    )
+                } else {
+                    statusTextView.text =
+                        "Live ROI SR (TFLite ${srBackend.label}/${srModelVariant.label})\n" +
+                            "frame ${full.width}x${full.height} | ROI ${cropSide}->128\n" +
+                            "everyN $everyN | enhanced $liveSrEnhancedFrames/$liveSrSeenFrames\n" +
+                            "capture+crop ${captureMs} ms | preprocess ${t.preprocessMs} ms\n" +
+                            "inference ${t.inferenceMs} ms | postprocess ${t.postprocessMs} ms\n" +
+                            "end-to-end ~${e2eMs} ms"
+                }
             }
         } catch (e: Throwable) {
             Log.e(srTag, "live SR failed", e)
             liveSr = false
             liveOutputBitmap = null
             runOnUiThread {
-                srResultView.visibility = View.GONE
-                findViewById<PreviewView>(R.id.previewView).visibility = View.VISIBLE
+                hideLiveSrOutput()
                 findViewById<Button>(R.id.sr_button).text = startButtonText()
                 statusTextView.text = "Live SR failed on ${srBackend.label}. Long press to choose another backend."
             }
@@ -1957,8 +2052,10 @@ class MainActivity : AppCompatActivity() {
                                     CAMERA_TAG,
                                     "$frameStatus timestamp=${imageProxy.imageInfo.timestamp}"
                                 )
-                                runOnUiThread {
-                                    statusTextView.text = "$nativeMessage\n\n$frameStatus"
+                                if (!demoMode) {
+                                    runOnUiThread {
+                                        statusTextView.text = "$nativeMessage\n\n$frameStatus"
+                                    }
                                 }
                             }
                         } finally {

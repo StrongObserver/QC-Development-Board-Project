@@ -48,7 +48,7 @@ later, but it must not disappear.
 | mixed-precision | w8a16 mixed precision | blocked_needs_user | No current W8A8 quality blocker or layer-level sensitivity evidence | Reopen only with quantization failure evidence |
 | temporal | frame skip / temporal reuse / double buffering | done | `sr_every_n=3` ImageAnalysis smoke is implemented and validated; effective enhanced FPS is about 9.4-9.9, while each enhanced frame remains about 21/25ms e2e | Treat as a cadence/product boundary; do not claim lower per-frame latency |
 | tile | post-capture whole-image tile enhancement | done | Host MVP, host multi-scene comparison, and Android app tile entry are implemented; same-frame QuickSR vs Real-ESRGAN app evidence exists | Real-ESRGAN tile is the quality-priority post-capture route; QuickSR tile stays speed/conservative baseline |
-| video | video every-N-frame enhancement | done | `20260720_low_cost_video_demo_quicksr_20s_v2` records the existing live ROI UI with `adb screenrecord`; every-N ImageAnalysis smoke remains cadence evidence | Treat as demo evidence only; full CameraX VideoCapture/Recorder waits for explicit product need |
+| video | video every-N-frame enhancement | done | `20260720_demo_mode_ui_final_20s` records the Demo Mode live ROI UI with `adb screenrecord`; every-N ImageAnalysis smoke remains cadence evidence | Treat as demo evidence only; full CameraX VideoCapture/Recorder waits for explicit product need |
 | power | sustained power/perf-watt | done | Rooted battery-node current/voltage reads work; core smoke estimates exist | Use as board-level estimate only; do not claim external-meter precision |
 | showcase | resume / README / demo / interview package | done | README, SHOWCASE_INDEX, DEMO_RUNBOOK, INTERVIEW_TALK_TRACK, resume draft | Maintain only |
 
@@ -64,7 +64,7 @@ design still has unfinished required lanes:
    CameraX -> tensor -> display zero-copy is not implemented. Further work would
    be a larger CameraX/native data-path integration project, not another small
    shared-allocation probe.
-3. `video`: low-cost screenrecord demo is complete; full CameraX
+3. `video`: Demo Mode screenrecord demo is complete; full CameraX
    VideoCapture/Recorder still needs explicit product need because it would be a
    different pipeline from the current live ROI app demo.
 

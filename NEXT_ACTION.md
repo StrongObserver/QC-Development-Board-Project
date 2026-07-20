@@ -33,7 +33,7 @@ QNN shared-memory Phase 2 normal-vs-shared tensor compare
 AIMET trigger crop search
 TextZoom OCR mini diagnostic
 RealSR 10-case lifecycle mini review
-low-cost live ROI screenrecord demo
+Demo Mode live ROI screenrecord demo
 ```
 
 ## Highest Priority
@@ -43,7 +43,7 @@ Next priority:
 ```text
 The project is past the clean archive checkpoint and has completed bounded
 exploration steps: QNN shared-memory Phase 0/1/2, AIMET trigger search,
-TextZoom OCR mini diagnostics, RealSR lifecycle mini review, and a low-cost
+TextZoom OCR mini diagnostics, RealSR lifecycle mini review, and a Demo Mode
 live ROI screenrecord demo. Continue the loop with the remaining bounded lanes:
 1. AIMET/CLE can continue only after WSL/Linux or another supported AIMET
    toolchain is available.
@@ -286,18 +286,19 @@ the 24-case main gate. Real-degradation PSNR can penalize sharper SR output, so
 contact sheet review owns any real-camera robustness claim.
 ```
 
-Low-cost video demo:
+Demo Mode video demo:
 
 ```text
-C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_low_cost_video_demo_quicksr_20s_v2
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_demo_mode_ui_final_20s
 model: QUICKSR_W8A8 through QNN TFLite Delegate / HTP
-recording: adb screenrecord, 20s, 1280x720 MP4
-video sanity: OpenCV opened=True, frames=743, first_frame_ok=True, first_frame_mean=56.00, bytes=1,527,322
-parsed live ROI frames: 192
-timing: pre/inf/post/e2e p50 = 2.0 / 1.0 / 1.0 / 13.5 ms; e2e p95 = 18.0 ms
+recording: adb screenrecord, 20s, 1280x720 MP4, Demo Mode UI
+video sanity: OpenCV opened=True, frames=795, bytes=2,388,242
+parsed live ROI frames: 190
+timing: pre/inf/post/e2e p50 = 2.0 / 1.0 / 1.0 / 12.5 ms; e2e p95 = 18.0 ms
+visual check: no startup desktop, no bottom control bar, no Android navigation
+bar, large landscape SR view, readable top-right performance overlay.
 boundary: demo recording of the live ROI UI, not CameraX VideoCapture/Recorder,
-not temporal SR quality evidence, and not external power evidence. Human review
-still needs to watch the MP4 for framing/readability.
+not temporal SR quality evidence, and not external power evidence.
 ```
 
 ## Next Engineering Choices

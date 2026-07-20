@@ -156,7 +156,7 @@ def write_loop_state(
         "parsed_frames": len(rows),
         "blocked_by": blocked_by,
         "requires_human_review": passed,
-        "boundary": "adb screenrecord of live ROI UI; not CameraX VideoCapture/Recorder and not temporal SR quality evidence",
+        "boundary": "adb screenrecord of demo-mode live ROI UI; not CameraX VideoCapture/Recorder and not temporal SR quality evidence",
     }
     (out_dir / "loop_state.json").write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return state
@@ -185,7 +185,7 @@ def write_summary(
         f"- local MP4: `{local_video}`",
         f"- remote MP4: `{remote_video}`",
         f"- loop_status: `{loop_state['status']}`",
-        "- boundary: screen recording of the existing live ROI UI, not a true VideoCapture/Recorder SR pipeline",
+        "- boundary: screen recording of the demo-mode live ROI UI, not a true VideoCapture/Recorder SR pipeline",
         "",
         "## Timing",
         "",
@@ -209,33 +209,27 @@ def write_summary(
             "",
             "## Review Boundary",
             "",
-            "Use this MP4 as a low-cost project demo artifact only. It can show the app running live ROI SR on device, but it does not prove temporal consistency, per-frame video enhancement, or external power efficiency.",
+            "Use this MP4 as a low-cost project demo artifact only. It can show the app running demo-mode live ROI SR on device, but it does not prove temporal consistency, per-frame video enhancement, or external power efficiency.",
         ]
     )
     (out_dir / "SUMMARY.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def collect_demo(model: str, duration_s: int, size: str, bit_rate: str, every_n: int, out_dir: Path, run_id: str) -> tuple[str, Path, str]:
+def collect_demo(
+    model: str,
+    duration_s: int,
+    size: str,
+    bit_rate: str,
+    every_n: int,
+    demo_mode: bool,
+    pre_record_wait_s: float,
+    out_dir: Path,
+    run_id: str,
+) -> tuple[str, Path, str]:
     remote_video = f"/sdcard/Movies/{run_id}.mp4"
     local_video = out_dir / f"{run_id}.mp4"
     adb("shell", "am", "force-stop", PACKAGE_NAME, check=False)
     adb("logcat", "-c", check=False)
-    screen_cmd = [
-        "adb",
-        "-s",
-        DEVICE_SERIAL,
-        "shell",
-        "screenrecord",
-        "--time-limit",
-        str(duration_s),
-        "--size",
-        size,
-        "--bit-rate",
-        bit_rate,
-        remote_video,
-    ]
-    proc = subprocess.Popen(screen_cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    time.sleep(1.0)
     start_cmd = [
         "shell",
         "am",
@@ -255,9 +249,27 @@ def collect_demo(model: str, duration_s: int, size: str, bit_rate: str, every_n:
         "sr_model",
         model,
     ]
+    if demo_mode:
+        start_cmd.extend(["--ez", "demo_mode", "true"])
     if every_n > 1:
         start_cmd.extend(["--ei", "sr_every_n", str(every_n)])
     adb(*start_cmd)
+    time.sleep(max(0.0, pre_record_wait_s))
+    screen_cmd = [
+        "adb",
+        "-s",
+        DEVICE_SERIAL,
+        "shell",
+        "screenrecord",
+        "--time-limit",
+        str(duration_s),
+        "--size",
+        size,
+        "--bit-rate",
+        bit_rate,
+        remote_video,
+    ]
+    proc = subprocess.Popen(screen_cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     try:
         stdout, _ = proc.communicate(timeout=duration_s + 20)
     except subprocess.TimeoutExpired:
@@ -279,6 +291,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--size", default="1280x720")
     parser.add_argument("--bit-rate", default="8M")
     parser.add_argument("--every-n", type=int, default=1)
+    parser.add_argument("--demo-mode", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--pre-record-wait-s", type=float, default=4.0)
     parser.add_argument("--run-id", default="")
     return parser.parse_args()
 
@@ -303,6 +317,8 @@ def main() -> None:
             args.size,
             args.bit_rate,
             max(1, args.every_n),
+            args.demo_mode,
+            args.pre_record_wait_s,
             out_dir,
             run_id,
         )
@@ -343,6 +359,8 @@ def main() -> None:
                 "parsed_frames": len(rows),
                 "status": loop_state["status"],
                 "boundary": loop_state["boundary"],
+                "demo_mode": args.demo_mode,
+                "pre_record_wait_s": args.pre_record_wait_s,
             }
         ],
     )
@@ -365,14 +383,14 @@ def main() -> None:
             "inference_ms": stage_value(metrics, "inf", "p50_ms"),
             "postprocess_ms": stage_value(metrics, "post", "p50_ms"),
             "e2e_ms": stage_value(metrics, "e2e", "p50_ms"),
-            "steady_state_window": f"{args.duration_s}s adb screenrecord demo; parsed frames={len(rows)}",
+            "steady_state_window": f"{args.duration_s}s adb screenrecord demo after {args.pre_record_wait_s}s pre-record wait; parsed frames={len(rows)}",
             "p50_e2e_ms": stage_value(metrics, "e2e", "p50_ms"),
             "p95_e2e_ms": stage_value(metrics, "e2e", "p95_ms"),
             "npu_or_dsp_note": "QNN Delegate configured for HTP backend; demo uses app logcat timings",
             "fallback_code": "none" if not blocked_by else "low_cost_video_demo_failed",
             "failure_code": "none" if not blocked_by else blocked_by,
             "human_decision": "not_reviewed",
-            "notes": "Low-cost demo MP4 is adb screenrecord of the live ROI UI, not a true VideoCapture/Recorder SR pipeline.",
+            "notes": "Low-cost demo MP4 is adb screenrecord of the demo-mode live ROI UI, not a true VideoCapture/Recorder SR pipeline.",
         },
     )
     app_e2e_mirror = mirror_app_e2e_log(REPO_ROOT, run_id, app_e2e_path)
