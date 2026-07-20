@@ -109,6 +109,15 @@ C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\aimet_tor
 QuickSRNet size/latency/quality curve:
 C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\quicksrnet_curve\20260721_quicksrnet_sml_curve
 
+Model route decision:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\MODEL_ROUTE_DECISION.md
+
+Direct ImageProxy ByteBuffer probe:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260721_loop_p3_direct_buffer_probe_v2
+
+QNN Delegate profile decode attempt:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260721_loop_p4_qnn_profile_decode_attempt
+
 Default live ROI recheck:
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_loop_p0_1_default_live_roi_recheck
 
@@ -183,6 +192,17 @@ Current route boundaries:
    or switch models.
 0e. QuickSRNet medium/large host curve exists. Larger models need human visual
    review of contact sheets before any Android packaging or QNN app validation.
+0f. Human review found QuickSRNetSmall is at least as good as Medium/Large for
+   the checked text/low-light sheets; Medium appears more yellow and has no
+   clear visual gain. Keep Small as the live workhorse and do not add
+   Medium/Large to Android by default.
+0g. Direct ImageProxy ByteBuffer probe shows Y/U/V plane buffers are direct and
+   JNI `GetDirectBufferAddress` returns non-null addresses. This supports a
+   future JNI direct-plane read experiment, but it is still not QNN input
+   zero-copy.
+0h. qnn-profile-viewer rejects the raw Java QNN Delegate profile buffer as a
+   corrupted flatbuffer stream. A best-effort diagnostic parser extracts 10
+   readable events, but this is not official per-op decoding.
 0. The default live ROI path remains the mainline after the P0 recheck:
    default Bitmap live ROI e2e p50/p95 is 14/18ms, while native-rotated tensor
    live ROI is 14/20ms. Native YUV ROI correctness is good enough for probes
