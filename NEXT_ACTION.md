@@ -34,6 +34,7 @@ AIMET trigger crop search
 TextZoom OCR mini diagnostic
 RealSR 10-case lifecycle mini review
 Demo Mode live ROI screenrecord demo
+Demo Mode wide-preview / model-input / SR-output relation evidence
 ```
 
 ## Highest Priority
@@ -306,6 +307,16 @@ the original control bar.
 boundary: demo recording of the live ROI UI, not CameraX VideoCapture/Recorder,
 not full-screen SR visual-quality evidence, not temporal SR quality evidence,
 and not external power evidence.
+```
+
+Demo Mode relation evidence:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_demo_relation_smoke\demo_relation
+relation sheet: wide preview display / model input 128 / QNN SR output 512
+purpose: explains why the demo main visual uses a clear wide preview while
+QNN/SR still runs on the 128 input and reports real timing.
+boundary: this is explanatory evidence, not a new quality benchmark.
 ```
 
 ## Next Engineering Choices

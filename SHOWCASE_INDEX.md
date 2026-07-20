@@ -42,6 +42,7 @@ RB5 Gen2 / QCS8550 Android device.
 | Latest 60s sustained app e2e smoke | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_e2e_schema_output_reuse_60s` |
 | Every-N temporal smoke | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_every_n3_live_roi_60s_final` |
 | Demo Mode wide-clear live ROI video | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_demo_mode_wide_clear_20s` |
+| Demo Mode relation evidence | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_demo_relation_smoke\demo_relation` |
 | Shared-memory Phase 2 compare | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_qnn_shared_memory_phase2_compare` |
 | 120s short sustained run | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20251110_output_reuse_quicksr_live_roi_120s` |
 | Real-camera showcase | `C:\Users\Admin\Videos\RB5 gen2\real_camera_showcase\20251110_045328_minimal_real_camera_set` |
@@ -60,6 +61,7 @@ RB5 Gen2 / QCS8550 Android device.
 | Latest 60s sustained e2e drift | `15.0/20.0ms -> 16.0/21.0ms` |
 | Every-N temporal smoke | `everyN=3`, effective enhanced FPS `9.9`, enhanced-frame e2e `22 / 25ms` |
 | Demo Mode wide-clear video | 20s MP4, 188 parsed live ROI frames, wide preview display, QNN/SR e2e `23 / 28ms` p50/p95 |
+| Demo Mode relation evidence | wide preview display / model input 128 / QNN SR output 512 in one sheet |
 | Shared-memory Phase 2 | checksum match, shared invoke avg `1.056ms` vs normal `1.104ms` |
 | Real-ESRGAN -> QuickSRNet switch | about `369ms` |
 | QuickSRNetSmall W8A8 model size | about `43.7KB` |

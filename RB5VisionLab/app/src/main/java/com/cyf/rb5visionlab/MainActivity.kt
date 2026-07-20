@@ -8,7 +8,10 @@ import android.content.pm.PackageManager
 import android.content.res.AssetManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Matrix
+import android.graphics.Paint
 import android.os.Bundle
 import android.os.Debug
 import android.os.Environment
@@ -93,6 +96,7 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var pendingAutoTileStill = false
     @Volatile private var pendingTileCompareCapture = false
     @Volatile private var pendingAutoTileCompare = false
+    @Volatile private var pendingDemoRelationCapture = false
     @Volatile private var pendingProbeMode: String = ""
     private val realCameraSessionId = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
     private var realCameraSceneIndex = 0
@@ -116,6 +120,8 @@ class MainActivity : AppCompatActivity() {
         val sr: Bitmap,
         val inferenceMs: Long,
         val e2eMs: Long,
+        val display: Bitmap? = null,
+        val cropSide: Int = 0,
     )
 
     private data class ResourceMemorySnapshot(
@@ -255,6 +261,7 @@ class MainActivity : AppCompatActivity() {
         val autoRunTensorReadyProbe = boolIntentExtra("run_tensor_ready_probe")
         val autoRunTileStill = boolIntentExtra("run_tile_still")
         val autoRunTileCompare = boolIntentExtra("run_tile_compare")
+        pendingDemoRelationCapture = boolIntentExtra("save_demo_relation")
         val requestedProbeMode = intent.getStringExtra("probe_mode")?.trim()?.lowercase(Locale.US).orEmpty()
         liveSrEveryN = intIntentExtra("sr_every_n", 1).coerceAtLeast(1)
         liveSrSessionId = intent.getStringExtra("sr_session_id")?.trim().orEmpty().ifEmpty { "manual" }
@@ -273,6 +280,7 @@ class MainActivity : AppCompatActivity() {
                 "start_live_sr_tensor_ready=$autoStartTensorReadyLiveSr " +
                 "run_tile_still=$autoRunTileStill tile_model=${tileModelVariant.label} " +
                 "run_tile_compare=$autoRunTileCompare " +
+                "save_demo_relation=$pendingDemoRelationCapture " +
                 "run_yuv_roi_probe=$autoRunYuvRoiProbe run_tensor_ready_probe=$autoRunTensorReadyProbe demo_mode=$demoMode " +
                 "probe_mode=$requestedProbeMode sr_every_n=$liveSrEveryN sr_session_id=$liveSrSessionId"
         )
@@ -1121,8 +1129,27 @@ class MainActivity : AppCompatActivity() {
                         sr = out.copy(Bitmap.Config.ARGB_8888, false),
                         inferenceMs = t.inferenceMs,
                         e2eMs = e2eMs,
+                        display = demoDisplayBitmap?.copy(Bitmap.Config.ARGB_8888, false),
+                        cropSide = cropSide,
                     )
                 }
+            }
+            if (pendingDemoRelationCapture) {
+                pendingDemoRelationCapture = false
+                val baseline = Bitmap.createScaledBitmap(roi, 512, 512, true)
+                val sample = SrSample(
+                    backend = srBackend,
+                    label = "DEMO_REL",
+                    input = roi.copy(Bitmap.Config.ARGB_8888, false),
+                    baseline = baseline,
+                    sr = out.copy(Bitmap.Config.ARGB_8888, false),
+                    inferenceMs = t.inferenceMs,
+                    e2eMs = e2eMs,
+                    display = demoDisplayBitmap?.copy(Bitmap.Config.ARGB_8888, false),
+                    cropSide = cropSide,
+                )
+                synchronized(srSampleLock) { latestSrSample = sample }
+                saveDemoRelationSample(sample)
             }
             val sampleCopyMs = (System.nanoTime() - tSampleStart) / 1_000_000
             val analyzerWallMs = frameBitmapMs + roiCropScaleMs + rotateMs + enhanceWallMs + sampleCopyMs
@@ -1258,6 +1285,37 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this, "保存失败", Toast.LENGTH_SHORT).show()
                 }
             }
+        }
+    }
+
+    private fun saveDemoRelationSample(sample: SrSample) {
+        if (sample.display == null) {
+            Log.d("RB5_SR", "demo relation skipped: no wide preview display sample")
+            return
+        }
+        try {
+            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+            val prefix = "DEMOREL_${timestamp}_${sample.backend.label}_${srModelVariant.label}_crop${sample.cropSide}"
+            val sheet = makeLabeledDemoRelationSheet(sample.display, sample.input, sample.sr)
+            val saved = listOf(
+                savePngToPictures(sample.display, "${prefix}_wide_preview.png"),
+                savePngToPictures(sample.input, "${prefix}_model_input_128.png"),
+                savePngToPictures(sample.sr, "${prefix}_sr_output_512.png"),
+                savePngToPictures(sheet, "${prefix}_relation_sheet.png"),
+            )
+            Log.d(
+                "RB5_SR",
+                "demo relation saved crop=${sample.cropSide} inf=${sample.inferenceMs} e2e=${sample.e2eMs} files=${saved.joinToString()}"
+            )
+            runOnUiThread {
+                if (demoMode) {
+                    demoOverlayView.text = "RB5 Gen2 Live SR\nDemo relation saved\ncrop ${sample.cropSide}->128 | NPU ${sample.inferenceMs} ms"
+                } else {
+                    statusTextView.text = "Demo relation saved\n" + saved.joinToString("\n")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("RB5_SR", "save demo relation failed", e)
         }
     }
 
@@ -1975,6 +2033,32 @@ class MainActivity : AppCompatActivity() {
         for (bitmap in bitmaps) {
             canvas.drawBitmap(bitmap, x, 0f, null)
             x += bitmap.width
+        }
+        return out
+    }
+
+    private fun makeLabeledDemoRelationSheet(display: Bitmap, input: Bitmap, sr: Bitmap): Bitmap {
+        val tileSide = 360
+        val headerHeight = 44
+        val displayTile = Bitmap.createScaledBitmap(display, tileSide, tileSide, true)
+        val inputTile = Bitmap.createScaledBitmap(input, tileSide, tileSide, true)
+        val srTile = Bitmap.createScaledBitmap(sr, tileSide, tileSide, true)
+        val tiles = listOf(
+            Pair("Wide preview display", displayTile),
+            Pair("Model input 128", inputTile),
+            Pair("QNN SR output 512", srTile),
+        )
+        val out = Bitmap.createBitmap(tileSide * tiles.size, tileSide + headerHeight, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(out)
+        canvas.drawColor(Color.rgb(20, 20, 20))
+        val headerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textSize = 24f
+        }
+        tiles.forEachIndexed { index, (label, bitmap) ->
+            val x = index * tileSide
+            canvas.drawText(label, x + 12f, 30f, headerPaint)
+            canvas.drawBitmap(bitmap, x.toFloat(), headerHeight.toFloat(), null)
         }
         return out
     }

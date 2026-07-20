@@ -31,6 +31,7 @@ RESULTS_ROOT = Path(r"C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results
 DEVICE_SERIAL = "ff5d3ab4"
 APP_COMPONENT = "com.cyf.rb5visionlab/.MainActivity"
 PACKAGE_NAME = "com.cyf.rb5visionlab"
+REMOTE_PICTURES_DIR = "/sdcard/Pictures/RB5VisionLab"
 
 LIVE_RE = re.compile(
     r"backend=(?P<backend>\w+) live ROI crop=(?P<crop_side>\d+)->128->512 "
@@ -174,6 +175,7 @@ def write_summary(
     loop_state: dict[str, object],
     app_e2e_path: Path,
     app_e2e_mirror: Path,
+    relation_files: list[Path],
 ) -> None:
     lines = [
         "# Low-Cost Video Demo Summary",
@@ -206,6 +208,7 @@ def write_summary(
             f"- EvalHub ignored mirror: `{app_e2e_mirror}`",
             f"- raw logcat: `{out_dir / 'raw_logcat.txt'}`",
             f"- screenrecord output: `{out_dir / 'screenrecord_stdout.txt'}`",
+            f"- demo relation images: `{out_dir / 'demo_relation'}`" if relation_files else "- demo relation images: not collected",
             "",
             "## Review Boundary",
             "",
@@ -222,6 +225,7 @@ def collect_demo(
     bit_rate: str,
     every_n: int,
     demo_mode: bool,
+    save_demo_relation: bool,
     pre_record_wait_s: float,
     out_dir: Path,
     run_id: str,
@@ -251,6 +255,8 @@ def collect_demo(
     ]
     if demo_mode:
         start_cmd.extend(["--ez", "demo_mode", "true"])
+    if save_demo_relation:
+        start_cmd.extend(["--ez", "save_demo_relation", "true"])
     if every_n > 1:
         start_cmd.extend(["--ei", "sr_every_n", str(every_n)])
     adb(*start_cmd)
@@ -284,6 +290,31 @@ def collect_demo(
     return log_text, local_video, remote_video
 
 
+def pull_demo_relation_files(run_id: str, out_dir: Path) -> list[Path]:
+    relation_dir = out_dir / "demo_relation"
+    relation_dir.mkdir(exist_ok=True)
+    result = adb("shell", "ls", "-1", f"{REMOTE_PICTURES_DIR}/DEMOREL_*.png", check=False)
+    if result.returncode != 0:
+        return []
+    remote_files = [
+        line.strip()
+        for line in result.stdout.splitlines()
+        if line.strip().startswith(REMOTE_PICTURES_DIR) and line.strip().endswith(".png")
+    ]
+    if not remote_files:
+        return []
+    selected = [path for path in remote_files if run_id[:8] in Path(path).name]
+    if not selected:
+        selected = remote_files[-8:]
+    pulled: list[Path] = []
+    for remote_path in selected:
+        local_path = relation_dir / Path(remote_path).name
+        adb("pull", remote_path, str(local_path), check=False, timeout=60)
+        if local_path.exists() and local_path.stat().st_size > 0:
+            pulled.append(local_path)
+    return pulled
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", choices=["QUICKSR_W8A8", "W8A8"], default="QUICKSR_W8A8")
@@ -292,6 +323,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bit-rate", default="8M")
     parser.add_argument("--every-n", type=int, default=1)
     parser.add_argument("--demo-mode", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--save-demo-relation", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--pre-record-wait-s", type=float, default=4.0)
     parser.add_argument("--run-id", default="")
     return parser.parse_args()
@@ -310,6 +342,7 @@ def main() -> None:
         local_video = out_dir / f"{run_id}.mp4"
         rows: list[dict[str, object]] = []
         metrics: list[dict[str, object]] = []
+        relation_files: list[Path] = []
     else:
         log_text, local_video, remote_video = collect_demo(
             args.model,
@@ -318,11 +351,13 @@ def main() -> None:
             args.bit_rate,
             max(1, args.every_n),
             args.demo_mode,
+            args.save_demo_relation,
             args.pre_record_wait_s,
             out_dir,
             run_id,
         )
         rows = parse_live_rows(log_text, args.model, run_id)
+        relation_files = pull_demo_relation_files(run_id, out_dir) if args.save_demo_relation else []
         write_csv(out_dir / "frame_metrics.csv", rows)
         metrics = []
         for key, label in [
@@ -360,6 +395,8 @@ def main() -> None:
                 "status": loop_state["status"],
                 "boundary": loop_state["boundary"],
                 "demo_mode": args.demo_mode,
+                "save_demo_relation": args.save_demo_relation,
+                "relation_files": len(relation_files),
                 "pre_record_wait_s": args.pre_record_wait_s,
             }
         ],
@@ -406,6 +443,7 @@ def main() -> None:
         loop_state,
         app_e2e_path,
         app_e2e_mirror,
+        relation_files,
     )
     print(f"[ok] wrote {out_dir}")
     if blocked_by:

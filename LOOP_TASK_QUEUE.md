@@ -120,6 +120,9 @@ C:\Users\Admin\Desktop\QC-Development-Board-Project\evalhub_data\derived_runs\ev
 
 Demo Mode video demo:
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_demo_mode_wide_clear_20s
+
+Demo Mode relation evidence:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_demo_relation_smoke\demo_relation
 ```
 
 Current route boundaries:
@@ -152,7 +155,9 @@ Current route boundaries:
    compact QNN/SR performance overlay, and avoids stretching the 128->512 SR
    output as the main visual. The default debug UI still has all buttons, and
    tapping the overlay in Demo Mode temporarily shows/hides the original control
-   bar. It still does not prove temporal consistency or true per-frame video SR.
+   bar. The relation sheet preserves wide preview / 128 input / 512 SR output
+   evidence so the display boundary is explainable. It still does not prove
+   temporal consistency or true per-frame video SR.
 ```
 
 Power/perf-watt:
