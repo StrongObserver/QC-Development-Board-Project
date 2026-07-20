@@ -40,7 +40,7 @@ later, but it must not disappear.
 | AIMET-advanced | AdaRound / QAT | blocked_needs_user | High cost and no current quantization failure trigger | Reopen only after CLE/Bias is insufficient on a real failure crop |
 | model-curve | Real-ESRGAN vs QuickSRNet quality/latency/size/power curve | done | Quality/latency/size evidence exists; board-level battery-node power smoke exists for idle, preview, live QuickSR, QuickSR tile, and Real-ESRGAN tile | Treat power as board-level estimate, not external-meter evidence |
 | eval-fixed | fixed scenario benchmark | done | `RB5_SR_Benchmark_v1`, full 24-case, real-camera 8-scene set | Maintain only |
-| eval-perceptual | LPIPS / NIQE / OCR diagnostic metrics | blocked_needs_user | Low-cost tile diagnostics exist; LPIPS/NIQE/OCR remain uncalibrated diagnostic-only tools; no current visual/metric conflict or text-readability claim requires them | Reopen when visual review conflicts with PSNR/SSIM or a text/OCR claim is needed |
+| eval-perceptual | LPIPS / NIQE / OCR diagnostic metrics | done | TextZoom OCR mini diagnostic exists at `RB5_SR_lab\results\textzoom_ocr\20260720_textzoom_ocr_mini_v2`; OCR similarity is low even on HR references, so it remains diagnostic-only and visual review still owns final quality decisions | Reopen only to calibrate OCR/LPIPS/NIQE against human review on a representative slice |
 | native-preprocess | native YUV ROI / RGB preprocessing | in_progress | Kotlin YUV correct but slow; native ROI faster single-frame; tensor-ready repeated live not default; output UINT8 bulk-copy now reduces postprocess to about 1/1ms in app e2e smoke | Future attempts should target deeper tensor-ready/YUV ROI only as isolated experiments |
 | buffer-reuse | buffer / object reuse | done | TFLite buffers, pixel arrays, sample-copy reduction, output Bitmap reuse, and reusable UINT8 output byte buffer | Maintain only |
 | zero-copy | true zero-copy CameraX -> NPU | in_progress | Phase 1 shared-memory tensor probe passed: TFLite C API interpreter uses QNN Delegate, input/output custom allocations are bound to shared buffers, 50 invokes average about 1.05ms; this is still not CameraX buffer binding | Decide whether to integrate a bounded C API e2e comparison path or stop at probe evidence |
@@ -56,15 +56,14 @@ later, but it must not disappear.
 The current checkpoint is strong enough for showcase, but the full original
 design still has unfinished required lanes:
 
-1. `AIMET-CLE` / `mixed-precision`: blocked until a concrete W8A8-vs-float
-   failure crop appears.
-2. `eval-perceptual`: blocked until visual review conflicts with PSNR/SSIM, or a
-   text/OCR claim needs calibrated diagnostic evidence.
-3. `zero-copy`: Java/Kotlin route remains blocked, but Phase 1 C API tensor
+1. `AIMET-CLE` / `mixed-precision`: concrete W8A8-vs-float failure crops exist,
+   but native Windows AIMET execution is blocked; next step needs WSL/Linux or
+   another supported AIMET toolchain.
+2. `zero-copy`: Java/Kotlin route remains blocked, but Phase 1 C API tensor
    binding and invoke timing are validated. Next decision is whether to build a
    bounded C API e2e comparison path around CameraX/ROI/output, while keeping
    rollback to `rb5-stable-20260720`.
-4. `video`: full CameraX VideoCapture/Recorder still needs explicit demo/product
+3. `video`: full CameraX VideoCapture/Recorder still needs explicit demo/product
    need from the user; every-N ImageAnalysis is already classified as cadence
    evidence, not a latency win.
 

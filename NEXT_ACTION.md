@@ -28,6 +28,9 @@ EvalHub-compatible app e2e log export
 README / demo runbook / interview talk track
 showcase index
 Nutstore long-term context updated with final closeout and full-scope ledger
+QNN shared-memory Phase 1 tensor binding + invoke timing probe
+AIMET trigger crop search
+TextZoom OCR mini diagnostic
 ```
 
 ## Highest Priority
@@ -35,12 +38,15 @@ Nutstore long-term context updated with final closeout and full-scope ledger
 Next priority:
 
 ```text
-The project is at a clean trigger-gated checkpoint. Continue only when one of
-these gates opens:
+The project is past the clean archive checkpoint and has completed three bounded
+exploration steps: QNN shared-memory Phase 1, AIMET trigger search, and TextZoom
+OCR mini diagnostics. Continue the loop with the remaining low-cost lanes:
 1. a concrete W8A8-vs-float failure crop appears -> AIMET/CLE or mixed precision;
 2. visual review conflicts with PSNR/SSIM or a text-readability claim is needed -> LPIPS/NIQE/OCR diagnostics;
 3. shared-memory Phase 1 passed -> compare timing and output validity against the Kotlin/TFLite default path;
 4. the user wants a video demo/product path -> CameraX VideoCapture/Recorder protocol and implementation.
+5. RealSR lifecycle data exists -> run a mini review before making real-camera
+   robustness claims.
 ```
 
 Do not reopen as unfinished:
@@ -234,6 +240,20 @@ invoke avg/min/max: 1,051 / 1,010 / 1,436 us over 50 runs
 boundary: tensor binding + invoke only; not CameraX buffer binding
 ```
 
+TextZoom OCR mini diagnostic:
+
+```text
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\textzoom_ocr\20260720_textzoom_ocr_mini_v2
+cases: 9 TextZoom easy/medium/hard samples
+average OCR similarity:
+  bicubic: 0.083
+  float: 0.099
+  W8A8: 0.056
+  HR: 0.264
+boundary: diagnostic-only; OCR is weak even on HR references, so human visual
+review still owns final text-readability decisions.
+```
+
 ## Next Engineering Choices
 
 Recommended order:
@@ -244,6 +264,11 @@ Recommended order:
 3. Decide whether to build a bounded C API e2e comparison path around
    CameraX/ROI/output after Phase 1 showed ~1.05ms invoke timing, keeping
    rb5-stable-20260720 as rollback anchor.
-4. Keep AIMET, mixed precision, LPIPS/NIQE/OCR behind their documented triggers.
-5. Full VideoCapture/Recorder waits for an explicit demo/product need.
+4. Keep AIMET and mixed precision behind the candidate-crop/toolchain boundary:
+   trigger exists, but native Windows AIMET execution is blocked.
+5. Keep LPIPS/NIQE/OCR diagnostic-only unless calibrated against visual review.
+6. Do the low-cost video demo protocol next if it can reuse existing app/device
+   paths without destabilizing the archived deliverable.
+7. Do a RealSR mini-review next to classify whether real-degradation lifecycle
+   evidence changes the current model story.
 ```

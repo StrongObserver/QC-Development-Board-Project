@@ -57,8 +57,8 @@ original project design unless there is concrete evidence that it cannot work.
 | 3 | tile-eval | done | Tile quality/performance evaluation | input/bicubic/SR/contact sheet plus timing and memory notes | human review needed or result accepted |
 | 4 | tile-app | done | Minimal Android app tile entry | app can trigger post-capture tile path without regressing live ROI | device/manual action needed or app evidence complete |
 | 5 | d8-config | done | Quantization configuration comparison | at least two quantization/calibration variants compared on fixed inputs | toolchain blocked or comparison complete |
-| 6 | aimet-trigger | in_progress | AIMET CLE/Bias Correction trigger check | exact W8A8-vs-float failure crop found, or AIMET remains deferred_with_trigger | recovery feasibility complete or toolchain blocked with evidence |
-| 7 | eval-diagnostic | done | LPIPS/NIQE/OCR diagnostic metrics | diagnostic metrics added only for a visual/metric conflict or text claim | calibrated enough for diagnostic use or deferred |
+| 6 | aimet-trigger | done | AIMET CLE/Bias Correction trigger check | exact W8A8-vs-float failure crop found, or AIMET remains deferred_with_trigger | recovery feasibility complete or toolchain blocked with evidence |
+| 7 | eval-diagnostic | done | LPIPS/NIQE/OCR diagnostic metrics | TextZoom OCR mini diagnostic script and sample run exist; metric remains diagnostic-only | calibrated enough for diagnostic use or deferred |
 | 8 | zero-copy-probe | in_progress | True zero-copy feasibility research/probe | Phase 1 TFLite C API custom allocation + QNN Delegate invoke validated | timing comparison complete or blocked with evidence |
 | 9 | video-temporal-plan | done | Video/every-N-frame enhancement protocol | every-N ImageAnalysis smoke is classified as cadence evidence, not per-frame latency gain | full VideoCapture needs explicit demo/product need |
 | 10 | power-perf-watt | done | Real power/perf-watt characterization | current/power evidence exists if making an efficiency claim | hardware/tooling blocked or evidence complete |
@@ -68,14 +68,15 @@ original project design unless there is concrete evidence that it cannot work.
 
 ## Current Closeout Task
 
-Current active task: `aimet-feasibility-validation`.
+Current active task: `video-demo-and-realsr-mini-review`.
 
 Current open work is no longer tile, D8-config, output postprocess, app e2e
 schema bring-up, or every-N smoke. Those lanes have evidence and should be
 treated as closed unless a regression appears. QNN shared-memory Phase 1 has
-validated custom allocation and invoke timing. The active technical exploration
-is now AIMET feasibility validation after automated crop search found concrete
-W8A8-vs-float local regression candidates.
+validated custom allocation and invoke timing. AIMET trigger search found
+concrete W8A8-vs-float local regression candidates, but native Windows remains
+blocked for actual AIMET execution. TextZoom/OCR mini evaluation is now a
+diagnostic-only text-fidelity tool, not a hard quality gate.
 
 Current evidence to preserve:
 
@@ -97,6 +98,9 @@ C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_qnn_shared_m
 
 AIMET trigger crop search:
 C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\aimet_trigger_search\20260720_full_v2_patch96
+
+TextZoom OCR mini diagnostic:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\textzoom_ocr\20260720_textzoom_ocr_mini_v2
 ```
 
 Current route boundaries:
@@ -117,6 +121,9 @@ Current route boundaries:
 4. Full CameraX VideoCapture/Recorder remains a separate product/demo decision.
 5. Prompts for Qualcomm/internal AI must be output directly in chat, not written
    to Markdown files, unless the user explicitly asks for a file.
+6. TextZoom/OCR is diagnostic-only: the mini run showed very low OCR similarity
+   even on HR references, so it can flag text-readability questions but cannot
+   replace human visual review.
 ```
 
 Power/perf-watt:
