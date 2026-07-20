@@ -122,6 +122,7 @@ class MainActivity : AppCompatActivity() {
         val e2eMs: Long,
         val display: Bitmap? = null,
         val cropSide: Int = 0,
+        val rotationDegrees: Int = 0,
     )
 
     private data class ResourceMemorySnapshot(
@@ -1131,6 +1132,7 @@ class MainActivity : AppCompatActivity() {
                         e2eMs = e2eMs,
                         display = demoDisplayBitmap?.copy(Bitmap.Config.ARGB_8888, false),
                         cropSide = cropSide,
+                        rotationDegrees = degrees,
                     )
                 }
             }
@@ -1147,6 +1149,7 @@ class MainActivity : AppCompatActivity() {
                     e2eMs = e2eMs,
                     display = demoDisplayBitmap?.copy(Bitmap.Config.ARGB_8888, false),
                     cropSide = cropSide,
+                    rotationDegrees = degrees,
                 )
                 synchronized(srSampleLock) { latestSrSample = sample }
                 saveDemoRelationSample(sample)
@@ -1295,9 +1298,9 @@ class MainActivity : AppCompatActivity() {
         }
         try {
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-            val prefix = "DEMOREL_${timestamp}_${sample.backend.label}_${srModelVariant.label}_crop${sample.cropSide}"
-            val alignedInput = alignToDisplayOrientation(sample.input, sample.display)
-            val alignedSr = alignToDisplayOrientation(sample.sr, sample.display)
+            val prefix = "DEMOREL_${timestamp}_${sample.backend.label}_${srModelVariant.label}_crop${sample.cropSide}_rot${sample.rotationDegrees}"
+            val alignedInput = alignToDisplayOrientation(sample.input, sample.rotationDegrees)
+            val alignedSr = alignToDisplayOrientation(sample.sr, sample.rotationDegrees)
             val sheet = makeLabeledDemoRelationSheet(sample.display, alignedInput, alignedSr)
             val saved = listOf(
                 savePngToPictures(sample.display, "${prefix}_wide_preview.png"),
@@ -1309,7 +1312,7 @@ class MainActivity : AppCompatActivity() {
             )
             Log.d(
                 "RB5_SR",
-                "demo relation saved crop=${sample.cropSide} inf=${sample.inferenceMs} e2e=${sample.e2eMs} files=${saved.joinToString()}"
+                "demo relation saved crop=${sample.cropSide} rotation=${sample.rotationDegrees} inf=${sample.inferenceMs} e2e=${sample.e2eMs} files=${saved.joinToString()}"
             )
             runOnUiThread {
                 if (demoMode) {
@@ -2041,13 +2044,12 @@ class MainActivity : AppCompatActivity() {
         return out
     }
 
-    private fun alignToDisplayOrientation(bitmap: Bitmap, display: Bitmap): Bitmap {
-        val bitmapLandscape = bitmap.width >= bitmap.height
-        val displayLandscape = display.width >= display.height
-        if (bitmapLandscape == displayLandscape) {
+    private fun alignToDisplayOrientation(bitmap: Bitmap, rotationDegrees: Int): Bitmap {
+        val normalized = ((rotationDegrees % 360) + 360) % 360
+        if (normalized == 0) {
             return bitmap
         }
-        val matrix = Matrix().apply { postRotate(90f) }
+        val matrix = Matrix().apply { postRotate((-normalized).toFloat()) }
         return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }
 

@@ -317,7 +317,7 @@ and not external power evidence.
 Demo Mode relation evidence:
 
 ```text
-C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_demo_relation_aligned_v2\demo_relation
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_demo_relation_aligned_v3\demo_relation
 relation sheet: display-aligned wide preview / model input 128 / QNN SR output 512
 purpose: explains why the demo main visual uses a clear wide preview while
 QNN/SR still runs on the 128 input and reports real timing.
