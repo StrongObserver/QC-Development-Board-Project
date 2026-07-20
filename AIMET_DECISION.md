@@ -156,6 +156,42 @@ installs. The next useful human action is to provide WSL/Linux or confirm the
 PyTorch FP source model/export path.
 ```
 
+2026-07-21 AIMET-Torch route update:
+
+```text
+PyTorch FP source route is confirmed:
+RB5_SR_lab\export_realesrgan_128_onnx.py
+RB5_SR_lab\verify_realesrgan_onnx.py
+RB5_SR_lab\results\onnx_fp_source_check\20260721_realesrgan128_flower
+
+PyTorch vs ONNXRuntime:
+PSNR=95.046dB, MAD=0.000020, max_abs=0.00001469
+
+AIMET-Torch environment:
+.venv-a with Python 3.12.10, aimet-torch==2.35.1, PYTHONUTF8=1
+
+CLE probe:
+RB5_SR_lab\run_aimet_torch_cle_probe.py
+RB5_SR_lab\results\aimet_torch_cle_probe\20260721_realesrgan128_flower
+before/after CLE PSNR=95.046dB, MAD=0.000020, max_abs=0.00001483
+
+QuantSim compare:
+RB5_SR_lab\run_aimet_torch_quantsim_compare.py
+RB5_SR_lab\results\aimet_torch_quantsim_compare\20260721_realesrgan128_fixed_slice
+avg PSNR delta CLE-minus-base = +0.115dB on the fixed slice
+```
+
+Updated decision:
+
+```text
+AIMET-CLE is now technically feasible through AIMET-Torch on the local PyTorch
+FP source path. It should no longer be described as fully blocked. The current
+evidence is still a small simulated-INT8 recovery signal, not a deployable
+Android/TFLite/QNN model replacement. Next step only if needed: connect the CLE
+state dict to an export/quantization path and compare against the existing app
+W8A8 asset on trigger crops.
+```
+
 ## If AIMET Starts Later
 
 Use the lightest path first:

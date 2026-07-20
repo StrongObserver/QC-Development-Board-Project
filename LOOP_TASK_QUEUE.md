@@ -91,6 +91,24 @@ product decision to build a full CameraX VideoCapture/Recorder route.
 Current evidence to preserve:
 
 ```text
+Optimized default live ROI with UINT8 bulk input and shadow metrics:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260721_loop_p4_strategy_shadow_live
+
+Bulk input comparison:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260721_loop_p2_bulk_input_compare
+
+QNN Delegate profile fixed sample:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260721_loop_p3_qnn_profile_fixed_sample_v2
+
+AIMET-Torch CLE probe:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\aimet_torch_cle_probe\20260721_realesrgan128_flower
+
+AIMET-Torch QuantSim compare:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\aimet_torch_quantsim_compare\20260721_realesrgan128_fixed_slice
+
+QuickSRNet size/latency/quality curve:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\quicksrnet_curve\20260721_quicksrnet_sml_curve
+
 Default live ROI recheck:
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_loop_p0_1_default_live_roi_recheck
 
@@ -149,6 +167,22 @@ C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\p1_aimet_
 Current route boundaries:
 
 ```text
+0a. Current default QNN/QuickSR live ROI now uses the optimized tensor path:
+   native-rotated ROI -> UINT8 NHWC bulk input -> QNN Delegate. Latest e2e p50/p95
+   is 11/17ms, with preprocess 0/0ms. This is a measured small performance win,
+   not true CameraX buffer zero-copy.
+0b. AIMET-CLE is no longer purely blocked: PyTorch FP source and AIMET-Torch CLE
+   are locally validated. QuantSim shows small average simulated INT8 improvement
+   (+0.115dB) but mixed results per case. This is evidence, not a deployed app
+   model replacement.
+0c. QNN Delegate profiling is accessible from the Android app: fixed sample
+   replay collected `profileBytes=904`. The profile payload is raw delegate bytes
+   and is not decoded per op yet.
+0d. Strategy shadow mode is active in logs only. It records luma, simple
+   sharpness, motion MAD, and a shadow decision; it does not actually skip frames
+   or switch models.
+0e. QuickSRNet medium/large host curve exists. Larger models need human visual
+   review of contact sheets before any Android packaging or QNN app validation.
 0. The default live ROI path remains the mainline after the P0 recheck:
    default Bitmap live ROI e2e p50/p95 is 14/18ms, while native-rotated tensor
    live ROI is 14/20ms. Native YUV ROI correctness is good enough for probes

@@ -10,7 +10,7 @@ timing record.
 Current default:
 
 ```text
-QNN backend + QuickSRNetSmall W8A8
+QNN backend + QuickSRNetSmall W8A8 + optimized native tensor input path
 ```
 
 Real-ESRGAN remains available for comparison through explicit UI / intent
@@ -55,7 +55,7 @@ Expected log signal:
 
 ```text
 RB5_SR: auto live SR from intent backend=QNN model=QUICKSR_W8A8
-RB5_SR: ... model=QUICKSR_W8A8
+RB5_SR_TENSOR: ... model=QUICKSR_W8A8 ... optimizedTensor=true
 ```
 
 ## Collect Default Live Timing
@@ -74,10 +74,16 @@ C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_e2e_sche
 Current reference numbers:
 
 ```text
-app e2e p50/p95: 15.0 / 19.0 ms
-analyzer p50/p95: 16.0 / 21.0 ms
-QNN inference p50/p95: 1.0 / 2.0 ms
+app e2e p50/p95: 11.0 / 17.0 ms
+analyzer p50/p95: 11.0 / 17.7 ms
+QNN inference p50/p95: 2.0 / 2.0 ms
 postprocess p50/p95: 1.0 / 1.0 ms
+```
+
+Reference result:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260721_loop_p4_strategy_shadow_live
 ```
 
 ## Short Sustained Check
@@ -140,20 +146,22 @@ C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20251110_tensor_ready
 Decision:
 
 ```text
-mainline_not_justified_yet
+superseded_by_optimized_tensor_default
 ```
 
 Reason:
 
 ```text
-tensor-ready e2e p50/p95: 20.0 / 25.7 ms
-Bitmap default after output reuse: 19.0 / 24.7 ms
-Bitmap default after UINT8 output bulk-copy smoke: 15.0 / 19.0 ms
+old tensor-ready e2e p50/p95: 20.0 / 25.7 ms
+old native-rotated tensor e2e p50/p95: 14.0 / 20.0 ms
+optimized tensor default e2e p50/p95: 11.0 / 17.0 ms
+The optimized path removes the per-byte UINT8 input quantization loop and is now
+the default only for QNN + QuickSRNetSmall.
 ```
 
 ## What Not To Do
 
-- Do not use tensor-ready live as the default path.
+- Do not use the old tensor-ready path as the default path.
 - Do not enable automatic dual-model routing.
 - Do not claim true zero-copy.
 - Do not use raw benchmark outputs as real-camera evidence.
