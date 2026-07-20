@@ -183,6 +183,7 @@ class MainActivity : AppCompatActivity() {
     external fun qnnRuntimePreflight(): String
     external fun qnnSharedMemoryProbe(inputBytes: Int, outputBytes: Int): String
     external fun qnnSharedMemoryTensorProbe(assetManager: AssetManager, modelAsset: String, delegateHandle: Long, repeats: Int): String
+    external fun qnnSharedMemoryTensorCompareProbe(assetManager: AssetManager, modelAsset: String, normalDelegateHandle: Long, sharedDelegateHandle: Long, repeats: Int): String
     external fun processYPlane(yData: ByteArray, width: Int, height: Int, rowStride: Int): String
     external fun nativeYuvToRgbRoi(
         yData: ByteArray,
@@ -239,6 +240,7 @@ class MainActivity : AppCompatActivity() {
         val autoRunResourceProbe = boolIntentExtra("run_resource_probe")
         val autoRunQnnSharedMemoryProbe = boolIntentExtra("run_qnn_shared_memory_probe")
         val autoRunQnnSharedTensorProbe = boolIntentExtra("run_qnn_shared_tensor_probe")
+        val autoRunQnnSharedTensorCompareProbe = boolIntentExtra("run_qnn_shared_tensor_compare_probe")
         val autoRunYuvRoiProbe = boolIntentExtra("run_yuv_roi_probe")
         val autoRunTensorReadyProbe = boolIntentExtra("run_tensor_ready_probe")
         val autoRunTileStill = boolIntentExtra("run_tile_still")
@@ -251,6 +253,7 @@ class MainActivity : AppCompatActivity() {
             "onCreate run_qnn_fixed=$autoRunQnnFixed run_resource_probe=$autoRunResourceProbe " +
                 "run_qnn_shared_memory_probe=$autoRunQnnSharedMemoryProbe " +
                 "run_qnn_shared_tensor_probe=$autoRunQnnSharedTensorProbe " +
+                "run_qnn_shared_tensor_compare_probe=$autoRunQnnSharedTensorCompareProbe " +
                 "run_yuv_roi_probe=$autoRunYuvRoiProbe run_tensor_ready_probe=$autoRunTensorReadyProbe " +
                 "probe_mode=$requestedProbeMode extras=${intent.extras?.keySet()?.joinToString()}"
         )
@@ -277,6 +280,11 @@ class MainActivity : AppCompatActivity() {
             srExecutor.execute {
                 Thread.sleep(500)
                 runQnnSharedMemoryTensorProbeOnWorker()
+            }
+        } else if (autoRunQnnSharedTensorCompareProbe || requestedProbeMode == "qnn_shared_tensor_compare") {
+            srExecutor.execute {
+                Thread.sleep(500)
+                runQnnSharedMemoryTensorCompareProbeOnWorker()
             }
         } else if (autoRunQnnFixed) {
             srExecutor.execute {
@@ -602,6 +610,43 @@ class MainActivity : AppCompatActivity() {
             }
         } finally {
             delegate?.close()
+        }
+    }
+
+    private fun runQnnSharedMemoryTensorCompareProbeOnWorker() {
+        val tag = "RB5_QNN_SHARED"
+        val modelAsset = SrModelVariant.QUICKSR_W8A8.assetName
+        val repeats = intIntentExtra("shared_tensor_repeats", 20).coerceAtLeast(1)
+        runOnUiThread {
+            offlineEvalActive = true
+            statusTextView.text = "QNN shared-memory tensor compare probe running..."
+        }
+        var normalDelegate: QnnDelegate? = null
+        var sharedDelegate: QnnDelegate? = null
+        try {
+            normalDelegate = createQnnDelegateForProbe()
+            sharedDelegate = createQnnDelegateForProbe()
+            val result = qnnSharedMemoryTensorCompareProbe(
+                assets,
+                modelAsset,
+                normalDelegate.getNativeHandle(),
+                sharedDelegate.getNativeHandle(),
+                repeats,
+            )
+            Log.d(tag, "tensor compare probe result $result")
+            runOnUiThread {
+                offlineEvalActive = false
+                statusTextView.text = "QNN shared-memory tensor compare probe\n$result"
+            }
+        } catch (e: Throwable) {
+            Log.e(tag, "tensor compare probe failed", e)
+            runOnUiThread {
+                offlineEvalActive = false
+                statusTextView.text = "QNN shared-memory tensor compare probe failed: ${e.message}"
+            }
+        } finally {
+            normalDelegate?.close()
+            sharedDelegate?.close()
         }
     }
 

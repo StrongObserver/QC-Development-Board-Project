@@ -1,4 +1,4 @@
-"""Run the RB5VisionLab QNN TFLite Delegate shared-memory Phase 0 probe."""
+"""Run RB5VisionLab QNN TFLite Delegate shared-memory probes."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ DEVICE_SERIAL = "ff5d3ab4"
 PACKAGE_NAME = "com.cyf.rb5visionlab"
 APP_COMPONENT = "com.cyf.rb5visionlab/.MainActivity"
 
-PROBE_RE = re.compile(r"(?:tensor )?probe result (?P<result>status=\S+ .*)")
+PROBE_RE = re.compile(r"(?:tensor compare |tensor )?probe result (?P<result>status=\S+ .*)")
 
 
 def run(cmd: list[str], *, check: bool = True, timeout: int | None = None) -> subprocess.CompletedProcess[str]:
@@ -76,6 +76,12 @@ def make_loop_state(run_id: str, out_dir: Path, row: dict[str, object], phase: s
         passed_next = "Compare C API tensor-binding timing against the Kotlin/TFLite default path, then decide whether to deepen the data-path probe."
         failed_next = "Inspect TFLite/QNN C API binding stages before attempting performance comparison."
         notes = "Phase 1 validates TFLite C API custom allocation, QNN Delegate binding, and one invoke; it is still not CameraX buffer binding."
+    elif phase == "phase2":
+        passed_status = "shared_memory_tensor_compare_validated"
+        passed_stop = "qnn_delegate_shared_vs_normal_tensor_compare_collected"
+        passed_next = "Use this as invoke-level comparison evidence; CameraX buffer binding remains a separate route."
+        failed_next = "Inspect normal/shared TFLite C API compare probe before attempting any e2e data-path claim."
+        notes = "Phase 2 compares normal TFLite tensor buffers and QNN shared custom allocations on the same synthetic input; it is still not CameraX buffer binding."
     else:
         passed_status = "shared_memory_alloc_free_validated"
         passed_stop = "qnn_delegate_shared_memory_api_available"
@@ -106,7 +112,11 @@ def collect_probe_log(timeout_s: int, phase: str, repeats: int) -> str:
         "-n",
         APP_COMPONENT,
         "--ez",
-        "run_qnn_shared_tensor_probe" if phase == "phase1" else "run_qnn_shared_memory_probe",
+        "run_qnn_shared_tensor_compare_probe"
+        if phase == "phase2"
+        else "run_qnn_shared_tensor_probe"
+        if phase == "phase1"
+        else "run_qnn_shared_memory_probe",
         "true",
         "--ei",
         "shared_tensor_repeats",
@@ -181,6 +191,32 @@ def write_summary(out_dir: Path, run_id: str, row: dict[str, object], loop_state
         "invokeAvgUs",
         "invokeMinUs",
         "invokeMaxUs",
+        "normalPass",
+        "normalStage",
+        "normalDelegate",
+        "normalInvoke",
+        "normalInputBound",
+        "normalOutputBound",
+        "normalChecksum",
+        "normalCompletedRuns",
+        "normalDelegateUs",
+        "normalInvokeAvgUs",
+        "normalInvokeMinUs",
+        "normalInvokeMaxUs",
+        "sharedPass",
+        "sharedStage",
+        "sharedDelegate",
+        "sharedInvoke",
+        "sharedInputBound",
+        "sharedOutputBound",
+        "sharedChecksum",
+        "sharedCompletedRuns",
+        "sharedDelegateUs",
+        "sharedInvokeAvgUs",
+        "sharedInvokeMinUs",
+        "sharedInvokeMaxUs",
+        "checksumMatch",
+        "invokeAvgDeltaUs",
     ]
     for key in keys:
         if key not in row:
@@ -192,7 +228,7 @@ def write_summary(out_dir: Path, run_id: str, row: dict[str, object], loop_state
             "## Boundary",
             "",
             "This is not CameraX buffer binding and not true zero-copy.",
-            "Phase 0 only proves shared-memory API access and alloc/free. Phase 1 additionally proves tensor custom allocation and one TFLite/QNN invoke.",
+            "Phase 0 only proves shared-memory API access and alloc/free. Phase 1 additionally proves tensor custom allocation and one TFLite/QNN invoke. Phase 2 compares normal tensor buffers against shared custom allocation on the same synthetic input.",
             "",
             "## Outputs",
             "",
@@ -206,7 +242,7 @@ def write_summary(out_dir: Path, run_id: str, row: dict[str, object], loop_state
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--phase", choices=["phase0", "phase1"], default="phase0")
+    parser.add_argument("--phase", choices=["phase0", "phase1", "phase2"], default="phase0")
     parser.add_argument("--repeats", type=int, default=20)
     parser.add_argument("--run-id", default="")
     parser.add_argument("--timeout-s", type=int, default=20)

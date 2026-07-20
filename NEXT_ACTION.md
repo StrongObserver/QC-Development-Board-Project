@@ -29,6 +29,7 @@ README / demo runbook / interview talk track
 showcase index
 Nutstore long-term context updated with final closeout and full-scope ledger
 QNN shared-memory Phase 1 tensor binding + invoke timing probe
+QNN shared-memory Phase 2 normal-vs-shared tensor compare
 AIMET trigger crop search
 TextZoom OCR mini diagnostic
 RealSR 10-case lifecycle mini review
@@ -40,17 +41,16 @@ low-cost live ROI screenrecord demo
 Next priority:
 
 ```text
-The project is past the clean archive checkpoint and has completed four bounded
-exploration steps: QNN shared-memory Phase 1, AIMET trigger search, TextZoom
-OCR mini diagnostics, RealSR lifecycle mini review, and a low-cost live ROI
-screenrecord demo. Continue the loop with the remaining bounded lanes:
+The project is past the clean archive checkpoint and has completed bounded
+exploration steps: QNN shared-memory Phase 0/1/2, AIMET trigger search,
+TextZoom OCR mini diagnostics, RealSR lifecycle mini review, and a low-cost
+live ROI screenrecord demo. Continue the loop with the remaining bounded lanes:
 1. a concrete W8A8-vs-float failure crop appears -> AIMET/CLE or mixed precision;
 2. visual review conflicts with PSNR/SSIM or a text-readability claim is needed -> LPIPS/NIQE/OCR diagnostics;
-3. shared-memory Phase 1 passed -> compare timing and output validity against the Kotlin/TFLite default path;
-4. shared-memory Phase 1 passed -> decide whether a bounded C API e2e comparison
-   is worth implementing beyond the probe.
-5. human review is needed -> watch the low-cost MP4 and decide whether the
+3. human review is needed -> watch the low-cost MP4 and decide whether the
    framing/readability is acceptable as demo evidence.
+4. if continuing data-path engineering -> design a larger CameraX/native
+   integration path; invoke-level shared-memory probing itself is complete.
 ```
 
 Do not reopen as unfinished:
@@ -244,6 +244,20 @@ invoke avg/min/max: 1,051 / 1,010 / 1,436 us over 50 runs
 boundary: tensor binding + invoke only; not CameraX buffer binding
 ```
 
+Shared-memory Phase 2:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_qnn_shared_memory_phase2_compare
+status: shared_memory_tensor_compare_validated
+normal tensor buffer invoke avg/min/max: 1,104 / 1,050 / 2,195 us
+shared custom allocation invoke avg/min/max: 1,056 / 1,016 / 1,250 us
+checksumMatch: true
+invokeAvgDeltaUs: -48
+boundary: same synthetic input and TFLite C API/QNN Delegate path only. This
+proves shared custom allocation does not break output and is not slower at
+invoke level, but it is still not CameraX buffer binding or true zero-copy.
+```
+
 TextZoom OCR mini diagnostic:
 
 ```text
@@ -293,9 +307,10 @@ Recommended order:
 ```text
 1. Do not reopen app output postprocess unless a regression appears.
 2. Treat every-N as a completed cadence boundary: valid, but not a latency win.
-3. Decide whether to build a bounded C API e2e comparison path around
-   CameraX/ROI/output after Phase 1 showed ~1.05ms invoke timing, keeping
-   rb5-stable-20260720 as rollback anchor.
+3. Treat shared-memory invoke-level probing as complete: Phase 2 shows matching
+   output checksum and only about 48us shared-allocation average invoke delta.
+   Further zero-copy work must target CameraX/native data-path integration, not
+   another small shared tensor probe.
 4. Keep AIMET and mixed precision behind the candidate-crop/toolchain boundary:
    trigger exists, but native Windows AIMET execution is blocked.
 5. Keep LPIPS/NIQE/OCR diagnostic-only unless calibrated against visual review.
@@ -303,6 +318,7 @@ Recommended order:
    a showcase artifact.
 7. Keep RealSR as lifecycle sanity until a reviewed real-camera robustness claim
    is needed.
-8. If continuing engineering without human review, decide whether to build a
-   bounded C API e2e comparison path after the shared-memory Phase 1 probe.
+8. If continuing engineering without human review, either scope a larger
+   CameraX/native data-path integration experiment or stop because the remaining
+   open items need WSL/Linux AIMET support or human visual review.
 ```

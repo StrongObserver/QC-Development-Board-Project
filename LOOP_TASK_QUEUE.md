@@ -59,7 +59,7 @@ original project design unless there is concrete evidence that it cannot work.
 | 5 | d8-config | done | Quantization configuration comparison | at least two quantization/calibration variants compared on fixed inputs | toolchain blocked or comparison complete |
 | 6 | aimet-trigger | done | AIMET CLE/Bias Correction trigger check | exact W8A8-vs-float failure crop found, or AIMET remains deferred_with_trigger | recovery feasibility complete or toolchain blocked with evidence |
 | 7 | eval-diagnostic | done | LPIPS/NIQE/OCR diagnostic metrics | TextZoom OCR mini diagnostic script and sample run exist; metric remains diagnostic-only | calibrated enough for diagnostic use or deferred |
-| 8 | zero-copy-probe | in_progress | True zero-copy feasibility research/probe | Phase 1 TFLite C API custom allocation + QNN Delegate invoke validated | timing comparison complete or blocked with evidence |
+| 8 | zero-copy-probe | done | True zero-copy feasibility research/probe | Phase 2 normal tensor vs shared custom allocation compare passed with matching checksum | timing comparison complete or blocked with evidence |
 | 9 | video-temporal-plan | done | Video/every-N-frame enhancement protocol | every-N ImageAnalysis smoke is classified as cadence evidence; low-cost screenrecord demo path exists | full VideoCapture needs explicit demo/product need |
 | 10 | power-perf-watt | done | Real power/perf-watt characterization | current/power evidence exists if making an efficiency claim | hardware/tooling blocked or evidence complete |
 | 11 | diff-audit | done | Audit current uncommitted changes and artifact boundaries | explicit source/doc/script files vs generated artifacts are separated | audit complete |
@@ -68,12 +68,13 @@ original project design unless there is concrete evidence that it cannot work.
 
 ## Current Closeout Task
 
-Current active task: `shared-memory-e2e-decision-or-human-review`.
+Current active task: `human-review-or-next-data-path-integration`.
 
 Current open work is no longer tile, D8-config, output postprocess, app e2e
-schema bring-up, or every-N smoke. Those lanes have evidence and should be
-treated as closed unless a regression appears. QNN shared-memory Phase 1 has
-validated custom allocation and invoke timing. AIMET trigger search found
+schema bring-up, every-N smoke, or invoke-level shared-memory probing. Those
+lanes have evidence and should be treated as closed unless a regression appears.
+QNN shared-memory Phase 2 has validated normal-vs-shared tensor comparison with
+matching output checksum. AIMET trigger search found
 concrete W8A8-vs-float local regression candidates, but native Windows remains
 blocked for actual AIMET execution. TextZoom/OCR mini evaluation is now a
 diagnostic-only text-fidelity tool, not a hard quality gate. RealSR 10-case
@@ -100,6 +101,9 @@ C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_qnn_shared_m
 QNN shared-memory Phase 1:
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_qnn_shared_memory_phase1
 
+QNN shared-memory Phase 2:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_qnn_shared_memory_phase2_compare
+
 AIMET trigger crop search:
 C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\aimet_trigger_search\20260720_full_v2_patch96
 
@@ -125,9 +129,10 @@ Current route boundaries:
    SampleAppSharedBuffer with libcdsprpc/rpcmem/QnnMem_register. The current
    Java/Kotlin QnnDelegate wrapper does not expose the custom allocation API;
    `javap` on `qtld-release.aar` confirms only backend/skel/perf/profile/skip
-   options are exposed. Phase 0 passed alloc/free for the current model I/O
-   sizes; Phase 1 passed tensor binding and one QNN Delegate invoke through
-   TFLite C API custom allocation.
+   options are exposed. Phase 0 passed alloc/free; Phase 1 passed tensor binding;
+   Phase 2 passed normal-vs-shared tensor comparison with matching checksum and
+   about -48us shared invoke average delta. This is still not CameraX buffer
+   binding or true zero-copy.
 4. Full CameraX VideoCapture/Recorder remains a separate product/demo decision.
 5. Prompts for Qualcomm/internal AI must be output directly in chat, not written
    to Markdown files, unless the user explicitly asks for a file.

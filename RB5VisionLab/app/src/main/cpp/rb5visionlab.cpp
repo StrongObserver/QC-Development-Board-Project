@@ -190,6 +190,113 @@ bool readAssetBytes(JNIEnv* env, jobject asset_manager, const char* asset_name, 
     return read == static_cast<int64_t>(bytes.size());
 }
 
+struct TfLiteApi {
+    TfLiteModelCreateFn modelCreate = nullptr;
+    TfLiteModelDeleteFn modelDelete = nullptr;
+    TfLiteInterpreterOptionsCreateFn optionsCreate = nullptr;
+    TfLiteInterpreterOptionsDeleteFn optionsDelete = nullptr;
+    TfLiteInterpreterOptionsSetNumThreadsFn optionsSetThreads = nullptr;
+    TfLiteInterpreterCreateFn interpreterCreate = nullptr;
+    TfLiteInterpreterDeleteFn interpreterDelete = nullptr;
+    TfLiteInterpreterGetInputTensorIndexFn inputIndex = nullptr;
+    TfLiteInterpreterGetOutputTensorIndexFn outputIndex = nullptr;
+    TfLiteInterpreterSetCustomAllocationForTensorFn setCustomAllocation = nullptr;
+    TfLiteInterpreterAllocateTensorsFn allocateTensors = nullptr;
+    TfLiteInterpreterModifyGraphWithDelegateFn modifyGraph = nullptr;
+    TfLiteInterpreterInvokeFn invoke = nullptr;
+    TfLiteInterpreterGetInputTensorFn getInputTensor = nullptr;
+    TfLiteInterpreterGetOutputTensorFn getOutputTensor = nullptr;
+    TfLiteTensorDataFn tensorData = nullptr;
+    TfLiteTensorByteSizeFn tensorByteSize = nullptr;
+};
+
+TfLiteApi loadTfLiteApi(void* handle) {
+    TfLiteApi api;
+    api.modelCreate = loadSymbol<TfLiteModelCreateFn>(handle, "TfLiteModelCreate");
+    api.modelDelete = loadSymbol<TfLiteModelDeleteFn>(handle, "TfLiteModelDelete");
+    api.optionsCreate = loadSymbol<TfLiteInterpreterOptionsCreateFn>(handle, "TfLiteInterpreterOptionsCreate");
+    api.optionsDelete = loadSymbol<TfLiteInterpreterOptionsDeleteFn>(handle, "TfLiteInterpreterOptionsDelete");
+    api.optionsSetThreads = loadSymbol<TfLiteInterpreterOptionsSetNumThreadsFn>(
+            handle, "TfLiteInterpreterOptionsSetNumThreads");
+    api.interpreterCreate = loadSymbol<TfLiteInterpreterCreateFn>(handle, "TfLiteInterpreterCreate");
+    api.interpreterDelete = loadSymbol<TfLiteInterpreterDeleteFn>(handle, "TfLiteInterpreterDelete");
+    api.inputIndex = loadSymbol<TfLiteInterpreterGetInputTensorIndexFn>(
+            handle, "TfLiteInterpreterGetInputTensorIndex");
+    api.outputIndex = loadSymbol<TfLiteInterpreterGetOutputTensorIndexFn>(
+            handle, "TfLiteInterpreterGetOutputTensorIndex");
+    api.setCustomAllocation = loadSymbol<TfLiteInterpreterSetCustomAllocationForTensorFn>(
+            handle, "TfLiteInterpreterSetCustomAllocationForTensor");
+    api.allocateTensors = loadSymbol<TfLiteInterpreterAllocateTensorsFn>(
+            handle, "TfLiteInterpreterAllocateTensors");
+    api.modifyGraph = loadSymbol<TfLiteInterpreterModifyGraphWithDelegateFn>(
+            handle, "TfLiteInterpreterModifyGraphWithDelegate");
+    api.invoke = loadSymbol<TfLiteInterpreterInvokeFn>(handle, "TfLiteInterpreterInvoke");
+    api.getInputTensor = loadSymbol<TfLiteInterpreterGetInputTensorFn>(
+            handle, "TfLiteInterpreterGetInputTensor");
+    api.getOutputTensor = loadSymbol<TfLiteInterpreterGetOutputTensorFn>(
+            handle, "TfLiteInterpreterGetOutputTensor");
+    api.tensorData = loadSymbol<TfLiteTensorDataFn>(handle, "TfLiteTensorData");
+    api.tensorByteSize = loadSymbol<TfLiteTensorByteSizeFn>(handle, "TfLiteTensorByteSize");
+    return api;
+}
+
+bool hasRequiredTfLiteApi(const TfLiteApi& api, bool needs_custom_allocation) {
+    return api.modelCreate != nullptr && api.modelDelete != nullptr &&
+           api.optionsCreate != nullptr && api.optionsDelete != nullptr &&
+           api.optionsSetThreads != nullptr && api.interpreterCreate != nullptr &&
+           api.interpreterDelete != nullptr && api.inputIndex != nullptr &&
+           api.outputIndex != nullptr && api.allocateTensors != nullptr &&
+           api.modifyGraph != nullptr && api.invoke != nullptr &&
+           api.getInputTensor != nullptr && api.getOutputTensor != nullptr &&
+           api.tensorData != nullptr && api.tensorByteSize != nullptr &&
+           (!needs_custom_allocation || api.setCustomAllocation != nullptr);
+}
+
+void fillSyntheticInput(uint8_t* input_bytes, size_t input_size) {
+    if (input_bytes == nullptr) {
+        return;
+    }
+    for (size_t i = 0; i < input_size; ++i) {
+        input_bytes[i] = static_cast<uint8_t>((i * 17 + 31) & 0xFF);
+    }
+}
+
+struct OutputSample {
+    uint32_t checksum = 0;
+    uint8_t minValue = 255;
+    uint8_t maxValue = 0;
+};
+
+OutputSample sampleOutputBytes(const uint8_t* output_bytes, size_t output_size) {
+    OutputSample sample;
+    if (output_bytes == nullptr || output_size == 0) {
+        sample.minValue = 0;
+        return sample;
+    }
+    for (size_t i = 0; i < output_size; i += 4096) {
+        const uint8_t value = output_bytes[i];
+        sample.checksum = sample.checksum * 131u + value;
+        sample.minValue = std::min(sample.minValue, value);
+        sample.maxValue = std::max(sample.maxValue, value);
+    }
+    return sample;
+}
+
+int64_t averageMicros(const std::vector<int64_t>& values) {
+    return values.empty()
+            ? -1
+            : std::accumulate(values.begin(), values.end(), int64_t{0}) /
+                    static_cast<int64_t>(values.size());
+}
+
+int64_t minMicros(const std::vector<int64_t>& values) {
+    return values.empty() ? -1 : *std::min_element(values.begin(), values.end());
+}
+
+int64_t maxMicros(const std::vector<int64_t>& values) {
+    return values.empty() ? -1 : *std::max_element(values.begin(), values.end());
+}
+
 std::string qnnDelegateSharedTensorProbe(
         JNIEnv* env,
         jobject asset_manager,
@@ -217,100 +324,69 @@ std::string qnnDelegateSharedTensorProbe(
         return "status=blocked stage=dlopen library=libQnnTFLiteDelegate.so";
     }
 
-    auto model_create = loadSymbol<TfLiteModelCreateFn>(tflite.handle, "TfLiteModelCreate");
-    auto model_delete = loadSymbol<TfLiteModelDeleteFn>(tflite.handle, "TfLiteModelDelete");
-    auto options_create = loadSymbol<TfLiteInterpreterOptionsCreateFn>(tflite.handle, "TfLiteInterpreterOptionsCreate");
-    auto options_delete = loadSymbol<TfLiteInterpreterOptionsDeleteFn>(tflite.handle, "TfLiteInterpreterOptionsDelete");
-    auto options_set_threads = loadSymbol<TfLiteInterpreterOptionsSetNumThreadsFn>(
-            tflite.handle, "TfLiteInterpreterOptionsSetNumThreads");
-    auto interpreter_create = loadSymbol<TfLiteInterpreterCreateFn>(tflite.handle, "TfLiteInterpreterCreate");
-    auto interpreter_delete = loadSymbol<TfLiteInterpreterDeleteFn>(tflite.handle, "TfLiteInterpreterDelete");
-    auto input_index = loadSymbol<TfLiteInterpreterGetInputTensorIndexFn>(
-            tflite.handle, "TfLiteInterpreterGetInputTensorIndex");
-    auto output_index = loadSymbol<TfLiteInterpreterGetOutputTensorIndexFn>(
-            tflite.handle, "TfLiteInterpreterGetOutputTensorIndex");
-    auto set_custom_allocation = loadSymbol<TfLiteInterpreterSetCustomAllocationForTensorFn>(
-            tflite.handle, "TfLiteInterpreterSetCustomAllocationForTensor");
-    auto allocate_tensors = loadSymbol<TfLiteInterpreterAllocateTensorsFn>(
-            tflite.handle, "TfLiteInterpreterAllocateTensors");
-    auto modify_graph = loadSymbol<TfLiteInterpreterModifyGraphWithDelegateFn>(
-            tflite.handle, "TfLiteInterpreterModifyGraphWithDelegate");
-    auto invoke = loadSymbol<TfLiteInterpreterInvokeFn>(tflite.handle, "TfLiteInterpreterInvoke");
-    auto get_input_tensor = loadSymbol<TfLiteInterpreterGetInputTensorFn>(
-            tflite.handle, "TfLiteInterpreterGetInputTensor");
-    auto get_output_tensor = loadSymbol<TfLiteInterpreterGetOutputTensorFn>(
-            tflite.handle, "TfLiteInterpreterGetOutputTensor");
-    auto tensor_data = loadSymbol<TfLiteTensorDataFn>(tflite.handle, "TfLiteTensorData");
-    auto tensor_byte_size = loadSymbol<TfLiteTensorByteSizeFn>(tflite.handle, "TfLiteTensorByteSize");
+    const TfLiteApi api = loadTfLiteApi(tflite.handle);
     auto alloc_mem = loadSymbol<QnnDelegateAllocCustomMemFn>(qnn.handle, "TfLiteQnnDelegateAllocCustomMem");
     auto free_mem = loadSymbol<QnnDelegateFreeCustomMemFn>(qnn.handle, "TfLiteQnnDelegateFreeCustomMem");
 
-    if (model_create == nullptr || model_delete == nullptr || options_create == nullptr ||
-        options_delete == nullptr || options_set_threads == nullptr || interpreter_create == nullptr ||
-        interpreter_delete == nullptr || input_index == nullptr || output_index == nullptr ||
-        set_custom_allocation == nullptr || allocate_tensors == nullptr || modify_graph == nullptr ||
-        invoke == nullptr || get_input_tensor == nullptr || get_output_tensor == nullptr ||
-        tensor_data == nullptr || tensor_byte_size == nullptr || alloc_mem == nullptr || free_mem == nullptr) {
+    if (!hasRequiredTfLiteApi(api, true) || alloc_mem == nullptr || free_mem == nullptr) {
         return "status=blocked stage=dlsym error=missing_tflite_or_qnn_symbol";
     }
 
-    TfLiteModel* model = model_create(model_bytes.data(), model_bytes.size());
+    TfLiteModel* model = api.modelCreate(model_bytes.data(), model_bytes.size());
     if (model == nullptr) {
         return "status=blocked stage=model_create";
     }
-    TfLiteInterpreterOptions* options = options_create();
+    TfLiteInterpreterOptions* options = api.optionsCreate();
     if (options == nullptr) {
-        model_delete(model);
+        api.modelDelete(model);
         return "status=blocked stage=options_create";
     }
-    options_set_threads(options, 1);
-    TfLiteInterpreter* interpreter = interpreter_create(model, options);
-    options_delete(options);
+    api.optionsSetThreads(options, 1);
+    TfLiteInterpreter* interpreter = api.interpreterCreate(model, options);
+    api.optionsDelete(options);
     if (interpreter == nullptr) {
-        model_delete(model);
+        api.modelDelete(model);
         return "status=blocked stage=interpreter_create";
     }
 
-    const int input_tensor_index = input_index(interpreter, 0);
-    const int output_tensor_index = output_index(interpreter, 0);
+    const int input_tensor_index = api.inputIndex(interpreter, 0);
+    const int output_tensor_index = api.outputIndex(interpreter, 0);
     void* input_ptr = alloc_mem(kInputBytes, kTfLiteDefaultTensorAlignment);
     void* output_ptr = alloc_mem(kOutputBytes, kTfLiteDefaultTensorAlignment);
     if (input_ptr == nullptr || output_ptr == nullptr || input_tensor_index < 0 || output_tensor_index < 0) {
         if (input_ptr != nullptr) free_mem(input_ptr);
         if (output_ptr != nullptr) free_mem(output_ptr);
-        interpreter_delete(interpreter);
-        model_delete(model);
+        api.interpreterDelete(interpreter);
+        api.modelDelete(model);
         return "status=blocked stage=prepare_custom_allocation";
     }
 
     TfLiteCustomAllocationNative input_alloc{input_ptr, kInputBytes};
     TfLiteCustomAllocationNative output_alloc{output_ptr, kOutputBytes};
     const TfLiteStatus input_alloc_status =
-            set_custom_allocation(interpreter, input_tensor_index, &input_alloc, 0);
+            api.setCustomAllocation(interpreter, input_tensor_index, &input_alloc, 0);
     const TfLiteStatus output_alloc_status =
-            set_custom_allocation(interpreter, output_tensor_index, &output_alloc, 0);
-    const TfLiteStatus allocate_status = allocate_tensors(interpreter);
-    TfLiteTensor* input_tensor = get_input_tensor(interpreter, 0);
-    const TfLiteTensor* output_tensor = get_output_tensor(interpreter, 0);
-    const bool input_bound = input_tensor != nullptr && tensor_data(input_tensor) == input_ptr;
-    const bool output_bound = output_tensor != nullptr && tensor_data(output_tensor) == output_ptr;
-    const size_t input_tensor_bytes = input_tensor != nullptr ? tensor_byte_size(input_tensor) : 0;
-    const size_t output_tensor_bytes = output_tensor != nullptr ? tensor_byte_size(output_tensor) : 0;
+            api.setCustomAllocation(interpreter, output_tensor_index, &output_alloc, 0);
+    const TfLiteStatus allocate_status = api.allocateTensors(interpreter);
+    TfLiteTensor* input_tensor = api.getInputTensor(interpreter, 0);
+    const TfLiteTensor* output_tensor = api.getOutputTensor(interpreter, 0);
+    const bool input_bound = input_tensor != nullptr && api.tensorData(input_tensor) == input_ptr;
+    const bool output_bound = output_tensor != nullptr && api.tensorData(output_tensor) == output_ptr;
+    const size_t input_tensor_bytes = input_tensor != nullptr ? api.tensorByteSize(input_tensor) : 0;
+    const size_t output_tensor_bytes = output_tensor != nullptr ? api.tensorByteSize(output_tensor) : 0;
     const auto delegate_start = std::chrono::steady_clock::now();
     const TfLiteStatus delegate_status =
-            modify_graph(interpreter, reinterpret_cast<TfLiteOpaqueDelegate*>(delegate_handle));
+            api.modifyGraph(interpreter, reinterpret_cast<TfLiteOpaqueDelegate*>(delegate_handle));
     const auto delegate_end = std::chrono::steady_clock::now();
 
     uint8_t* input_bytes = reinterpret_cast<uint8_t*>(input_ptr);
-    for (size_t i = 0; i < kInputBytes; ++i) {
-        input_bytes[i] = static_cast<uint8_t>((i * 17 + 31) & 0xFF);
-    }
+    fillSyntheticInput(input_bytes, kInputBytes);
     int invoke_status = delegate_status;
     std::vector<int64_t> invoke_times_us;
     if (delegate_status == 0) {
         for (int i = 0; i < repeats; ++i) {
             const auto invoke_start = std::chrono::steady_clock::now();
-            invoke_status = invoke(interpreter);
+            invoke_status = api.invoke(interpreter);
             const auto invoke_end = std::chrono::steady_clock::now();
             invoke_times_us.push_back(std::chrono::duration_cast<std::chrono::microseconds>(
                     invoke_end - invoke_start).count());
@@ -320,15 +396,7 @@ std::string qnnDelegateSharedTensorProbe(
         }
     }
     const uint8_t* output_bytes = reinterpret_cast<const uint8_t*>(output_ptr);
-    uint32_t checksum = 0;
-    uint8_t min_value = 255;
-    uint8_t max_value = 0;
-    for (size_t i = 0; i < kOutputBytes; i += 4096) {
-        const uint8_t value = output_bytes[i];
-        checksum = checksum * 131u + value;
-        min_value = std::min(min_value, value);
-        max_value = std::max(max_value, value);
-    }
+    const OutputSample output_sample = sampleOutputBytes(output_bytes, kOutputBytes);
 
     const bool passed = input_alloc_status == 0 && output_alloc_status == 0 &&
                         allocate_status == 0 && delegate_status == 0 && invoke_status == 0 &&
@@ -336,19 +404,12 @@ std::string qnnDelegateSharedTensorProbe(
                         input_tensor_bytes <= kInputBytes && output_tensor_bytes <= kOutputBytes;
     const int64_t delegate_us = std::chrono::duration_cast<std::chrono::microseconds>(
             delegate_end - delegate_start).count();
-    const int64_t invoke_min_us = invoke_times_us.empty()
-            ? -1
-            : *std::min_element(invoke_times_us.begin(), invoke_times_us.end());
-    const int64_t invoke_max_us = invoke_times_us.empty()
-            ? -1
-            : *std::max_element(invoke_times_us.begin(), invoke_times_us.end());
-    const int64_t invoke_avg_us = invoke_times_us.empty()
-            ? -1
-            : std::accumulate(invoke_times_us.begin(), invoke_times_us.end(), int64_t{0}) /
-                    static_cast<int64_t>(invoke_times_us.size());
+    const int64_t invoke_min_us = minMicros(invoke_times_us);
+    const int64_t invoke_max_us = maxMicros(invoke_times_us);
+    const int64_t invoke_avg_us = averageMicros(invoke_times_us);
 
-    interpreter_delete(interpreter);
-    model_delete(model);
+    api.interpreterDelete(interpreter);
+    api.modelDelete(model);
     free_mem(input_ptr);
     free_mem(output_ptr);
 
@@ -372,15 +433,249 @@ std::string qnnDelegateSharedTensorProbe(
              output_bound ? "true" : "false",
              input_tensor_bytes,
              output_tensor_bytes,
-             checksum,
-             static_cast<unsigned int>(min_value),
-             static_cast<unsigned int>(max_value),
+             output_sample.checksum,
+             static_cast<unsigned int>(output_sample.minValue),
+             static_cast<unsigned int>(output_sample.maxValue),
              repeats,
              invoke_times_us.size(),
              static_cast<long long>(delegate_us),
              static_cast<long long>(invoke_avg_us),
              static_cast<long long>(invoke_min_us),
              static_cast<long long>(invoke_max_us));
+    return result;
+}
+
+struct TensorProbeRun {
+    bool passed = false;
+    std::string blockedStage;
+    int inputIndex = -1;
+    int outputIndex = -1;
+    int inputAllocStatus = -1;
+    int outputAllocStatus = -1;
+    int allocateStatus = -1;
+    int delegateStatus = -1;
+    int invokeStatus = -1;
+    bool inputBound = false;
+    bool outputBound = false;
+    size_t inputTensorBytes = 0;
+    size_t outputTensorBytes = 0;
+    OutputSample outputSample;
+    size_t completedRuns = 0;
+    int64_t delegateUs = -1;
+    int64_t invokeAvgUs = -1;
+    int64_t invokeMinUs = -1;
+    int64_t invokeMaxUs = -1;
+};
+
+TensorProbeRun runTensorProbeVariant(
+        const TfLiteApi& api,
+        const std::vector<uint8_t>& model_bytes,
+        intptr_t delegate_handle,
+        bool use_custom_allocation,
+        QnnDelegateAllocCustomMemFn alloc_mem,
+        QnnDelegateFreeCustomMemFn free_mem,
+        int repeats) {
+    constexpr size_t kTfLiteDefaultTensorAlignment = 64;
+    constexpr size_t kInputBytes = 128 * 128 * 3;
+    constexpr size_t kOutputBytes = 512 * 512 * 3;
+    TensorProbeRun result;
+    void* custom_input_ptr = nullptr;
+    void* custom_output_ptr = nullptr;
+
+    TfLiteModel* model = api.modelCreate(model_bytes.data(), model_bytes.size());
+    if (model == nullptr) {
+        result.blockedStage = "model_create";
+        return result;
+    }
+    TfLiteInterpreterOptions* options = api.optionsCreate();
+    if (options == nullptr) {
+        api.modelDelete(model);
+        result.blockedStage = "options_create";
+        return result;
+    }
+    api.optionsSetThreads(options, 1);
+    TfLiteInterpreter* interpreter = api.interpreterCreate(model, options);
+    api.optionsDelete(options);
+    if (interpreter == nullptr) {
+        api.modelDelete(model);
+        result.blockedStage = "interpreter_create";
+        return result;
+    }
+
+    result.inputIndex = api.inputIndex(interpreter, 0);
+    result.outputIndex = api.outputIndex(interpreter, 0);
+    if (result.inputIndex < 0 || result.outputIndex < 0) {
+        result.blockedStage = "tensor_index";
+        api.interpreterDelete(interpreter);
+        api.modelDelete(model);
+        return result;
+    }
+
+    if (use_custom_allocation) {
+        custom_input_ptr = alloc_mem(kInputBytes, kTfLiteDefaultTensorAlignment);
+        custom_output_ptr = alloc_mem(kOutputBytes, kTfLiteDefaultTensorAlignment);
+        if (custom_input_ptr == nullptr || custom_output_ptr == nullptr) {
+            result.blockedStage = "custom_alloc";
+            if (custom_input_ptr != nullptr) free_mem(custom_input_ptr);
+            if (custom_output_ptr != nullptr) free_mem(custom_output_ptr);
+            api.interpreterDelete(interpreter);
+            api.modelDelete(model);
+            return result;
+        }
+        TfLiteCustomAllocationNative input_alloc{custom_input_ptr, kInputBytes};
+        TfLiteCustomAllocationNative output_alloc{custom_output_ptr, kOutputBytes};
+        result.inputAllocStatus =
+                api.setCustomAllocation(interpreter, result.inputIndex, &input_alloc, 0);
+        result.outputAllocStatus =
+                api.setCustomAllocation(interpreter, result.outputIndex, &output_alloc, 0);
+    } else {
+        result.inputAllocStatus = 0;
+        result.outputAllocStatus = 0;
+    }
+
+    result.allocateStatus = api.allocateTensors(interpreter);
+    TfLiteTensor* input_tensor = api.getInputTensor(interpreter, 0);
+    const TfLiteTensor* output_tensor = api.getOutputTensor(interpreter, 0);
+    void* input_ptr = input_tensor != nullptr ? api.tensorData(input_tensor) : nullptr;
+    const void* output_ptr = output_tensor != nullptr ? api.tensorData(output_tensor) : nullptr;
+    result.inputTensorBytes = input_tensor != nullptr ? api.tensorByteSize(input_tensor) : 0;
+    result.outputTensorBytes = output_tensor != nullptr ? api.tensorByteSize(output_tensor) : 0;
+    result.inputBound = use_custom_allocation ? input_ptr == custom_input_ptr : input_ptr != nullptr;
+    result.outputBound = use_custom_allocation ? output_ptr == custom_output_ptr : output_ptr != nullptr;
+
+    const auto delegate_start = std::chrono::steady_clock::now();
+    result.delegateStatus =
+            api.modifyGraph(interpreter, reinterpret_cast<TfLiteOpaqueDelegate*>(delegate_handle));
+    const auto delegate_end = std::chrono::steady_clock::now();
+    result.delegateUs = std::chrono::duration_cast<std::chrono::microseconds>(
+            delegate_end - delegate_start).count();
+
+    input_tensor = api.getInputTensor(interpreter, 0);
+    output_tensor = api.getOutputTensor(interpreter, 0);
+    input_ptr = input_tensor != nullptr ? api.tensorData(input_tensor) : input_ptr;
+    output_ptr = output_tensor != nullptr ? api.tensorData(output_tensor) : output_ptr;
+    result.inputTensorBytes = input_tensor != nullptr ? api.tensorByteSize(input_tensor) : result.inputTensorBytes;
+    result.outputTensorBytes = output_tensor != nullptr ? api.tensorByteSize(output_tensor) : result.outputTensorBytes;
+    result.inputBound = use_custom_allocation ? input_ptr == custom_input_ptr : input_ptr != nullptr;
+    result.outputBound = use_custom_allocation ? output_ptr == custom_output_ptr : output_ptr != nullptr;
+
+    fillSyntheticInput(reinterpret_cast<uint8_t*>(input_ptr), std::min(result.inputTensorBytes, kInputBytes));
+    std::vector<int64_t> invoke_times_us;
+    result.invokeStatus = result.delegateStatus;
+    if (result.delegateStatus == 0) {
+        for (int i = 0; i < repeats; ++i) {
+            const auto invoke_start = std::chrono::steady_clock::now();
+            result.invokeStatus = api.invoke(interpreter);
+            const auto invoke_end = std::chrono::steady_clock::now();
+            invoke_times_us.push_back(std::chrono::duration_cast<std::chrono::microseconds>(
+                    invoke_end - invoke_start).count());
+            if (result.invokeStatus != 0) {
+                break;
+            }
+        }
+    }
+    result.completedRuns = invoke_times_us.size();
+    result.invokeAvgUs = averageMicros(invoke_times_us);
+    result.invokeMinUs = minMicros(invoke_times_us);
+    result.invokeMaxUs = maxMicros(invoke_times_us);
+    result.outputSample = sampleOutputBytes(
+            reinterpret_cast<const uint8_t*>(output_ptr),
+            std::min(result.outputTensorBytes, kOutputBytes));
+    result.passed = result.inputAllocStatus == 0 && result.outputAllocStatus == 0 &&
+                    result.allocateStatus == 0 && result.delegateStatus == 0 &&
+                    result.invokeStatus == 0 && result.inputBound && result.outputBound &&
+                    result.inputTensorBytes <= kInputBytes &&
+                    result.outputTensorBytes <= kOutputBytes;
+
+    api.interpreterDelete(interpreter);
+    api.modelDelete(model);
+    if (custom_input_ptr != nullptr) free_mem(custom_input_ptr);
+    if (custom_output_ptr != nullptr) free_mem(custom_output_ptr);
+    return result;
+}
+
+std::string qnnDelegateSharedTensorCompareProbe(
+        JNIEnv* env,
+        jobject asset_manager,
+        const char* model_asset,
+        intptr_t normal_delegate_handle,
+        intptr_t shared_delegate_handle,
+        int repeats) {
+    if (normal_delegate_handle == 0 || shared_delegate_handle == 0) {
+        return "status=blocked stage=argument error=null_delegate_handle";
+    }
+    std::vector<uint8_t> model_bytes;
+    if (!readAssetBytes(env, asset_manager, model_asset, model_bytes)) {
+        return "status=blocked stage=asset error=read_model_failed";
+    }
+    DynamicLibrary tflite("libtensorflowlite_jni.so");
+    if (tflite.handle == nullptr) {
+        return "status=blocked stage=dlopen library=libtensorflowlite_jni.so";
+    }
+    DynamicLibrary qnn("libQnnTFLiteDelegate.so");
+    if (qnn.handle == nullptr) {
+        return "status=blocked stage=dlopen library=libQnnTFLiteDelegate.so";
+    }
+    const TfLiteApi api = loadTfLiteApi(tflite.handle);
+    auto alloc_mem = loadSymbol<QnnDelegateAllocCustomMemFn>(qnn.handle, "TfLiteQnnDelegateAllocCustomMem");
+    auto free_mem = loadSymbol<QnnDelegateFreeCustomMemFn>(qnn.handle, "TfLiteQnnDelegateFreeCustomMem");
+    if (!hasRequiredTfLiteApi(api, true) || alloc_mem == nullptr || free_mem == nullptr) {
+        return "status=blocked stage=dlsym error=missing_tflite_or_qnn_symbol";
+    }
+
+    const int safe_repeats = std::max(1, repeats);
+    TensorProbeRun normal = runTensorProbeVariant(
+            api, model_bytes, normal_delegate_handle, false, alloc_mem, free_mem, safe_repeats);
+    TensorProbeRun shared = runTensorProbeVariant(
+            api, model_bytes, shared_delegate_handle, true, alloc_mem, free_mem, safe_repeats);
+    const bool checksum_match = normal.outputSample.checksum == shared.outputSample.checksum;
+    const int64_t avg_delta_us =
+            (shared.invokeAvgUs >= 0 && normal.invokeAvgUs >= 0)
+            ? shared.invokeAvgUs - normal.invokeAvgUs
+            : 0;
+    const bool passed = normal.passed && shared.passed && checksum_match;
+
+    char result[3072];
+    snprintf(result, sizeof(result),
+             "status=%s stage=tensor_buffer_compare modelBytes=%zu repeats=%d "
+             "normalPass=%s normalStage=%s normalDelegate=%d normalInvoke=%d "
+             "normalInputBound=%s normalOutputBound=%s normalChecksum=%u "
+             "normalCompletedRuns=%zu normalDelegateUs=%lld normalInvokeAvgUs=%lld "
+             "normalInvokeMinUs=%lld normalInvokeMaxUs=%lld "
+             "sharedPass=%s sharedStage=%s sharedDelegate=%d sharedInvoke=%d "
+             "sharedInputBound=%s sharedOutputBound=%s sharedChecksum=%u "
+             "sharedCompletedRuns=%zu sharedDelegateUs=%lld sharedInvokeAvgUs=%lld "
+             "sharedInvokeMinUs=%lld sharedInvokeMaxUs=%lld "
+             "checksumMatch=%s invokeAvgDeltaUs=%lld",
+             passed ? "pass" : "blocked",
+             model_bytes.size(),
+             safe_repeats,
+             normal.passed ? "true" : "false",
+             normal.blockedStage.empty() ? "ok" : normal.blockedStage.c_str(),
+             normal.delegateStatus,
+             normal.invokeStatus,
+             normal.inputBound ? "true" : "false",
+             normal.outputBound ? "true" : "false",
+             normal.outputSample.checksum,
+             normal.completedRuns,
+             static_cast<long long>(normal.delegateUs),
+             static_cast<long long>(normal.invokeAvgUs),
+             static_cast<long long>(normal.invokeMinUs),
+             static_cast<long long>(normal.invokeMaxUs),
+             shared.passed ? "true" : "false",
+             shared.blockedStage.empty() ? "ok" : shared.blockedStage.c_str(),
+             shared.delegateStatus,
+             shared.invokeStatus,
+             shared.inputBound ? "true" : "false",
+             shared.outputBound ? "true" : "false",
+             shared.outputSample.checksum,
+             shared.completedRuns,
+             static_cast<long long>(shared.delegateUs),
+             static_cast<long long>(shared.invokeAvgUs),
+             static_cast<long long>(shared.invokeMinUs),
+             static_cast<long long>(shared.invokeMaxUs),
+             checksum_match ? "true" : "false",
+             static_cast<long long>(avg_delta_us));
     return result;
 }
 
@@ -476,6 +771,36 @@ Java_com_cyf_rb5visionlab_MainActivity_qnnSharedMemoryTensorProbe(
             std::max(1, static_cast<int>(repeats)));
     env->ReleaseStringUTFChars(model_asset, model_asset_chars);
     LOGD("qnnSharedMemoryTensorProbe %s", result.c_str());
+    return env->NewStringUTF(result.c_str());
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_com_cyf_rb5visionlab_MainActivity_qnnSharedMemoryTensorCompareProbe(
+        JNIEnv* env,
+        jobject /* thiz */,
+        jobject asset_manager,
+        jstring model_asset,
+        jlong normal_delegate_handle,
+        jlong shared_delegate_handle,
+        jint repeats) {
+    if (asset_manager == nullptr || model_asset == nullptr ||
+        normal_delegate_handle == 0 || shared_delegate_handle == 0) {
+        return env->NewStringUTF("status=blocked stage=argument error=null_input");
+    }
+    const char* model_asset_chars = env->GetStringUTFChars(model_asset, nullptr);
+    if (model_asset_chars == nullptr) {
+        return env->NewStringUTF("status=blocked stage=argument error=model_asset_string");
+    }
+    const std::string result = qnnDelegateSharedTensorCompareProbe(
+            env,
+            asset_manager,
+            model_asset_chars,
+            static_cast<intptr_t>(normal_delegate_handle),
+            static_cast<intptr_t>(shared_delegate_handle),
+            std::max(1, static_cast<int>(repeats)));
+    env->ReleaseStringUTFChars(model_asset, model_asset_chars);
+    LOGD("qnnSharedMemoryTensorCompareProbe %s", result.c_str());
     return env->NewStringUTF(result.c_str());
 }
 

@@ -395,6 +395,49 @@ useful question is whether this C API path can reduce total app e2e once
 CameraX/ROI/output display costs are included.
 ```
 
+## Shared-Memory Phase 2 Result
+
+2026-07-20 follow-up:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_qnn_shared_memory_phase2_compare
+```
+
+Result:
+
+```text
+status=pass
+stage=tensor_buffer_compare
+repeats=50
+normal tensor buffer:
+  delegate=0
+  invoke=0
+  checksum=3819326390
+  invoke avg/min/max=1,104 / 1,050 / 2,195 us
+shared custom allocation:
+  delegate=0
+  invoke=0
+  checksum=3819326390
+  invoke avg/min/max=1,056 / 1,016 / 1,250 us
+checksumMatch=true
+invokeAvgDeltaUs=-48
+```
+
+Interpretation:
+
+```text
+The TFLite C API path can run both normal tensor buffers and QNN shared custom
+allocations on the same synthetic input, with matching output checksum. Shared
+allocation is not slower at the invoke level in this probe, but the average gain
+is only about 48us, which is too small to explain the app e2e bottleneck.
+
+This completes the invoke-level shared-memory feasibility check. The remaining
+zero-copy question is no longer whether QNN Delegate can bind shared tensors;
+it is whether CameraX/YUV ROI/native preprocessing/display can be wired into a
+lower-copy e2e path. That is a separate data-path integration project, not a
+small Kotlin wrapper patch and still not true zero-copy today.
+```
+
 ## Short Sustained Run Result
 
 P4 short sustained validation is complete:
