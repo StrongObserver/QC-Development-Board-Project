@@ -864,6 +864,36 @@ Java_com_cyf_rb5visionlab_MainActivity_processYPlane(
 }
 
 extern "C"
+JNIEXPORT jstring JNICALL
+Java_com_cyf_rb5visionlab_MainActivity_directBufferProbe(
+        JNIEnv* env,
+        jobject /* thiz */,
+        jobject y_buffer,
+        jobject u_buffer,
+        jobject v_buffer) {
+    auto describe = [env](const char* name, jobject buffer) -> std::string {
+        if (buffer == nullptr) {
+            return std::string(name) + "=null";
+        }
+        void* address = env->GetDirectBufferAddress(buffer);
+        const jlong capacity = env->GetDirectBufferCapacity(buffer);
+        char text[160];
+        snprintf(text, sizeof(text), "%sDirectAddress=%s %sCapacity=%lld",
+                 name,
+                 address != nullptr ? "non_null" : "null",
+                 name,
+                 static_cast<long long>(capacity));
+        return text;
+    };
+    const std::string result =
+            describe("y", y_buffer) + " " +
+            describe("u", u_buffer) + " " +
+            describe("v", v_buffer);
+    LOGD("directBufferProbe %s", result.c_str());
+    return env->NewStringUTF(result.c_str());
+}
+
+extern "C"
 JNIEXPORT jintArray JNICALL
 Java_com_cyf_rb5visionlab_MainActivity_nativeYuvToRgbRoi(
         JNIEnv* env,

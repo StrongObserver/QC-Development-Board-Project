@@ -297,7 +297,8 @@ class SuperResolver(
         return try {
             val data = delegate.profilingResult ?: ByteArray(0)
             val prefix = data.take(16).joinToString("") { "%02x".format(it.toInt() and 0xFF) }
-            "profileBytes=${data.size} profileHex16=$prefix"
+            val full = data.joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+            "profileBytes=${data.size} profileHex16=$prefix profileHex=$full"
         } catch (e: Throwable) {
             "profile=unavailable reason=${e.javaClass.simpleName}:${e.message}"
         }

@@ -25,7 +25,7 @@ FIXED_RE = re.compile(
     r"fixed sample QNN Delegate OK model=(?P<model>\w+) asset=(?P<asset>\S+) "
     r"pre=(?P<pre_ms>\d+) inf=(?P<inf_ms>\d+) post=(?P<post_ms>\d+) "
     r"total=(?P<total_ms>\d+) "
-    r"(?:profileBytes=(?P<profile_bytes>\d+) profileHex16=(?P<profile_hex16>[0-9a-fA-F]*) )?"
+    r"(?:profileBytes=(?P<profile_bytes>\d+) profileHex16=(?P<profile_hex16>[0-9a-fA-F]*) (?:profileHex=(?P<profile_hex>[0-9a-fA-F]*) )?)?"
     r"saved=(?P<saved>.*)"
 )
 
@@ -78,6 +78,7 @@ def parse_fixed_rows(log_text: str) -> list[dict[str, object]]:
                 "total_ms": int(values["total_ms"]),
                 "profile_bytes": int(values["profile_bytes"]) if values.get("profile_bytes") else "",
                 "profile_hex16": values.get("profile_hex16") or "",
+                "profile_hex": values.get("profile_hex") or "",
                 "saved_paths": "|".join(saved_paths),
                 "raw_log_prefix": line[:18],
             }
@@ -155,6 +156,44 @@ def pull_saved_outputs(rows: list[dict[str, object]], out_dir: Path) -> list[dic
     return pulled
 
 
+def write_profile_outputs(rows: list[dict[str, object]], out_dir: Path) -> list[dict[str, object]]:
+    profile_dir = out_dir / "profiles"
+    profile_dir.mkdir(exist_ok=True)
+    outputs: list[dict[str, object]] = []
+    viewer = Path(r"C:\Qualcomm\QAIRT\v2.45.0.260326\qairt\2.45.0.260326\bin\x86_64-windows-msvc\qnn-profile-viewer.exe")
+    for row in rows:
+        profile_hex = str(row.get("profile_hex") or "")
+        if not profile_hex:
+            continue
+        profile_path = profile_dir / f"{row['asset']}_{row['model']}_profile.bin".replace("/", "_")
+        profile_path.write_bytes(bytes.fromhex(profile_hex))
+        viewer_stdout = ""
+        viewer_status = "not_run"
+        csv_path = profile_path.with_suffix(".csv")
+        if viewer.exists():
+            result = run(
+                [str(viewer), "--input_log", str(profile_path), "--output", str(csv_path)],
+                check=False,
+                timeout=30,
+            )
+            viewer_stdout = result.stdout
+            viewer_status = "ok" if result.returncode == 0 else f"failed_{result.returncode}"
+            profile_path.with_suffix(".viewer.txt").write_text(viewer_stdout, encoding="utf-8")
+        outputs.append(
+            {
+                "asset": row["asset"],
+                "model": row["model"],
+                "profile_path": str(profile_path),
+                "profile_bytes": profile_path.stat().st_size,
+                "viewer_status": viewer_status,
+                "viewer_csv": str(csv_path) if csv_path.exists() else "",
+                "viewer_stdout": str(profile_path.with_suffix(".viewer.txt")) if viewer_stdout else "",
+            }
+        )
+    write_csv(out_dir / "profile_outputs.csv", outputs)
+    return outputs
+
+
 def write_contact_sheet(out_dir: Path, pulled_rows: list[dict[str, object]]) -> bool:
     try:
         import cv2
@@ -190,7 +229,7 @@ def write_contact_sheet(out_dir: Path, pulled_rows: list[dict[str, object]]) -> 
     return True
 
 
-def write_summary(out_dir: Path, run_id: str, rows: list[dict[str, object]], pulled_rows: list[dict[str, object]], app_e2e_path: Path, app_e2e_mirror: Path, contact_sheet: bool) -> None:
+def write_summary(out_dir: Path, run_id: str, rows: list[dict[str, object]], pulled_rows: list[dict[str, object]], profile_rows: list[dict[str, object]], app_e2e_path: Path, app_e2e_mirror: Path, contact_sheet: bool) -> None:
     lines = [
         "# App Fixed-Sample Replay Summary",
         "",
@@ -198,6 +237,7 @@ def write_summary(out_dir: Path, run_id: str, rows: list[dict[str, object]], pul
         f"- cases: {len(rows)}",
         f"- pulled images: {len(pulled_rows)}",
         f"- max profile bytes: {max((int(row.get('profile_bytes') or 0) for row in rows), default=0)}",
+        f"- decoded profile files: {len(profile_rows)}",
         "- boundary: Android app fixed-sample replay evidence, not live camera visual quality",
         "",
         "## Timing",
@@ -218,6 +258,7 @@ def write_summary(out_dir: Path, run_id: str, rows: list[dict[str, object]], pul
             f"- EvalHub app e2e row: `{app_e2e_path}`",
             f"- EvalHub ignored mirror: `{app_e2e_mirror}`",
             f"- raw logcat: `{out_dir / 'raw_logcat.txt'}`",
+            f"- profile outputs: `{out_dir / 'profile_outputs.csv'}`",
         ]
     )
     (out_dir / "SUMMARY.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -255,6 +296,7 @@ def main() -> None:
     write_csv(out_dir / "metrics.csv", all_rows)
     pulled_rows = pull_saved_outputs(all_rows, out_dir)
     write_csv(out_dir / "pulled_images.csv", pulled_rows)
+    profile_rows = write_profile_outputs(all_rows, out_dir)
     contact_sheet = write_contact_sheet(out_dir, pulled_rows)
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M +0800")
     totals = [float(row["total_ms"]) for row in all_rows]
@@ -301,6 +343,7 @@ def main() -> None:
                 "contact_sheet": contact_sheet,
                 "status": "app_fixed_sample_replay_collected" if all_rows else "environment_blocked",
                 "max_profile_bytes": max((int(row.get("profile_bytes") or 0) for row in all_rows), default=0),
+                "profile_files": len(profile_rows),
             }
         ],
     )
@@ -317,6 +360,7 @@ def main() -> None:
                 "cases": len(all_rows),
                 "pulled_images": len(pulled_rows),
                 "max_profile_bytes": max((int(row.get("profile_bytes") or 0) for row in all_rows), default=0),
+                "profile_files": len(profile_rows),
                 "boundary": "QNN Delegate profile buffer presence confirms app-side profiling API access; format is raw delegate bytes and is not yet per-op decoded.",
             },
             ensure_ascii=False,
@@ -325,7 +369,7 @@ def main() -> None:
         + "\n",
         encoding="utf-8",
     )
-    write_summary(out_dir, run_id, all_rows, pulled_rows, app_e2e_path, app_e2e_mirror, contact_sheet)
+    write_summary(out_dir, run_id, all_rows, pulled_rows, profile_rows, app_e2e_path, app_e2e_mirror, contact_sheet)
     print(f"[ok] wrote {out_dir}")
 
 

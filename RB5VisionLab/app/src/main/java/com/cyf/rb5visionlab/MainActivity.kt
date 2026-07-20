@@ -40,6 +40,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.qualcomm.qti.QnnDelegate
+import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -217,6 +218,7 @@ class MainActivity : AppCompatActivity() {
     external fun qnnSharedMemoryTensorProbe(assetManager: AssetManager, modelAsset: String, delegateHandle: Long, repeats: Int): String
     external fun qnnSharedMemoryTensorCompareProbe(assetManager: AssetManager, modelAsset: String, normalDelegateHandle: Long, sharedDelegateHandle: Long, repeats: Int): String
     external fun processYPlane(yData: ByteArray, width: Int, height: Int, rowStride: Int): String
+    external fun directBufferProbe(yBuffer: ByteBuffer, uBuffer: ByteBuffer, vBuffer: ByteBuffer): String
     external fun nativeYuvToRgbRoi(
         yData: ByteArray,
         uData: ByteArray,
@@ -294,6 +296,7 @@ class MainActivity : AppCompatActivity() {
         val autoRunQnnSharedTensorCompareProbe = boolIntentExtra("run_qnn_shared_tensor_compare_probe")
         val autoRunYuvRoiProbe = boolIntentExtra("run_yuv_roi_probe")
         val autoRunTensorReadyProbe = boolIntentExtra("run_tensor_ready_probe")
+        val autoRunDirectBufferProbe = boolIntentExtra("run_direct_buffer_probe")
         val autoRunTileStill = boolIntentExtra("run_tile_still")
         val autoRunTileCompare = boolIntentExtra("run_tile_compare")
         pendingDemoRelationCapture = boolIntentExtra("save_demo_relation")
@@ -306,7 +309,7 @@ class MainActivity : AppCompatActivity() {
                 "run_qnn_shared_memory_probe=$autoRunQnnSharedMemoryProbe " +
                 "run_qnn_shared_tensor_probe=$autoRunQnnSharedTensorProbe " +
                 "run_qnn_shared_tensor_compare_probe=$autoRunQnnSharedTensorCompareProbe " +
-                "run_yuv_roi_probe=$autoRunYuvRoiProbe run_tensor_ready_probe=$autoRunTensorReadyProbe " +
+                "run_yuv_roi_probe=$autoRunYuvRoiProbe run_tensor_ready_probe=$autoRunTensorReadyProbe run_direct_buffer_probe=$autoRunDirectBufferProbe " +
                 "probe_mode=$requestedProbeMode extras=${intent.extras?.keySet()?.joinToString()}"
         )
         Log.d(
@@ -317,7 +320,7 @@ class MainActivity : AppCompatActivity() {
                 "run_tile_still=$autoRunTileStill tile_model=${tileModelVariant.label} " +
                 "run_tile_compare=$autoRunTileCompare " +
                 "save_demo_relation=$pendingDemoRelationCapture " +
-                "run_yuv_roi_probe=$autoRunYuvRoiProbe run_tensor_ready_probe=$autoRunTensorReadyProbe demo_mode=$demoMode " +
+                "run_yuv_roi_probe=$autoRunYuvRoiProbe run_tensor_ready_probe=$autoRunTensorReadyProbe run_direct_buffer_probe=$autoRunDirectBufferProbe demo_mode=$demoMode " +
                 "probe_mode=$requestedProbeMode sr_every_n=$liveSrEveryN sr_session_id=$liveSrSessionId"
         )
         if (autoRunResourceProbe) {
@@ -359,6 +362,8 @@ class MainActivity : AppCompatActivity() {
             pendingProbeMode = "yuv_roi"
         } else if (requestedProbeMode == "tensor_ready" || autoRunTensorReadyProbe) {
             pendingProbeMode = "tensor_ready"
+        } else if (requestedProbeMode == "direct_buffer" || autoRunDirectBufferProbe) {
+            pendingProbeMode = "direct_buffer"
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             startCamera()
@@ -1782,6 +1787,53 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun runDirectBufferProbe(imageProxy: ImageProxy) {
+        try {
+            val y = imageProxy.planes[0]
+            val u = imageProxy.planes[1]
+            val v = imageProxy.planes[2]
+            val yBuffer = y.buffer
+            val uBuffer = u.buffer
+            val vBuffer = v.buffer
+            val yDirect = yBuffer.isDirect
+            val uDirect = uBuffer.isDirect
+            val vDirect = vBuffer.isDirect
+            val yRemaining = yBuffer.remaining()
+            val uRemaining = uBuffer.remaining()
+            val vRemaining = vBuffer.remaining()
+            val yRow = y.rowStride
+            val uRow = u.rowStride
+            val vRow = v.rowStride
+            val uPixel = u.pixelStride
+            val vPixel = v.pixelStride
+            val result = directBufferProbe(yBuffer, uBuffer, vBuffer)
+            Log.d(
+                "RB5_DIRECT_BUFFER",
+                "probe frame=${imageProxy.width}x${imageProxy.height} " +
+                    "yDirect=$yDirect uDirect=$uDirect vDirect=$vDirect " +
+                    "yRemaining=$yRemaining uRemaining=$uRemaining vRemaining=$vRemaining " +
+                    "yRow=$yRow uRow=$uRow vRow=$vRow " +
+                    "uPixel=$uPixel vPixel=$vPixel native=$result"
+            )
+            runOnUiThread {
+                offlineEvalActive = false
+                statusTextView.text =
+                    "Direct buffer probe\n" +
+                        "Y/U/V direct $yDirect/$uDirect/$vDirect\n" +
+                        "remaining $yRemaining/$uRemaining/$vRemaining\n" +
+                        result
+                Toast.makeText(this, "Direct buffer probe complete", Toast.LENGTH_LONG).show()
+            }
+        } catch (e: Throwable) {
+            Log.e("RB5_DIRECT_BUFFER", "probe failed", e)
+            runOnUiThread {
+                offlineEvalActive = false
+                statusTextView.text = "Direct buffer probe failed: ${e.message}"
+                Toast.makeText(this, "Direct buffer probe failed", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     private fun runTensorReadyProbe(imageProxy: ImageProxy) {
         var resolver: SuperResolver? = null
         try {
@@ -2333,6 +2385,10 @@ class MainActivity : AppCompatActivity() {
                                 pendingProbeMode = ""
                                 Log.d("RB5_SR", "pending probe consumed: tensor_ready")
                                 runTensorReadyProbe(imageProxy)
+                            } else if (pendingProbeMode == "direct_buffer") {
+                                pendingProbeMode = ""
+                                Log.d("RB5_SR", "pending probe consumed: direct_buffer")
+                                runDirectBufferProbe(imageProxy)
                             } else if (pendingRealCameraCapture) {
                                 pendingRealCameraCapture = false
                                 runRealCameraCapture(imageProxy)
@@ -2388,7 +2444,7 @@ class MainActivity : AppCompatActivity() {
                 )
                 Log.d(CAMERA_TAG, "CameraX preview and ImageAnalysis started")
                 when (pendingProbeMode) {
-                    "yuv_roi", "tensor_ready" -> Log.d("RB5_SR", "pending probe armed: $pendingProbeMode")
+                    "yuv_roi", "tensor_ready", "direct_buffer" -> Log.d("RB5_SR", "pending probe armed: $pendingProbeMode")
                     "tensor_live" -> {
                         pendingProbeMode = ""
                         previewView.postDelayed({ startTensorReadyLiveSrFromIntent() }, 500)
