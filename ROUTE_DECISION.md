@@ -292,6 +292,12 @@ QNN TFLite Delegate C API:
 Native QNN sample:
   SampleAppSharedBuffer
   libcdsprpc.so / rpcmem / QnnMem_register
+
+Current `qtld-release.aar` Java wrapper:
+  `javap com.qualcomm.qti.QnnDelegate`
+  `javap com.qualcomm.qti.QnnDelegate$Options`
+  exposes backend/skel/perf/profile/skip configuration only, not custom tensor
+  allocation or shared-memory registration APIs.
 ```
 
 Boundary:
@@ -300,6 +306,8 @@ Boundary:
 The current Java/Kotlin QnnDelegate wrapper does not expose equivalent custom
 tensor allocation APIs. A shared-memory experiment should be a separate C++ TFLite
 Delegate or native QNN probe, not a replacement for the current stable default.
+Do not start it unless the experiment has a concrete target beyond the current
+15/19ms default app e2e smoke and a rollback path back to Kotlin/TFLite.
 ```
 
 ## Short Sustained Run Result

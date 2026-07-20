@@ -36,16 +36,16 @@ later, but it must not disappear.
 | E10-B | QNN/HTP Android app path | done | QNN TFLite Delegate + HTP app path works with skel lib | Maintain only |
 | D8 | W8A8 quantized baseline | done | Real-ESRGAN W8A8 TFLite and QNN paths; QuickSRNetSmall W8A8 default live path | Maintain only |
 | D8-config | per-channel/per-tensor/calibration comparison | done | First-pass AI Hub comparison completed for current app W8A8, calib10 default, and calib10 minmax; minmax is worse and calib10 default is close to current app W8A8 | Do not replace app model without stronger evidence |
-| AIMET-CLE | AIMET CLE or Bias Correction | queued | Trigger check completed; no clear W8A8-vs-float showcase regression was found | Need failure crop before execution |
-| AIMET-advanced | AdaRound / QAT | queued | High cost and no current trigger | Keep behind CLE/Bias trigger |
+| AIMET-CLE | AIMET CLE or Bias Correction | blocked_needs_user | Trigger check completed; no clear W8A8-vs-float showcase regression was found | Reopen only when human review or a benchmark finds a concrete W8A8-vs-float failure crop |
+| AIMET-advanced | AdaRound / QAT | blocked_needs_user | High cost and no current quantization failure trigger | Reopen only after CLE/Bias is insufficient on a real failure crop |
 | model-curve | Real-ESRGAN vs QuickSRNet quality/latency/size/power curve | done | Quality/latency/size evidence exists; board-level battery-node power smoke exists for idle, preview, live QuickSR, QuickSR tile, and Real-ESRGAN tile | Treat power as board-level estimate, not external-meter evidence |
 | eval-fixed | fixed scenario benchmark | done | `RB5_SR_Benchmark_v1`, full 24-case, real-camera 8-scene set | Maintain only |
-| eval-perceptual | LPIPS / NIQE / OCR diagnostic metrics | in_progress | Low-cost tile diagnostics exist; LPIPS/NIQE/OCR remain uncalibrated diagnostic-only tools | Use only when visual and PSNR/SSIM conflict |
+| eval-perceptual | LPIPS / NIQE / OCR diagnostic metrics | blocked_needs_user | Low-cost tile diagnostics exist; LPIPS/NIQE/OCR remain uncalibrated diagnostic-only tools; no current visual/metric conflict or text-readability claim requires them | Reopen when visual review conflicts with PSNR/SSIM or a text/OCR claim is needed |
 | native-preprocess | native YUV ROI / RGB preprocessing | in_progress | Kotlin YUV correct but slow; native ROI faster single-frame; tensor-ready repeated live not default; output UINT8 bulk-copy now reduces postprocess to about 1/1ms in app e2e smoke | Future attempts should target deeper tensor-ready/YUV ROI only as isolated experiments |
 | buffer-reuse | buffer / object reuse | done | TFLite buffers, pixel arrays, sample-copy reduction, output Bitmap reuse, and reusable UINT8 output byte buffer | Maintain only |
-| zero-copy | true zero-copy CameraX -> NPU | blocked_technical | QAIRT docs confirm QNN TFLite Delegate C API shared memory via `TfLiteQnnDelegateAllocCustomMem` + TFLite C++ `SetCustomAllocationForTensor`; Java/Kotlin wrapper exposes no equivalent API, and this is not direct CameraX buffer binding | Keep Kotlin/TFLite path; only attempt separate C++ delegate shared-memory probe if needed |
-| mixed-precision | w8a16 mixed precision | queued | No current W8A8 quality blocker | Needs quantization failure evidence |
-| temporal | frame skip / temporal reuse / double buffering | in_progress | `sr_every_n=3` ImageAnalysis smoke is implemented and validated; effective enhanced FPS is about 9.4-9.9, but per-enhanced-frame e2e is about 21/25ms and does not beat every-frame latency | Decide whether this is useful as display cadence/product strategy or just a boundary result |
+| zero-copy | true zero-copy CameraX -> NPU | blocked_technical | QAIRT docs confirm QNN TFLite Delegate C API shared memory via `TfLiteQnnDelegateAllocCustomMem` + TFLite C++ `SetCustomAllocationForTensor`; `javap` on `qtld-release.aar` confirms the Java `QnnDelegate` wrapper exposes no custom-allocation API; this is not direct CameraX buffer binding | Keep Kotlin/TFLite path; only attempt separate C++ delegate/shared-memory probe with an explicit latency target beyond the current 15/19ms baseline |
+| mixed-precision | w8a16 mixed precision | blocked_needs_user | No current W8A8 quality blocker or layer-level sensitivity evidence | Reopen only with quantization failure evidence |
+| temporal | frame skip / temporal reuse / double buffering | done | `sr_every_n=3` ImageAnalysis smoke is implemented and validated; effective enhanced FPS is about 9.4-9.9, while each enhanced frame remains about 21/25ms e2e | Treat as a cadence/product boundary; do not claim lower per-frame latency |
 | tile | post-capture whole-image tile enhancement | done | Host MVP, host multi-scene comparison, and Android app tile entry are implemented; same-frame QuickSR vs Real-ESRGAN app evidence exists | Real-ESRGAN tile is the quality-priority post-capture route; QuickSR tile stays speed/conservative baseline |
 | video | video every-N-frame enhancement | blocked_needs_user | No CameraX VideoCapture/Recorder path yet; every-N ImageAnalysis smoke now exists as pre-video evidence | Full VideoCapture waits for explicit demo need |
 | power | sustained power/perf-watt | done | Rooted battery-node current/voltage reads work; core smoke estimates exist | Use as board-level estimate only; do not claim external-meter precision |
@@ -56,13 +56,16 @@ later, but it must not disappear.
 The current checkpoint is strong enough for showcase, but the full original
 design still has unfinished required lanes:
 
-1. `AIMET-CLE`: precision recovery, triggered by a real quantization failure.
-2. `eval-perceptual`: LPIPS / NIQE / OCR diagnostic metrics when visual and
-   PSNR/SSIM conflict.
-3. `zero-copy`: C++ delegate shared-memory probe only if it is worth leaving the
-   current Kotlin/TFLite path.
-4. `temporal` / `video`: decide whether every-N is useful enough to become a
-   product/display strategy; full VideoCapture still needs explicit demo need.
+1. `AIMET-CLE` / `mixed-precision`: blocked until a concrete W8A8-vs-float
+   failure crop appears.
+2. `eval-perceptual`: blocked until visual review conflicts with PSNR/SSIM, or a
+   text/OCR claim needs calibrated diagnostic evidence.
+3. `zero-copy`: blocked in the current Java/Kotlin route; only a separate C++
+   TFLite Delegate or native QNN probe remains, and it must beat an explicit
+   latency target beyond the current 15/19ms app e2e baseline.
+4. `video`: full CameraX VideoCapture/Recorder still needs explicit demo/product
+   need from the user; every-N ImageAnalysis is already classified as cadence
+   evidence, not a latency win.
 
 ## Loop Rule
 

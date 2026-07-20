@@ -15,6 +15,7 @@ Current logical commit split:
 3. docs(route): record app e2e and temporal boundaries
 4. docs(showcase): refresh RB5 demo evidence
 5. docs(eval): record app e2e lifecycle evidence
+6. docs(loop): close full-scope trigger gates
 ```
 
 Explicit path groups:
@@ -55,6 +56,13 @@ SHOWCASE_NARRATIVE.md
 Commit 5:
 eval_hub/README.md
 eval_hub/EVAL_SYSTEM_FREEZE.md
+
+Commit 6:
+PROJECT_FULL_SCOPE_LEDGER.md
+LOOP_TASK_QUEUE.md
+NEXT_ACTION.md
+ROUTE_DECISION.md
+COMMIT_PLAN.md
 ```
 
 Verification already run for this closeout:
@@ -75,6 +83,16 @@ status: temporal_cadence_validated
 parsed_frames: 79
 skipped_frames: 158
 every_n: 3
+```
+
+Additional trigger-gate evidence:
+
+```text
+QAIRT shared-memory tutorial confirms TfLiteQnnDelegateAllocCustomMem +
+SetCustomAllocationForTensor is a C/C++ route.
+QNN SampleAppSharedBuffer confirms rpcmem/QnnMem_register native route.
+`javap` on `qtld-release.aar` confirms Java QnnDelegate/Options do not expose
+custom tensor allocation APIs.
 ```
 
 Do not stage:

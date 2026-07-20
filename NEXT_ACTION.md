@@ -2,9 +2,10 @@
 
 ## Current Conclusion
 
-Current checkpoint has advanced beyond the previous closeout. Local `main` was
-previously synced with `origin/main`; the current worktree now has new local
-changes for app e2e schema export and output-path optimization.
+Current checkpoint has advanced beyond the previous closeout. The app e2e
+schema export, output-path optimization, every-N smoke, shared-memory feasibility
+classification, and related handoff updates have been reviewed, verified, and
+split into logical commits on local `main`.
 
 ```text
 real-camera capture support
@@ -26,11 +27,12 @@ Nutstore long-term context updated with final closeout and full-scope ledger
 Next priority:
 
 ```text
-Close the current local diff after review. Then continue only the remaining
-full-scope lanes whose gates are actually open:
-1. decide whether every-N ImageAnalysis is useful as a product/display strategy,
-2. decide whether a C++ QNN Delegate shared-memory probe is worth leaving the current Kotlin/TFLite path,
-3. AIMET or perceptual/OCR diagnostics only if their triggers appear.
+The project is at a clean trigger-gated checkpoint. Continue only when one of
+these gates opens:
+1. a concrete W8A8-vs-float failure crop appears -> AIMET/CLE or mixed precision;
+2. visual review conflicts with PSNR/SSIM or a text-readability claim is needed -> LPIPS/NIQE/OCR diagnostics;
+3. a deeper data-path experiment has an explicit target beyond the current 15/19ms app e2e baseline -> C++ QNN Delegate shared-memory probe;
+4. the user wants a video demo/product path -> CameraX VideoCapture/Recorder protocol and implementation.
 ```
 
 Do not reopen as unfinished:
@@ -194,8 +196,9 @@ Native QNN sample supports shared buffer:
   libcdsprpc.so / rpcmem / QnnMem_register
 
 Current Java/Kotlin QnnDelegate wrapper does not expose equivalent custom tensor
-allocation APIs. This is a C++ delegate/native probe lane, not a direct Kotlin
-SuperResolver patch.
+allocation APIs. `javap` on `qtld-release.aar` confirms the public Java API only
+exposes backend/skel/perf/profile/skip options, not custom allocation.
+This is a C++ delegate/native probe lane, not a direct Kotlin SuperResolver patch.
 ```
 
 ## Next Engineering Choices
@@ -203,14 +206,10 @@ SuperResolver patch.
 Recommended order:
 
 ```text
-1. Review the current local diff and split it into logical commits.
-2. Run the small verification set again if needed:
-   - py_compile app e2e scripts
-   - :app:assembleDebug
-   - 120-frame app live ROI smoke
-3. Do not reopen app output postprocess unless a regression appears.
-4. Treat every-N as a cadence/product experiment: it is valid but not a latency win.
-5. Treat shared memory as a C++ probe only if the project needs deeper data-path
-   exploration; do not replace the current Kotlin/TFLite default path yet.
-6. Keep AIMET and LPIPS/NIQE/OCR behind their documented triggers.
+1. Do not reopen app output postprocess unless a regression appears.
+2. Treat every-N as a completed cadence boundary: valid, but not a latency win.
+3. Treat shared memory as blocked in the Java/Kotlin route; C++ probe only with
+   a clear latency target and rollback.
+4. Keep AIMET, mixed precision, LPIPS/NIQE/OCR behind their documented triggers.
+5. Full VideoCapture/Recorder waits for an explicit demo/product need.
 ```

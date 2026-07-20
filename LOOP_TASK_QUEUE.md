@@ -59,8 +59,8 @@ original project design unless there is concrete evidence that it cannot work.
 | 5 | d8-config | done | Quantization configuration comparison | at least two quantization/calibration variants compared on fixed inputs | toolchain blocked or comparison complete |
 | 6 | aimet-trigger | done | AIMET CLE/Bias Correction trigger check | exact W8A8-vs-float failure crop found, or AIMET remains deferred_with_trigger | no trigger, blocked, or recovery evidence complete |
 | 7 | eval-diagnostic | done | LPIPS/NIQE/OCR diagnostic metrics | diagnostic metrics added only for a visual/metric conflict or text claim | calibrated enough for diagnostic use or deferred |
-| 8 | zero-copy-probe | blocked_technical | True zero-copy feasibility research/probe | AHardwareBuffer/DMA-BUF/QNN tensor-memory path classified with evidence | C++ shared-memory probe needed before implementation |
-| 9 | video-temporal-plan | in_progress | Video/every-N-frame enhancement protocol | every-N ImageAnalysis smoke exists before video implementation starts | decide product value or run stronger temporal validation |
+| 8 | zero-copy-probe | blocked_technical | True zero-copy feasibility research/probe | Java/Kotlin route is blocked; C++ TFLite Delegate/native QNN probe is classified | reopen only with explicit latency target and C++ probe budget |
+| 9 | video-temporal-plan | done | Video/every-N-frame enhancement protocol | every-N ImageAnalysis smoke is classified as cadence evidence, not per-frame latency gain | full VideoCapture needs explicit demo/product need |
 | 10 | power-perf-watt | done | Real power/perf-watt characterization | current/power evidence exists if making an efficiency claim | hardware/tooling blocked or evidence complete |
 | 11 | diff-audit | done | Audit current uncommitted changes and artifact boundaries | explicit source/doc/script files vs generated artifacts are separated | audit complete |
 | 12 | commit-boundary-plan | done | Split current work into logical commits | staging paths are explicit and generated artifacts excluded | plan complete |
@@ -68,12 +68,12 @@ original project design unless there is concrete evidence that it cannot work.
 
 ## Current Closeout Task
 
-Current active task: `diff-review-and-milestone-closeout`.
+Current active task: `full-scope-trigger-gate-closeout`.
 
-Current open work is no longer tile, D8-config, output postprocess, or app e2e
-schema bring-up. Those lanes have evidence and should be treated as closed unless
-a regression appears. The current local diff should be reviewed, split, and
-committed before adding new feature work.
+Current open work is no longer tile, D8-config, output postprocess, app e2e
+schema bring-up, or every-N smoke. Those lanes have evidence and should be
+treated as closed unless a regression appears. The remaining full-scope items
+are trigger-gated or technically blocked, not active implementation tasks.
 
 Current evidence to preserve:
 
@@ -92,13 +92,15 @@ Current route boundaries:
 
 ```text
 1. Output postprocess is no longer the next target unless a regression appears.
-2. every-N ImageAnalysis is a valid cadence/product probe, not a per-frame
+2. every-N ImageAnalysis is a completed cadence/product boundary, not a per-frame
    latency win: everyN=3 gives about 9.9 effective enhanced FPS, while each
    enhanced frame remains about 22/25ms e2e.
 3. QNN shared memory is a C++ delegate/native probe lane:
    TfLiteQnnDelegateAllocCustomMem + SetCustomAllocationForTensor, or
    SampleAppSharedBuffer with libcdsprpc/rpcmem/QnnMem_register. The current
-   Java/Kotlin QnnDelegate wrapper does not expose the custom allocation API.
+   Java/Kotlin QnnDelegate wrapper does not expose the custom allocation API;
+   `javap` on `qtld-release.aar` confirms only backend/skel/perf/profile/skip
+   options are exposed.
 4. Full CameraX VideoCapture/Recorder remains a separate product/demo decision.
 5. Prompts for Qualcomm/internal AI must be output directly in chat, not written
    to Markdown files, unless the user explicitly asks for a file.
@@ -128,10 +130,9 @@ about 6.98 W; QuickSR tile once about 29.8 J; Real-ESRGAN tile once about
 evidence.
 
 Current source-control task:
-The current worktree contains a new accumulated diff after app e2e schema export,
-UINT8 output bulk-copy, every-N ImageAnalysis smoke, shared-memory feasibility
-classification, and related handoff updates. Before adding new functionality,
-review and split this diff into current logical commits. Keep generated evidence
+The app e2e schema export, UINT8 output bulk-copy, every-N ImageAnalysis smoke,
+shared-memory feasibility classification, and related handoff updates have been
+reviewed, verified, and split into logical commits. Keep generated evidence
 under `RB5_SR_lab\results` and `evalhub_data` out of git.
 ```
 
@@ -165,9 +166,10 @@ Boundary:
 ```text
 This is app timing and schema evidence, not visual quality evidence and not true
 zero-copy. Do not reopen output postprocess as the next task unless a regression
-appears. The remaining non-terminal routes are C++ shared-memory probe only if
-needed, deciding whether every-N is useful as a product/display cadence, and
-AIMET/perceptual metrics only when their trigger conditions appear.
+appears. The remaining routes are gated: C++ shared-memory probe only with an
+explicit target beyond the 15/19ms app e2e baseline; AIMET/perceptual metrics
+only when their trigger conditions appear; full VideoCapture only when a demo or
+product need is explicit.
 Prompts for Qualcomm/internal AI must be output directly in chat, not written to
 Markdown files, unless the user explicitly asks for a file.
 ```
