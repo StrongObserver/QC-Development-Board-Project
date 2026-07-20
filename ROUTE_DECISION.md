@@ -249,6 +249,42 @@ uses CameraX ImageAnalysis, CPU-side ROI/preprocess, TFLite output readback,
 and Bitmap display.
 ```
 
+## Tensor-Ready Recheck After Output Bulk-Copy
+
+2026-07-20 follow-up:
+
+```text
+Default path:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_recheck_default_live_roi_120f
+
+Tensor-ready path:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_recheck_tensor_ready_live_roi_120f
+```
+
+Key result:
+
+| Path | Frames | Input prep p50/p95 | QNN inference p50/p95 | Postprocess p50/p95 | E2E p50/p95 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Default Bitmap path | 166 | `frameBitmap 9.0 / 13.0ms` | `1.0 / 2.0ms` | `1.0 / 1.0ms` | `14.0 / 19.8ms` |
+| Tensor-ready native RGB path | 248 | `nativeRgb 11.0 / 15.0ms` | `1.0 / 2.0ms` | `1.0 / 2.0ms` | `15.0 / 21.0ms` |
+
+Interpretation:
+
+```text
+After the output UINT8 bulk-copy optimization, tensor-ready remains valid but
+still does not beat the default Bitmap live ROI path. It eliminates full-frame
+Bitmap conversion in the isolated path, but nativeRgb plus rotation/prep still
+costs about the same or slightly more than the current default path.
+
+The earlier 0-frame tensor-ready recheck was a runner parsing issue: tensor-ready
+logs do not carry the session id, so session filtering dropped valid RB5_SR_TENSOR
+rows. The runner now treats tensor-ready logs separately.
+
+Keep tensor-ready as an isolated data-path experiment. Do not promote it to the
+default path unless a later native preprocessing change produces a clear e2e win
+over the current default baseline.
+```
+
 ## Every-N Temporal Smoke
 
 2026-07-20 follow-up: the app now supports a temporal smoke mode via

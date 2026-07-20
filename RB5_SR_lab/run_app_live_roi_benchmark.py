@@ -146,7 +146,7 @@ def parse_skip_rows(log_text: str, session_id: str = "") -> list[dict[str, objec
         if not match:
             continue
         values = match.groupdict()
-        if session_id and values.get("session_id") != session_id:
+        if session_id and not tensor_ready and values.get("session_id") != session_id:
             continue
         rows.append(
             {
@@ -176,7 +176,7 @@ def parse_live_rows(log_text: str, model: str, tensor_ready: bool, session_id: s
         row: dict[str, object] = {
             "index": len(rows) + 1,
             "model": log_model,
-            "session_id": values.pop("session_id") or "",
+            "session_id": values.pop("session_id", "") or "",
             "raw_log_prefix": line[:18],
         }
         for key, value in values.items():
@@ -273,7 +273,8 @@ def collect_logcat(
                 check=False,
             )
             final_log = dump.stdout
-            final_rows = parse_live_rows(latest_session_log(final_log), model, tensor_ready, session_id)
+            parse_source = final_log if tensor_ready else latest_session_log(final_log)
+            final_rows = parse_live_rows(parse_source, model, tensor_ready, session_id)
             duration_done = duration_s <= 0 or time.time() >= duration_deadline
             if len(final_rows) >= min_frames and duration_done:
                 break
@@ -473,9 +474,14 @@ def main() -> None:
         max(0, args.duration_s),
         run_id,
     )
-    session_log_text = filter_session_lines(latest_session_log(log_text), run_id)
-    frame_rows = parse_live_rows(session_log_text, model_label, args.tensor_ready, run_id)
-    skip_rows = parse_skip_rows(session_log_text, run_id)
+    if args.tensor_ready:
+        session_log_text = latest_session_log(log_text)
+        frame_rows = parse_live_rows(session_log_text, model_label, args.tensor_ready, "")
+        skip_rows = []
+    else:
+        session_log_text = filter_session_lines(latest_session_log(log_text), run_id)
+        frame_rows = parse_live_rows(session_log_text, model_label, args.tensor_ready, run_id)
+        skip_rows = parse_skip_rows(session_log_text, run_id)
     add_normalized_session_indices(frame_rows, skip_rows)
     (out_dir / "raw_logcat.txt").write_text(log_text, encoding="utf-8")
     (out_dir / "session_logcat.txt").write_text(session_log_text, encoding="utf-8")

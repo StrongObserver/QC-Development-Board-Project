@@ -47,7 +47,7 @@ RB5 Gen2 / QCS8550 Android device.
 | Shared-memory Phase 2 compare | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_qnn_shared_memory_phase2_compare` |
 | 120s short sustained run | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20251110_output_reuse_quicksr_live_roi_120s` |
 | Real-camera showcase | `C:\Users\Admin\Videos\RB5 gen2\real_camera_showcase\20251110_045328_minimal_real_camera_set` |
-| Tensor-ready boundary | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20251110_tensor_ready_live_roi_1280x960` |
+| Tensor-ready recheck boundary | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_recheck_tensor_ready_live_roi_120f` |
 
 ## Numbers To Use
 
@@ -76,7 +76,7 @@ RB5 Gen2 / QCS8550 Android device.
 | `QNN + QuickSRNetSmall W8A8` | default live ROI workhorse |
 | `QNN + Real-ESRGAN W8A8` | QNN/HTP milestone, comparison, optional post-capture/perceptual path |
 | automatic live dual-model routing | not default |
-| tensor-ready live path | valid but not promoted |
+| tensor-ready live path | valid but not promoted after current recheck |
 | Kotlin-only YUV ROI | correct but slower |
 
 ## Boundaries

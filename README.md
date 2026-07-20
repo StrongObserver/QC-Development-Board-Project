@@ -38,7 +38,7 @@ Automatic dual-model live routing is intentionally not the default.
 | App fixed-sample replay | `20260720_app_fixed_replay_quicksr_3assets`, 3 fixed assets through Android QNN path, p50 total about `17-18ms` |
 | Shared-memory feasibility | Phase 2 normal-vs-shared tensor compare passed; checksum matched and shared invoke avg was `1.056ms` vs normal `1.104ms`, but this is still not CameraX true zero-copy |
 | Real-camera showcase | 8 scenes / 32 standard images, `accepted_with_caveats` |
-| Tensor-ready live experiment | valid, but not promoted: p50 e2e `20.0ms` vs Bitmap default `19.0ms` |
+| Tensor-ready live experiment | valid, but not promoted: current recheck e2e p50/p95 `15 / 21ms` vs default `14 / 19.8ms` |
 
 Large generated evidence lives outside Git under:
 

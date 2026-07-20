@@ -154,6 +154,10 @@ YUV_ROI_PROBE_20251110_061600: nativeYuvRoiMs=5, nativeMAD=0.41
 TENSOR_READY_PROBE_20251110_064501: bitmapPath=37ms, rgbPath=20ms, outputMAD=0.74
 20251110_tensor_ready_live_roi_1280x960: tensor-ready live e2e p50/p95=20.0/25.7ms
 current Bitmap default remains better on p50 after output reuse: 19.0/24.7ms
+20260720 recheck:
+  default Bitmap path e2e p50/p95=14.0/19.8ms
+  tensor-ready path e2e p50/p95=15.0/21.0ms
+  boundary: tensor-ready is valid, but still not promoted to default.
 ```
 
 Latest app e2e schema + output-path smoke:
