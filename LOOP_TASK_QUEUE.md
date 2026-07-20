@@ -59,7 +59,7 @@ original project design unless there is concrete evidence that it cannot work.
 | 5 | d8-config | done | Quantization configuration comparison | at least two quantization/calibration variants compared on fixed inputs | toolchain blocked or comparison complete |
 | 6 | aimet-trigger | done | AIMET CLE/Bias Correction trigger check | exact W8A8-vs-float failure crop found, or AIMET remains deferred_with_trigger | no trigger, blocked, or recovery evidence complete |
 | 7 | eval-diagnostic | done | LPIPS/NIQE/OCR diagnostic metrics | diagnostic metrics added only for a visual/metric conflict or text claim | calibrated enough for diagnostic use or deferred |
-| 8 | zero-copy-probe | in_progress | True zero-copy feasibility research/probe | Phase 0 QNN Delegate shared-memory alloc/free validated in app process | Phase 1 C++ TFLite tensor-binding probe complete or blocked with evidence |
+| 8 | zero-copy-probe | in_progress | True zero-copy feasibility research/probe | Phase 1 TFLite C API custom allocation + QNN Delegate invoke validated | timing comparison complete or blocked with evidence |
 | 9 | video-temporal-plan | done | Video/every-N-frame enhancement protocol | every-N ImageAnalysis smoke is classified as cadence evidence, not per-frame latency gain | full VideoCapture needs explicit demo/product need |
 | 10 | power-perf-watt | done | Real power/perf-watt characterization | current/power evidence exists if making an efficiency claim | hardware/tooling blocked or evidence complete |
 | 11 | diff-audit | done | Audit current uncommitted changes and artifact boundaries | explicit source/doc/script files vs generated artifacts are separated | audit complete |
@@ -68,13 +68,14 @@ original project design unless there is concrete evidence that it cannot work.
 
 ## Current Closeout Task
 
-Current active task: `qnn-shared-memory-phase1-design`.
+Current active task: `qnn-shared-memory-timing-compare`.
 
 Current open work is no longer tile, D8-config, output postprocess, app e2e
 schema bring-up, or every-N smoke. Those lanes have evidence and should be
 treated as closed unless a regression appears. The active technical exploration
-is QNN shared-memory Phase 1 after Phase 0 confirmed that the app process can
-access `TfLiteQnnDelegateAllocCustomMem` / `TfLiteQnnDelegateFreeCustomMem`.
+is QNN shared-memory timing comparison after Phase 1 confirmed that TFLite C API
+custom allocation, QNN Delegate binding, and one invoke succeed in the app
+process.
 
 Current evidence to preserve:
 
@@ -90,6 +91,9 @@ C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_every_n3_liv
 
 QNN shared-memory Phase 0:
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_qnn_shared_memory_phase0
+
+QNN shared-memory Phase 1:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_qnn_shared_memory_phase1
 ```
 
 Current route boundaries:
@@ -105,7 +109,8 @@ Current route boundaries:
    Java/Kotlin QnnDelegate wrapper does not expose the custom allocation API;
    `javap` on `qtld-release.aar` confirms only backend/skel/perf/profile/skip
    options are exposed. Phase 0 passed alloc/free for the current model I/O
-   sizes; Phase 1 must prove tensor binding and inference.
+   sizes; Phase 1 passed tensor binding and one QNN Delegate invoke through
+   TFLite C API custom allocation.
 4. Full CameraX VideoCapture/Recorder remains a separate product/demo decision.
 5. Prompts for Qualcomm/internal AI must be output directly in chat, not written
    to Markdown files, unless the user explicitly asks for a file.
@@ -171,9 +176,10 @@ Boundary:
 ```text
 This is app timing and schema evidence, not visual quality evidence and not true
 zero-copy. Do not reopen output postprocess as the next task unless a regression
-appears. The current active route is C++ shared-memory Phase 1. AIMET/perceptual
-metrics only run when their trigger conditions appear; full VideoCapture only
-runs when a demo or product need is explicit.
+appears. The current active route is timing comparison for the C API
+shared-memory tensor-binding path. AIMET/perceptual metrics only run when their
+trigger conditions appear; full VideoCapture only runs when a demo or product
+need is explicit.
 Prompts for Qualcomm/internal AI must be output directly in chat, not written to
 Markdown files, unless the user explicitly asks for a file.
 ```

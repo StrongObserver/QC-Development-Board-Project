@@ -39,7 +39,7 @@ The project is at a clean trigger-gated checkpoint. Continue only when one of
 these gates opens:
 1. a concrete W8A8-vs-float failure crop appears -> AIMET/CLE or mixed precision;
 2. visual review conflicts with PSNR/SSIM or a text-readability claim is needed -> LPIPS/NIQE/OCR diagnostics;
-3. shared-memory Phase 0 passed -> design and implement C++ TFLite Interpreter tensor-binding Phase 1;
+3. shared-memory Phase 1 passed -> compare timing and output validity against the Kotlin/TFLite default path;
 4. the user wants a video demo/product path -> CameraX VideoCapture/Recorder protocol and implementation.
 ```
 
@@ -220,6 +220,18 @@ alignment: 64
 boundary: alloc/free only; not tensor binding or true zero-copy
 ```
 
+Shared-memory Phase 1:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_qnn_shared_memory_phase1
+status: shared_memory_tensor_bind_validated
+inputBound: true
+outputBound: true
+delegate: 0
+invoke: 0
+boundary: tensor binding + invoke only; not CameraX buffer binding
+```
+
 ## Next Engineering Choices
 
 Recommended order:
@@ -227,8 +239,8 @@ Recommended order:
 ```text
 1. Do not reopen app output postprocess unless a regression appears.
 2. Treat every-N as a completed cadence boundary: valid, but not a latency win.
-3. Continue shared memory with Phase 1 C++ TFLite Interpreter tensor binding,
-   keeping rb5-stable-20260720 as rollback anchor.
+3. Continue shared memory with timing and output-validity comparison against the
+   Kotlin/TFLite default path, keeping rb5-stable-20260720 as rollback anchor.
 4. Keep AIMET, mixed precision, LPIPS/NIQE/OCR behind their documented triggers.
 5. Full VideoCapture/Recorder waits for an explicit demo/product need.
 ```

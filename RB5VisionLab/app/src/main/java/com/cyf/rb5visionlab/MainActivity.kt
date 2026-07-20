@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.AssetManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
@@ -32,6 +33,7 @@ import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.qualcomm.qti.QnnDelegate
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -180,6 +182,7 @@ class MainActivity : AppCompatActivity() {
     external fun stringFromJNI(): String
     external fun qnnRuntimePreflight(): String
     external fun qnnSharedMemoryProbe(inputBytes: Int, outputBytes: Int): String
+    external fun qnnSharedMemoryTensorProbe(assetManager: AssetManager, modelAsset: String, delegateHandle: Long): String
     external fun processYPlane(yData: ByteArray, width: Int, height: Int, rowStride: Int): String
     external fun nativeYuvToRgbRoi(
         yData: ByteArray,
@@ -235,6 +238,7 @@ class MainActivity : AppCompatActivity() {
         val autoStartTensorReadyLiveSr = boolIntentExtra("start_live_sr_tensor_ready")
         val autoRunResourceProbe = boolIntentExtra("run_resource_probe")
         val autoRunQnnSharedMemoryProbe = boolIntentExtra("run_qnn_shared_memory_probe")
+        val autoRunQnnSharedTensorProbe = boolIntentExtra("run_qnn_shared_tensor_probe")
         val autoRunYuvRoiProbe = boolIntentExtra("run_yuv_roi_probe")
         val autoRunTensorReadyProbe = boolIntentExtra("run_tensor_ready_probe")
         val autoRunTileStill = boolIntentExtra("run_tile_still")
@@ -246,6 +250,7 @@ class MainActivity : AppCompatActivity() {
             "RB5_QNN",
             "onCreate run_qnn_fixed=$autoRunQnnFixed run_resource_probe=$autoRunResourceProbe " +
                 "run_qnn_shared_memory_probe=$autoRunQnnSharedMemoryProbe " +
+                "run_qnn_shared_tensor_probe=$autoRunQnnSharedTensorProbe " +
                 "run_yuv_roi_probe=$autoRunYuvRoiProbe run_tensor_ready_probe=$autoRunTensorReadyProbe " +
                 "probe_mode=$requestedProbeMode extras=${intent.extras?.keySet()?.joinToString()}"
         )
@@ -267,6 +272,11 @@ class MainActivity : AppCompatActivity() {
             srExecutor.execute {
                 Thread.sleep(500)
                 runQnnSharedMemoryProbeOnWorker()
+            }
+        } else if (autoRunQnnSharedTensorProbe || requestedProbeMode == "qnn_shared_tensor") {
+            srExecutor.execute {
+                Thread.sleep(500)
+                runQnnSharedMemoryTensorProbeOnWorker()
             }
         } else if (autoRunQnnFixed) {
             srExecutor.execute {
@@ -553,6 +563,44 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this, "QNN 固定样张失败", Toast.LENGTH_SHORT).show()
                 }
             }
+        }
+    }
+
+    private fun createQnnDelegateForProbe(): QnnDelegate {
+        val options = QnnDelegate.Options().apply {
+            setBackendType(QnnDelegate.Options.BackendType.HTP_BACKEND)
+            setSkelLibraryDir(applicationInfo.nativeLibraryDir)
+            setHtpPerformanceMode(QnnDelegate.Options.HtpPerformanceMode.HTP_PERFORMANCE_HIGH_PERFORMANCE)
+            setHtpPdSession(QnnDelegate.Options.HtpPdSession.HTP_PD_SESSION_UNSIGNED)
+            setLogLevel(QnnDelegate.Options.LogLevel.LOG_LEVEL_INFO)
+        }
+        return QnnDelegate(options)
+    }
+
+    private fun runQnnSharedMemoryTensorProbeOnWorker() {
+        val tag = "RB5_QNN_SHARED"
+        val modelAsset = SrModelVariant.QUICKSR_W8A8.assetName
+        runOnUiThread {
+            offlineEvalActive = true
+            statusTextView.text = "QNN shared-memory tensor probe running..."
+        }
+        var delegate: QnnDelegate? = null
+        try {
+            delegate = createQnnDelegateForProbe()
+            val result = qnnSharedMemoryTensorProbe(assets, modelAsset, delegate.getNativeHandle())
+            Log.d(tag, "tensor probe result $result")
+            runOnUiThread {
+                offlineEvalActive = false
+                statusTextView.text = "QNN shared-memory tensor probe\n$result"
+            }
+        } catch (e: Throwable) {
+            Log.e(tag, "tensor probe failed", e)
+            runOnUiThread {
+                offlineEvalActive = false
+                statusTextView.text = "QNN shared-memory tensor probe failed: ${e.message}"
+            }
+        } finally {
+            delegate?.close()
         }
     }
 

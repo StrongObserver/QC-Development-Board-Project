@@ -351,6 +351,45 @@ SetCustomAllocationForTensor, calls AllocateTensors and ModifyGraphWithDelegate,
 then compares output validity and timing against the Kotlin/TFLite default path.
 ```
 
+## Shared-Memory Phase 1 Result
+
+2026-07-20 follow-up:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_qnn_shared_memory_phase1
+```
+
+Result:
+
+```text
+status=pass
+stage=tensor_bind_invoke
+modelBytes=43672
+inputIndex=0
+outputIndex=32
+inputAlloc=0
+outputAlloc=0
+allocate=0
+delegate=0
+invoke=0
+inputBound=true
+outputBound=true
+inputTensorBytes=49152
+outputTensorBytes=786432
+```
+
+Interpretation:
+
+```text
+The app process can create a TFLite C API interpreter, bind input/output tensors
+to QNN Delegate shared-memory allocations, delegate the graph to QNN, and invoke
+the model successfully. This is a real step beyond alloc/free.
+
+It is still not CameraX buffer binding and not true zero-copy for the full app
+pipeline. The next useful question is timing and output comparison against the
+current Kotlin/TFLite path.
+```
+
 ## Short Sustained Run Result
 
 P4 short sustained validation is complete:
