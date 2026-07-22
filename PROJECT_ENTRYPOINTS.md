@@ -54,6 +54,11 @@ memory, or previous-chat assumptions. The required shape is:
 Get-Content -LiteralPath 'C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5 Gen2项目口播模板.txt' -Raw -Encoding UTF8
 ```
 
+Do not act from a guard hash, file stat, or task excerpt alone. The final
+section of the oral template controls whether the agent should execute
+immediately or align first, so the whole file must be visible to the acting
+agent in the current turn.
+
 After reading, the agent must judge the task boundary from the current file.
 
 ## Default Loop Engineering Rule

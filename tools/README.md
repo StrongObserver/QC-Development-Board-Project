@@ -2,10 +2,19 @@
 
 ## RB5 oral-template guard
 
-Use this before acting on a newly updated oral template:
+Use this before acting on a newly updated oral template. The default output
+prints the full template text because the final section controls whether the
+agent should execute immediately or align first:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\read_rb5_oral_template_guard.ps1
+```
+
+Do not act from a task excerpt alone. If you only need a quick human-readable
+preview, use the explicit summary mode:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\read_rb5_oral_template_guard.ps1 -SummaryOnly
 ```
 
 After confirming the template is the version you acted on, update the local

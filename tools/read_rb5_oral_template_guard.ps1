@@ -4,7 +4,8 @@ param(
     [string]$StateFile = "",
     [int]$ExcerptChars = 1400,
     [switch]$RequireChanged,
-    [switch]$UpdateState
+    [switch]$UpdateState,
+    [switch]$SummaryOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -63,17 +64,23 @@ if ($PreviousHash -ne "") {
     Write-Host "HASH_STATUS=NO_PREVIOUS_HASH"
 }
 
-$marker = "## " + (Join-Codepoints @(0x6211, 0x9700, 0x8981, 0x4F60, 0x505A, 0x3010, 0x6A21, 0x5757, 0x002F, 0x529F, 0x80FD, 0x3011))
-$index = $content.IndexOf($marker)
-if ($index -ge 0) {
-    $excerpt = $content.Substring($index, [Math]::Min($ExcerptChars, $content.Length - $index))
-    Write-Host "TASK_EXCERPT_BEGIN"
-    Write-Output $excerpt
-    Write-Host "TASK_EXCERPT_END"
+if ($SummaryOnly) {
+    $marker = "## " + (Join-Codepoints @(0x6211, 0x9700, 0x8981, 0x4F60, 0x505A, 0x3010, 0x6A21, 0x5757, 0x002F, 0x529F, 0x80FD, 0x3011))
+    $index = $content.IndexOf($marker)
+    if ($index -ge 0) {
+        $excerpt = $content.Substring($index, [Math]::Min($ExcerptChars, $content.Length - $index))
+        Write-Host "TASK_EXCERPT_BEGIN"
+        Write-Output $excerpt
+        Write-Host "TASK_EXCERPT_END"
+    } else {
+        Write-Host "TASK_EXCERPT_BEGIN"
+        Write-Output $content.Substring(0, [Math]::Min($ExcerptChars, $content.Length))
+        Write-Host "TASK_EXCERPT_END"
+    }
 } else {
-    Write-Host "TASK_EXCERPT_BEGIN"
-    Write-Output $content.Substring(0, [Math]::Min($ExcerptChars, $content.Length))
-    Write-Host "TASK_EXCERPT_END"
+    Write-Host "TEMPLATE_FULL_TEXT_BEGIN"
+    Write-Output $content
+    Write-Host "TEMPLATE_FULL_TEXT_END"
 }
 
 if ($UpdateState) {
