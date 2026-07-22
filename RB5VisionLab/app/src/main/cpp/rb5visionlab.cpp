@@ -894,6 +894,73 @@ Java_com_cyf_rb5visionlab_MainActivity_directBufferProbe(
 }
 
 extern "C"
+JNIEXPORT jbyteArray JNICALL
+Java_com_cyf_rb5visionlab_MainActivity_nativeYuvToRgbRoiBytesRotatedDirect(
+        JNIEnv* env,
+        jobject /* thiz */,
+        jobject y_buffer,
+        jobject u_buffer,
+        jobject v_buffer,
+        jint width,
+        jint height,
+        jint y_row_stride,
+        jint y_pixel_stride,
+        jint u_row_stride,
+        jint u_pixel_stride,
+        jint v_row_stride,
+        jint v_pixel_stride,
+        jint output_side,
+        jint rotation_degrees) {
+    if (y_buffer == nullptr || u_buffer == nullptr || v_buffer == nullptr ||
+        width <= 0 || height <= 0 || output_side <= 0 ||
+        y_row_stride <= 0 || u_row_stride <= 0 || v_row_stride <= 0 ||
+        y_pixel_stride <= 0 || u_pixel_stride <= 0 || v_pixel_stride <= 0) {
+        return nullptr;
+    }
+
+    const auto* y_bytes = static_cast<const uint8_t*>(env->GetDirectBufferAddress(y_buffer));
+    const auto* u_bytes = static_cast<const uint8_t*>(env->GetDirectBufferAddress(u_buffer));
+    const auto* v_bytes = static_cast<const uint8_t*>(env->GetDirectBufferAddress(v_buffer));
+    if (y_bytes == nullptr || u_bytes == nullptr || v_bytes == nullptr) {
+        return nullptr;
+    }
+
+    const int crop_side = std::max(
+            output_side,
+            std::min({width * output_side / 640, width, height}));
+    const int left = (width - crop_side) / 2;
+    const int top = (height - crop_side) / 2;
+    const int byte_count = output_side * output_side * 3;
+    jbyteArray result = env->NewByteArray(byte_count);
+    if (result == nullptr) {
+        return nullptr;
+    }
+
+    std::vector<jbyte> rgb(byte_count);
+    for (int oy = 0; oy < output_side; ++oy) {
+        const int src_y = top + (oy * crop_side + crop_side / (output_side * 2)) / output_side;
+        const int y_base = src_y * y_row_stride;
+        const int uv_y = src_y / 2;
+        const int u_base = uv_y * u_row_stride;
+        const int v_base = uv_y * v_row_stride;
+        for (int ox = 0; ox < output_side; ++ox) {
+            const int src_x = left + (ox * crop_side + crop_side / (output_side * 2)) / output_side;
+            const int uv_x = src_x / 2;
+            const int y_value = y_bytes[y_base + src_x * y_pixel_stride];
+            const int u_value = u_bytes[u_base + uv_x * u_pixel_stride];
+            const int v_value = v_bytes[v_base + uv_x * v_pixel_stride];
+            const int out = rotatedOutputIndex(ox, oy, output_side, rotation_degrees) * 3;
+            yuvToRgb(y_value, u_value, v_value, rgb.data() + out);
+        }
+    }
+
+    env->SetByteArrayRegion(result, 0, byte_count, rgb.data());
+    LOGD("nativeYuvToRgbRoiBytesRotatedDirect width=%d height=%d crop=%d output=%d rotation=%d",
+         width, height, crop_side, output_side, normalizeRotation(rotation_degrees));
+    return result;
+}
+
+extern "C"
 JNIEXPORT jintArray JNICALL
 Java_com_cyf_rb5visionlab_MainActivity_nativeYuvToRgbRoi(
         JNIEnv* env,

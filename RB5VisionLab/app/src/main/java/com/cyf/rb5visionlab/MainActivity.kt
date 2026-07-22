@@ -93,6 +93,7 @@ class MainActivity : AppCompatActivity() {
     private var latestSrSample: SrSample? = null
     private var liveOutputBitmap: Bitmap? = null
     private var tensorLiveOutputBitmap: Bitmap? = null
+    @Volatile private var liveSrTensorDirectYuv = false
     private var highResResolver: SuperResolver? = null
     @Volatile private var pendingHighResSample = false
     @Volatile private var pendingAutoLiveSr = false
@@ -219,6 +220,21 @@ class MainActivity : AppCompatActivity() {
     external fun qnnSharedMemoryTensorCompareProbe(assetManager: AssetManager, modelAsset: String, normalDelegateHandle: Long, sharedDelegateHandle: Long, repeats: Int): String
     external fun processYPlane(yData: ByteArray, width: Int, height: Int, rowStride: Int): String
     external fun directBufferProbe(yBuffer: ByteBuffer, uBuffer: ByteBuffer, vBuffer: ByteBuffer): String
+    external fun nativeYuvToRgbRoiBytesRotatedDirect(
+        yBuffer: ByteBuffer,
+        uBuffer: ByteBuffer,
+        vBuffer: ByteBuffer,
+        width: Int,
+        height: Int,
+        yRowStride: Int,
+        yPixelStride: Int,
+        uRowStride: Int,
+        uPixelStride: Int,
+        vRowStride: Int,
+        vPixelStride: Int,
+        outputSide: Int,
+        rotationDegrees: Int,
+    ): ByteArray
     external fun nativeYuvToRgbRoi(
         yData: ByteArray,
         uData: ByteArray,
@@ -290,6 +306,7 @@ class MainActivity : AppCompatActivity() {
         val autoStartLiveSr = boolIntentExtra("start_live_sr")
         val autoStartTensorReadyLiveSr = boolIntentExtra("start_live_sr_tensor_ready")
         val autoStartTensorRotatedLiveSr = boolIntentExtra("start_live_sr_tensor_rotated")
+        val autoStartDirectYuvLiveSr = boolIntentExtra("start_live_sr_direct_yuv")
         val autoRunResourceProbe = boolIntentExtra("run_resource_probe")
         val autoRunQnnSharedMemoryProbe = boolIntentExtra("run_qnn_shared_memory_probe")
         val autoRunQnnSharedTensorProbe = boolIntentExtra("run_qnn_shared_tensor_probe")
@@ -317,6 +334,7 @@ class MainActivity : AppCompatActivity() {
             "intent probes run_qnn_fixed=$autoRunQnnFixed start_live_sr=$autoStartLiveSr " +
                 "start_live_sr_tensor_ready=$autoStartTensorReadyLiveSr " +
                 "start_live_sr_tensor_rotated=$autoStartTensorRotatedLiveSr " +
+                "start_live_sr_direct_yuv=$autoStartDirectYuvLiveSr " +
                 "run_tile_still=$autoRunTileStill tile_model=${tileModelVariant.label} " +
                 "run_tile_compare=$autoRunTileCompare " +
                 "save_demo_relation=$pendingDemoRelationCapture " +
@@ -356,12 +374,16 @@ class MainActivity : AppCompatActivity() {
             pendingAutoTileCompare = true
         } else if (autoStartTensorReadyLiveSr) {
             pendingProbeMode = "tensor_live"
+        } else if (autoStartDirectYuvLiveSr || requestedProbeMode == "direct_yuv_live") {
+            pendingProbeMode = "direct_yuv_live"
         } else if (autoStartTensorRotatedLiveSr || requestedProbeMode == "tensor_rotated_live") {
             pendingProbeMode = "tensor_rotated_live"
         } else if (requestedProbeMode == "yuv_roi" || autoRunYuvRoiProbe) {
             pendingProbeMode = "yuv_roi"
         } else if (requestedProbeMode == "tensor_ready" || autoRunTensorReadyProbe) {
             pendingProbeMode = "tensor_ready"
+        } else if (requestedProbeMode == "direct_yuv_roi") {
+            pendingProbeMode = "direct_yuv_roi"
         } else if (requestedProbeMode == "direct_buffer" || autoRunDirectBufferProbe) {
             pendingProbeMode = "direct_buffer"
         }
@@ -449,6 +471,7 @@ class MainActivity : AppCompatActivity() {
                 liveSr = !useOptimizedTensor
                 liveSrTensorReady = useOptimizedTensor
                 liveSrTensorRotatedNative = useOptimizedTensor
+                liveSrTensorDirectYuv = useOptimizedTensor
                 liveSrOptimizedTensor = useOptimizedTensor
                 offlineEvalActive = false
                 liveSrEveryN = 1
@@ -456,10 +479,10 @@ class MainActivity : AppCompatActivity() {
                 showLiveSrOutput()
                 srButton.text = "停止实时超分"
                 if (demoMode) {
-                    val path = if (useOptimizedTensor) "optimized tensor" else "bitmap"
+                    val path = if (useOptimizedTensor) "optimized direct YUV tensor" else "bitmap"
                     demoOverlayView.text = "RB5 Gen2 Live SR\n${srBackend.label} / ${srModelVariant.label}\n$path\nStarting..."
                 } else {
-                    val path = if (useOptimizedTensor) "optimized tensor" else "bitmap"
+                    val path = if (useOptimizedTensor) "optimized direct YUV tensor" else "bitmap"
                     statusTextView.text = "Live ROI SR starting with ${srBackend.label}/${srModelVariant.label} ($path)..."
                 }
             } else {
@@ -621,37 +644,39 @@ class MainActivity : AppCompatActivity() {
         liveSr = !useOptimizedTensor
         liveSrTensorReady = useOptimizedTensor
         liveSrTensorRotatedNative = useOptimizedTensor
+        liveSrTensorDirectYuv = useOptimizedTensor
         liveSrOptimizedTensor = useOptimizedTensor
         offlineEvalActive = false
         showLiveSrOutput()
         findViewById<Button>(R.id.sr_button).text = "停止实时超分"
         if (demoMode) {
-            val path = if (useOptimizedTensor) "optimized tensor" else "bitmap"
+            val path = if (useOptimizedTensor) "optimized direct YUV tensor" else "bitmap"
             demoOverlayView.text = "RB5 Gen2 Live SR\n${srBackend.label} / ${srModelVariant.label}\n$path\nStarting..."
         } else {
-            val path = if (useOptimizedTensor) "optimized tensor" else "bitmap"
+            val path = if (useOptimizedTensor) "optimized direct YUV tensor" else "bitmap"
             statusTextView.text = "Live ROI SR starting with ${srBackend.label}/${srModelVariant.label} ($path) from intent..."
         }
         resetLiveSrCadenceCounters()
         Log.d("RB5_SR", "auto live SR from intent backend=${srBackend.label} model=${srModelVariant.label} session=$liveSrSessionId everyN=$liveSrEveryN optimizedTensor=$useOptimizedTensor")
     }
 
-    private fun startTensorReadyLiveSrFromIntent(rotatedNative: Boolean = false) {
+    private fun startTensorReadyLiveSrFromIntent(rotatedNative: Boolean = false, directYuv: Boolean = false) {
         liveSr = false
         liveSrTensorReady = true
-        liveSrTensorRotatedNative = rotatedNative
+        liveSrTensorRotatedNative = rotatedNative || directYuv
+        liveSrTensorDirectYuv = directYuv
         liveSrOptimizedTensor = false
         offlineEvalActive = false
         showLiveSrOutput()
         findViewById<Button>(R.id.sr_button).text = "停止 Tensor Live"
         if (demoMode) {
-            val pathLabel = if (rotatedNative) "rotated native RGB" else "Kotlin rotate"
+            val pathLabel = if (directYuv) "direct YUV native RGB" else if (rotatedNative) "rotated native RGB" else "Kotlin rotate"
             demoOverlayView.text = "RB5 Gen2 Tensor Live\nQNN / QUICKSR_W8A8\n$pathLabel\nStarting..."
         } else {
-            val pathLabel = if (rotatedNative) "rotated native RGB" else "Kotlin rotate"
+            val pathLabel = if (directYuv) "direct YUV native RGB" else if (rotatedNative) "rotated native RGB" else "Kotlin rotate"
             statusTextView.text = "Tensor-ready live ROI SR starting with QNN/QUICKSR_W8A8 ($pathLabel)..."
         }
-        Log.d("RB5_SR_TENSOR", "auto tensor-ready live SR from intent backend=QNN model=QUICKSR_W8A8 tensorPath=${if (rotatedNative) "rotatedNative" else "kotlinRotate"}")
+        Log.d("RB5_SR_TENSOR", "auto tensor-ready live SR from intent backend=QNN model=QUICKSR_W8A8 tensorPath=${if (directYuv) "directYuv" else if (rotatedNative) "rotatedNative" else "kotlinRotate"}")
     }
 
     private fun shouldUseOptimizedTensorLivePath(): Boolean {
@@ -1035,6 +1060,7 @@ class MainActivity : AppCompatActivity() {
         liveOutputBitmap = null
         tensorLiveOutputBitmap = null
         lastStrategyRgbBytes = null
+        liveSrTensorDirectYuv = false
         liveSrOptimizedTensor = false
         cameraExecutor.execute { oldResolver?.close() }
         srExecutor.execute { oldOfflineResolver?.close() }
@@ -1288,7 +1314,26 @@ class MainActivity : AppCompatActivity() {
             val side = 128
             val degrees = imageProxy.imageInfo.rotationDegrees
             val tRgbStart = System.nanoTime()
-            var rgbBytes = if (liveSrTensorRotatedNative) {
+            var rgbBytes = if (liveSrTensorDirectYuv) {
+                val y = imageProxy.planes[0]
+                val u = imageProxy.planes[1]
+                val v = imageProxy.planes[2]
+                nativeYuvToRgbRoiBytesRotatedDirect(
+                    y.buffer.duplicate(),
+                    u.buffer.duplicate(),
+                    v.buffer.duplicate(),
+                    imageProxy.width,
+                    imageProxy.height,
+                    y.rowStride,
+                    y.pixelStride,
+                    u.rowStride,
+                    u.pixelStride,
+                    v.rowStride,
+                    v.pixelStride,
+                    side,
+                    degrees,
+                )
+            } else if (liveSrTensorRotatedNative) {
                 nativeYuv420ToRgbCenterRoiBytesRotated(imageProxy, side, degrees)
             } else {
                 nativeYuv420ToRgbCenterRoiBytes(imageProxy, side)
@@ -1318,7 +1363,7 @@ class MainActivity : AppCompatActivity() {
                     "frame=${imageProxy.width}x${imageProxy.height} nativeRgb=$nativeRgbMs rotate=$degrees " +
                     "pre=${timing.preprocessMs} inf=${timing.inferenceMs} post=${timing.postprocessMs} " +
                     "enhanceWall=$enhanceWallMs analyzer=$analyzerWallMs e2e=${e2eMs}ms " +
-                    "tensorPath=${if (liveSrTensorRotatedNative) "rotatedNative" else "kotlinRotate"} optimizedTensor=$liveSrOptimizedTensor " +
+                    "tensorPath=${if (liveSrTensorDirectYuv) "directYuv" else if (liveSrTensorRotatedNative) "rotatedNative" else "kotlinRotate"} optimizedTensor=$liveSrOptimizedTensor " +
                     strategyShadow.toLogFields() +
                     if (profileSummary.isNotEmpty()) " $profileSummary" else ""
             )
@@ -1326,7 +1371,7 @@ class MainActivity : AppCompatActivity() {
                 srResultView.setImageBitmap(out)
                 statusTextView.text =
                     "${if (liveSrOptimizedTensor) "Optimized" else "Tensor-ready"} live ROI SR (QNN/QUICKSR_W8A8)\n" +
-                        "frame ${imageProxy.width}x${imageProxy.height} | ROI 128 | ${if (liveSrTensorRotatedNative) "native rotated" else "Kotlin rotated"}\n" +
+                        "frame ${imageProxy.width}x${imageProxy.height} | ROI 128 | ${if (liveSrTensorDirectYuv) "direct YUV native" else if (liveSrTensorRotatedNative) "native rotated" else "Kotlin rotated"}\n" +
                         "native RGB ${nativeRgbMs} ms | preprocess ${timing.preprocessMs} ms\n" +
                         "shadow ${strategyShadow.decision} | Y ${"%.1f".format(Locale.US, strategyShadow.meanLuma)} | sharp ${"%.1f".format(Locale.US, strategyShadow.sharpness)}\n" +
                         "inference ${timing.inferenceMs} ms | postprocess ${timing.postprocessMs} ms\n" +
@@ -1830,6 +1875,70 @@ class MainActivity : AppCompatActivity() {
                 offlineEvalActive = false
                 statusTextView.text = "Direct buffer probe failed: ${e.message}"
                 Toast.makeText(this, "Direct buffer probe failed", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun runDirectYuvRoiProbe(imageProxy: ImageProxy) {
+        try {
+            val side = 128
+            val degrees = imageProxy.imageInfo.rotationDegrees
+            val tArray0 = System.nanoTime()
+            val arrayRgb = nativeYuv420ToRgbCenterRoiBytesRotated(imageProxy, side, degrees)
+            val arrayMs = (System.nanoTime() - tArray0) / 1_000_000
+
+            val y = imageProxy.planes[0]
+            val u = imageProxy.planes[1]
+            val v = imageProxy.planes[2]
+            val tDirect0 = System.nanoTime()
+            val directRgb = nativeYuvToRgbRoiBytesRotatedDirect(
+                y.buffer.duplicate(),
+                u.buffer.duplicate(),
+                v.buffer.duplicate(),
+                imageProxy.width,
+                imageProxy.height,
+                y.rowStride,
+                y.pixelStride,
+                u.rowStride,
+                u.pixelStride,
+                v.rowStride,
+                v.pixelStride,
+                side,
+                degrees,
+            )
+            val directMs = (System.nanoTime() - tDirect0) / 1_000_000
+            val arrayBitmap = rgbBytesToBitmap(arrayRgb, side)
+            val directBitmap = rgbBytesToBitmap(directRgb, side)
+            val mad = meanAbsDiff(arrayBitmap, directBitmap)
+            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+            val prefix = "DIRECT_YUV_ROI_${timestamp}"
+            val saved = listOf(
+                savePngToPictures(arrayBitmap, "${prefix}_array_rotated_rgb_128.png"),
+                savePngToPictures(directBitmap, "${prefix}_direct_rotated_rgb_128.png"),
+                savePngToPictures(makeHorizontalSheet(listOf(arrayBitmap, directBitmap)), "${prefix}_side_by_side.png"),
+            )
+            Log.d(
+                "RB5_DIRECT_YUV",
+                "probe frame=${imageProxy.width}x${imageProxy.height} rotation=$degrees " +
+                    "arrayMs=$arrayMs directMs=$directMs mad=${"%.2f".format(Locale.US, mad)} " +
+                    "yDirect=${y.buffer.isDirect} uDirect=${u.buffer.isDirect} vDirect=${v.buffer.isDirect} " +
+                    "yRow=${y.rowStride} uRow=${u.rowStride} vRow=${v.rowStride} " +
+                    "uPixel=${u.pixelStride} vPixel=${v.pixelStride} saved=${saved.joinToString()}"
+            )
+            runOnUiThread {
+                offlineEvalActive = false
+                statusTextView.text =
+                    "Direct YUV ROI probe saved\n" +
+                        "array $arrayMs ms | direct $directMs ms | MAD ${"%.2f".format(Locale.US, mad)}\n" +
+                        saved.joinToString("\n")
+                Toast.makeText(this, "Direct YUV ROI probe saved", Toast.LENGTH_LONG).show()
+            }
+        } catch (e: Throwable) {
+            Log.e("RB5_DIRECT_YUV", "probe failed", e)
+            runOnUiThread {
+                offlineEvalActive = false
+                statusTextView.text = "Direct YUV ROI probe failed: ${e.message}"
+                Toast.makeText(this, "Direct YUV ROI probe failed", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -2385,6 +2494,10 @@ class MainActivity : AppCompatActivity() {
                                 pendingProbeMode = ""
                                 Log.d("RB5_SR", "pending probe consumed: tensor_ready")
                                 runTensorReadyProbe(imageProxy)
+                            } else if (pendingProbeMode == "direct_yuv_roi") {
+                                pendingProbeMode = ""
+                                Log.d("RB5_SR", "pending probe consumed: direct_yuv_roi")
+                                runDirectYuvRoiProbe(imageProxy)
                             } else if (pendingProbeMode == "direct_buffer") {
                                 pendingProbeMode = ""
                                 Log.d("RB5_SR", "pending probe consumed: direct_buffer")
@@ -2444,14 +2557,21 @@ class MainActivity : AppCompatActivity() {
                 )
                 Log.d(CAMERA_TAG, "CameraX preview and ImageAnalysis started")
                 when (pendingProbeMode) {
-                    "yuv_roi", "tensor_ready", "direct_buffer" -> Log.d("RB5_SR", "pending probe armed: $pendingProbeMode")
+                    "yuv_roi", "tensor_ready", "direct_buffer", "direct_yuv_roi" -> Log.d("RB5_SR", "pending probe armed: $pendingProbeMode")
                     "tensor_live" -> {
                         pendingProbeMode = ""
+                        liveSrTensorDirectYuv = false
                         previewView.postDelayed({ startTensorReadyLiveSrFromIntent() }, 500)
                         Log.d("RB5_SR_TENSOR", "pending tensor-ready live armed")
                     }
+                    "direct_yuv_live" -> {
+                        pendingProbeMode = ""
+                        previewView.postDelayed({ startTensorReadyLiveSrFromIntent(rotatedNative = true, directYuv = true) }, 500)
+                        Log.d("RB5_SR_TENSOR", "pending direct-yuv tensor live armed")
+                    }
                     "tensor_rotated_live" -> {
                         pendingProbeMode = ""
+                        liveSrTensorDirectYuv = false
                         previewView.postDelayed({ startTensorReadyLiveSrFromIntent(rotatedNative = true) }, 500)
                         Log.d("RB5_SR_TENSOR", "pending tensor-ready rotated native live armed")
                     }
