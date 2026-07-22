@@ -244,6 +244,7 @@ def collect_logcat(
     use_app_default: bool,
     tensor_ready: bool,
     tensor_rotated_native: bool,
+    direct_yuv: bool,
     every_n: int,
     duration_s: int,
     session_id: str,
@@ -255,7 +256,7 @@ def collect_logcat(
         "-n",
         APP_COMPONENT,
         "--ez",
-        "start_live_sr_tensor_rotated" if tensor_rotated_native else "start_live_sr_tensor_ready" if tensor_ready else "start_live_sr",
+        "start_live_sr_direct_yuv" if direct_yuv else "start_live_sr_tensor_rotated" if tensor_rotated_native else "start_live_sr_tensor_ready" if tensor_ready else "start_live_sr",
         "true",
         "--es",
         "sr_session_id",
@@ -463,6 +464,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--use-app-default", action="store_true", help="Do not pass sr_backend/sr_model extras; validate the app's compiled default.")
     parser.add_argument("--tensor-ready", action="store_true", help="Run the isolated native-RGB tensor-ready live path.")
     parser.add_argument("--tensor-rotated-native", action="store_true", help="Run the native-RGB tensor live path with rotation handled in native code.")
+    parser.add_argument("--direct-yuv", action="store_true", help="Run the isolated direct ImageProxy ByteBuffer native-RGB tensor live path.")
     parser.add_argument("--every-n", type=int, default=1, help="Enhance every Nth ImageAnalysis frame for temporal smoke.")
     parser.add_argument("--min-frames", type=int, default=120)
     parser.add_argument("--timeout-s", type=int, default=90)
@@ -478,9 +480,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    tensor_mode = args.tensor_ready or args.tensor_rotated_native
+    tensor_mode = args.tensor_ready or args.tensor_rotated_native or args.direct_yuv
     model_label = (
-        "TENSOR_ROTATED_NATIVE_QUICKSR_W8A8"
+        "DIRECT_YUV_TENSOR_QUICKSR_W8A8"
+        if args.direct_yuv
+        else "TENSOR_ROTATED_NATIVE_QUICKSR_W8A8"
         if args.tensor_rotated_native
         else "TENSOR_READY_QUICKSR_W8A8"
         if args.tensor_ready
@@ -509,6 +513,7 @@ def main() -> None:
         args.use_app_default,
         tensor_mode,
         args.tensor_rotated_native,
+        args.direct_yuv,
         every_n,
         max(0, args.duration_s),
         run_id,

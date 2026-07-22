@@ -116,6 +116,18 @@ def start_scenario(scenario: str) -> None:
             "QUICKSR_W8A8",
         )
         return
+    if scenario == "live_direct_yuv":
+        adb(
+            "shell",
+            "am",
+            "start",
+            "-n",
+            APP_COMPONENT,
+            "--ez",
+            "start_live_sr_direct_yuv",
+            "true",
+        )
+        return
     if scenario in {"tile_quicksr_once", "tile_realesrgan_once"}:
         adb(
             "shell",
@@ -147,7 +159,15 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--scenario",
-        choices=["idle", "camera_preview", "live_quicksr", "tile_quicksr_once", "tile_realesrgan_once", "suite_core"],
+        choices=[
+            "idle",
+            "camera_preview",
+            "live_quicksr",
+            "live_direct_yuv",
+            "tile_quicksr_once",
+            "tile_realesrgan_once",
+            "suite_core",
+        ],
         required=True,
     )
     parser.add_argument("--duration-s", type=float, default=30.0)
@@ -240,6 +260,7 @@ def main() -> None:
             ("idle", args.baseline_duration_s),
             ("camera_preview", args.baseline_duration_s),
             ("live_quicksr", args.live_duration_s),
+            ("live_direct_yuv", args.live_duration_s),
             ("tile_quicksr_once", args.duration_s),
             ("tile_realesrgan_once", args.duration_s),
         ]
