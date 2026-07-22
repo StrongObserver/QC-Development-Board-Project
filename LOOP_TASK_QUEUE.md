@@ -1,6 +1,6 @@
 # RB5 Loop Task Queue
 
-Updated: 2026-07-20
+Updated: 2026-07-22
 
 ## Purpose
 
@@ -71,28 +71,40 @@ original project design unless there is concrete evidence that it cannot work.
 Current active task: `blocked-needs-user-or-new-scope`.
 
 Current open work is no longer tile, D8-config, output postprocess, app e2e
-schema bring-up, every-N smoke, or invoke-level shared-memory probing. Those
-lanes have evidence and should be treated as closed unless a regression appears.
-QNN shared-memory Phase 2 has validated normal-vs-shared tensor comparison with
-matching output checksum. AIMET trigger search found
-concrete W8A8-vs-float local regression candidates, but native Windows remains
-blocked for actual AIMET execution. TextZoom/OCR mini evaluation is now a
-diagnostic-only text-fidelity tool, not a hard quality gate. RealSR 10-case
-mini review is now a real-degradation lifecycle sanity check, not a replacement
-for `RB5_SR_Benchmark_v1`. Demo Mode wide-FoV video capture is now validated
-through `adb screenrecord` on the live ROI UI; it is not a true VideoCapture SR
-pipeline.
+schema bring-up, every-N smoke, invoke-level shared-memory probing, or
+direct-YUV default promotion. Those lanes have evidence and should be treated as
+closed unless a regression appears. QNN shared-memory Phase 2 has validated
+normal-vs-shared tensor comparison with matching output checksum. Direct
+PlaneProxy ByteBuffer -> native ROI/RGB is now the compiled default QNN/QuickSR
+live path. AIMET trigger search found concrete W8A8-vs-float local regression
+candidates, and AIMET-Torch CLE is locally feasible, but a deployable CLE W8A8
+TFLite/QNN artifact still requires an explicit remote AI Hub export decision.
+TextZoom/OCR mini evaluation is now a diagnostic-only text-fidelity tool, not a
+hard quality gate. RealSR 10-case mini review is now a real-degradation
+lifecycle sanity check, not a replacement for `RB5_SR_Benchmark_v1`. Demo Mode
+wide-FoV video capture is validated through `adb screenrecord` on the live ROI
+UI; it is not a true VideoCapture SR pipeline.
 
 The current loop can stop under exit condition 2/3: remaining progress needs
-either user/toolchain input (AIMET on WSL/Linux or supported environment), a new
-larger scoped CameraX/native data-path integration experiment, or an explicit
-product decision to build a full CameraX VideoCapture/Recorder route.
+either explicit user approval to submit Qualcomm AI Hub remote AIMET/CLE W8A8
+export jobs, a new larger scoped true CameraX-to-QNN buffer-registration
+experiment, or an explicit product decision to build a full CameraX
+VideoCapture/Recorder route.
 
 Current evidence to preserve:
 
 ```text
 Optimized default live ROI with UINT8 bulk input and shadow metrics:
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260721_loop_p4_strategy_shadow_live
+
+Direct-YUV default live ROI:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260722_app_default_direct_yuv_live_roi_120f
+
+Direct-YUV sustained live ROI:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260722_direct_yuv_live_roi_120s_sustained
+
+Direct-YUV same-frame correctness probe:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\direct_yuv_roi_probe\20260722_direct_yuv_roi_probe
 
 Bulk input comparison:
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260721_loop_p2_bulk_input_compare
@@ -105,6 +117,12 @@ C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\aimet_tor
 
 AIMET-Torch QuantSim compare:
 C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\aimet_torch_quantsim_compare\20260721_realesrgan128_fixed_slice
+
+AIMET CLE QAI Hub Models local export checkpoint:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\aimet_deployability\20260722_aimet_cle_export_checkpoint
+
+Mixed-precision support probe:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\mixed_precision_probe\20260722_realesrgan_w8a16_support
 
 QuickSRNet size/latency/quality curve:
 C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\quicksrnet_curve\20260721_quicksrnet_sml_curve
@@ -176,14 +194,17 @@ C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\p1_aimet_
 Current route boundaries:
 
 ```text
-0a. Current default QNN/QuickSR live ROI now uses the optimized tensor path:
-   native-rotated ROI -> UINT8 NHWC bulk input -> QNN Delegate. Latest e2e p50/p95
-   is 11/17ms, with preprocess 0/0ms. This is a measured small performance win,
-   not true CameraX buffer zero-copy.
+0a. Current default QNN/QuickSR live ROI now uses the direct-YUV tensor path:
+   CameraX PlaneProxy direct ByteBuffer -> native ROI/RGB -> UINT8 NHWC bulk
+   input -> QNN Delegate. Latest compiled default e2e p50/p95 is 10/12ms.
+   This is a measured data-path win, not true CameraX buffer -> QNN input
+   zero-copy.
 0b. AIMET-CLE is no longer purely blocked: PyTorch FP source and AIMET-Torch CLE
-   are locally validated. QuantSim shows small average simulated INT8 improvement
-   (+0.115dB) but mixed results per case. This is evidence, not a deployed app
-   model replacement.
+   are locally validated. QuantSim shows small average simulated INT8
+   improvement (+0.115dB) but mixed results per case. The CLE state dict can be
+   wrapped into the checkpoint shape expected by Qualcomm AI Hub Models and
+   serialized to ONNX locally. A deployable CLE W8A8 TFLite/QNN asset still
+   needs explicit user approval for remote AI Hub quantize/compile/profile jobs.
 0c. QNN Delegate profiling is accessible from the Android app: fixed sample
    replay collected `profileBytes=904`. The profile payload is raw delegate bytes
    and is not decoded per op yet.
@@ -242,11 +263,9 @@ Current route boundaries:
 9. App fixed-sample replay is now a small regression layer: it runs fixed assets
    through the Android QNN path, pulls input/baseline/SR outputs, and writes an
    app_e2e row. It supports repeatability but is not live-camera quality proof.
-10. AIMET-CLE remains blocked_needs_user: trigger crops exist, but native
-   Windows/Python 3.12 still lacks `aimet-onnx`, WSL is not installed, and
-   external research did not provide a Windows-only workaround. `aimet-torch`
-   only becomes actionable if the PyTorch FP source model/export route is
-   confirmed.
+10. AIMET remote export is blocked_needs_user: local CLE deployability is
+   proven, but producing a CLE W8A8 TFLite/QNN replacement would submit remote
+   Qualcomm AI Hub jobs and needs explicit user approval.
 ```
 
 Power/perf-watt:

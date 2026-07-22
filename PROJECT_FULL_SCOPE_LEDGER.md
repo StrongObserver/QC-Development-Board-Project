@@ -1,6 +1,6 @@
 # RB5 Gen2 Full Scope Ledger
 
-Updated: 2026-07-20
+Updated: 2026-07-22
 
 ## Purpose
 
@@ -43,10 +43,10 @@ later, but it must not disappear.
 | eval-realsr | RealSR real-degradation lifecycle sanity | done | `evalhub_realsr_mini_10cases_20260720_v2` covers Canon/Nikon 5+5 host LiteRT cases; bicubic PSNR is higher, while SR SSIM/sharpness can improve, so visual review remains required | Use only before real-camera robustness claims; do not replace the 24-case main gate |
 | eval-perceptual | LPIPS / NIQE / OCR diagnostic metrics | done | TextZoom OCR mini diagnostic exists at `RB5_SR_lab\results\textzoom_ocr\20260720_textzoom_ocr_mini_v2`; OCR similarity is low even on HR references, so it remains diagnostic-only and visual review still owns final quality decisions | Reopen only to calibrate OCR/LPIPS/NIQE against human review on a representative slice |
 | app-fixed-replay | Android app fixed-sample replay | done | `20260720_app_fixed_replay_quicksr_3assets` runs 3 fixed assets through Android QNN/HTP, pulls 9 output images, and writes app e2e evidence | Maintain as a small regression layer; expand only if a concrete app regression appears |
-| native-preprocess | native YUV ROI / RGB preprocessing | done | UINT8 NHWC bulk input plus native-rotated tensor path is now the default QNN/QuickSR live path. Latest default live ROI e2e p50/p95 is `11/17ms` with pre `0/0ms`; prior Bitmap default was about `14/20ms` | Maintain as default for QNN/QuickSR. Further zero-copy work is a separate larger data-path project |
+| native-preprocess | native YUV ROI / RGB preprocessing | done | Direct PlaneProxy ByteBuffer -> native ROI/RGB is now the default QNN/QuickSR live path. Same-frame direct-vs-array probe has MAD `0.0`; default app direct-YUV live ROI e2e p50/p95 is `10/12ms` | Maintain as default for QNN/QuickSR. Further zero-copy work is a separate larger data-path project |
 | buffer-reuse | buffer / object reuse | done | TFLite buffers, pixel arrays, sample-copy reduction, output Bitmap reuse, and reusable UINT8 output byte buffer | Maintain only |
-| zero-copy | true zero-copy CameraX -> NPU | done | Phase 2 normal tensor vs shared custom allocation compare passed with matching checksum; direct buffer probe confirms CameraX Y/U/V PlaneProxy buffers are direct and JNI `GetDirectBufferAddress` returns non-null native addresses. This is still not QNN Delegate input binding | Treat invoke-level and direct-plane probes as complete; any further work is a larger CameraX/native data-path integration project |
-| mixed-precision | w8a16 mixed precision | queued | AIMET-Torch route is now technically feasible, but CLE only shows small simulated INT8 gains and no layer-level sensitivity evidence yet | Reopen only if W8A8 quality remains blocking after CLE/export evidence |
+| zero-copy | true zero-copy CameraX -> NPU | done | Phase 2 normal tensor vs shared custom allocation compare passed with matching checksum; direct buffer probe confirms CameraX Y/U/V PlaneProxy buffers are direct and JNI `GetDirectBufferAddress` returns non-null native addresses. Direct-YUV default reads PlaneProxy buffers in native code, but this is still not QNN Delegate input binding | Treat invoke-level and direct-plane probes as complete; any further work is a larger CameraX/native data-path integration project |
+| mixed-precision | w8a16 mixed precision | blocked_technical | Current generated Qualcomm AI Hub Models exporter for `real_esrgan_general_x4v3` supports float and w8a8 only; `--precision w8a16` is rejected for this model/runtime route | Reopen only if QAI Hub Models adds Real-ESRGAN w8a16 support, or if a custom lower-level AIMET/ONNX/QNN mixed-precision route is explicitly chosen |
 | temporal | frame skip / temporal reuse / double buffering | done | `sr_every_n=3` ImageAnalysis smoke is implemented and validated; effective enhanced FPS is about 9.4-9.9, while each enhanced frame remains about 21/25ms e2e | Treat as a cadence/product boundary; do not claim lower per-frame latency |
 | tile | post-capture whole-image tile enhancement | done | Host MVP, host multi-scene comparison, and Android app tile entry are implemented; same-frame QuickSR vs Real-ESRGAN app evidence exists | Real-ESRGAN tile is the quality-priority post-capture route; QuickSR tile stays speed/conservative baseline |
 | video | video every-N-frame enhancement | done | `20260720_demo_mode_wide_clear_20s` records the Demo Mode live ROI UI with `adb screenrecord`; `20260720_demo_relation_aligned_v3` explains display-aligned wide preview / model input / SR output; button access is preserved through default UI / overlay toggle / intent control | Treat as demo evidence only; full CameraX VideoCapture/Recorder waits for explicit product need |
@@ -58,15 +58,17 @@ later, but it must not disappear.
 The current checkpoint is strong enough for showcase, but the full original
 design still has unfinished required lanes:
 
-1. `mixed-precision`: still queued, because CLE has only small simulated INT8
-   evidence and there is no layer-level sensitivity or deployable W8A16/QNN
-   export result yet.
-2. `zero-copy`: invoke-level and native-preprocess probes are complete, and the
-   default live ROI now uses the faster native tensor path. True CameraX buffer
+1. `AIMET-advanced`: still `blocked_needs_user`; only reopen after CLE/Bias is
+   insufficient on a real failure crop and the user approves the added cost.
+2. `zero-copy`: invoke-level and direct-plane native-preprocess probes are
+   complete, and the default live ROI now uses direct-YUV. True CameraX buffer
    registration remains a separate larger data-path project.
 3. `video`: Demo Mode screenrecord demo is complete; full CameraX
    VideoCapture/Recorder still needs explicit product need because it would be a
    different pipeline from the current live ROI app demo.
+4. `AIMET-CLE deployable export`: local CLE checkpoint deployability is proven,
+   but a CLE W8A8 TFLite/QNN artifact requires explicit user approval because it
+   submits Qualcomm AI Hub remote quantize/compile/profile jobs.
 
 ## Loop Rule
 
