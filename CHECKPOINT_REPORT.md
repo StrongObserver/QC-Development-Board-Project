@@ -27,7 +27,7 @@ stable rollback tag: rb5-stable-20260720
 | --- | --- |
 | Android app QNN/HTP path works | `20260718_app_qnn_delegate_fixed_live_rb5` |
 | App bottleneck was not QNN inference | `ImageProxy.toBitmap()` was about `41/43ms` before the 1280x960 fix |
-| Current default live route is usable | latest app smoke reaches `15/19ms` e2e p50/p95 |
+| Current default live route is usable | latest app smoke reaches `10/12ms` e2e p50/p95 |
 | Output conversion was reduced | latest postprocess p50/p95 is `1/1ms` |
 | Sustained short run is stable enough for showcase | 60s e2e first/last p50/p95 `15/20ms -> 16/21ms` |
 | every-N route is classified | `everyN=3` gives about `9.9` effective enhanced FPS, not lower per-frame latency |
@@ -54,7 +54,7 @@ video product readiness
 | Output postprocess | closed | Reopen only on regression |
 | every-N ImageAnalysis | done | Cadence evidence only, not latency win |
 | Java/Kotlin shared memory | blocked_technical | `qtld-release.aar` Java wrapper exposes no custom allocation API |
-| C++ shared-memory probe | gated | Only start with target beyond `15/19ms` app e2e and rollback plan |
+| C++ shared-memory probe | gated | Only start with target beyond `10/12ms` app e2e and rollback plan |
 | AIMET / mixed precision | blocked_needs_user | Requires concrete W8A8-vs-float failure crop |
 | LPIPS / NIQE / OCR | blocked_needs_user | Requires visual/metric conflict or text-readability claim |
 | CameraX VideoCapture | blocked_needs_user | Requires explicit demo/product need |
@@ -109,6 +109,6 @@ Continue only when one of these becomes true:
 ```text
 1. A concrete W8A8-vs-float failure crop appears.
 2. Visual review conflicts with PSNR/SSIM, or a text/OCR claim is required.
-3. A C++ shared-memory probe has a clear target beyond the 15/19ms baseline.
+3. A deeper zero-copy probe has a clear target beyond the 10/12ms direct-YUV baseline.
 4. A video demo/product path is explicitly needed.
 ```

@@ -20,7 +20,7 @@ HTP，再显示增强结果。
 项目重点不是单纯把模型跑起来，而是把 pipeline 做成可 profiling、可评测、
 可解释取舍的工程闭环。QNN inference 已经只有 1-3ms，真正瓶颈在
 CameraX 转 Bitmap 和输出后处理。我把 live ROI e2e 从约 63/65ms 推到
-最新 15/19ms p50/p95，并用固定 benchmark 和真实相机小集决定
+最新 direct-YUV 默认路径 10/12ms p50/p95，并用固定 benchmark 和真实相机小集决定
 QuickSRNetSmall 做 live workhorse，Real-ESRGAN 保留为感知增强和
 post-capture 对照路线。
 ```
@@ -41,7 +41,7 @@ setSkelLibraryDir(nativeLibraryDir)。
 老路径慢在 4000x3000 全帧 ImageProxy.toBitmap，约 41/43ms。把 live
 analysis 收敛到 1280x960 后，e2e 从约 63/65ms 降到 22/25ms。后面继续
 做 buffer reuse、output Bitmap reuse 和 UINT8 output bulk-copy，最新
-app smoke 达到 15/19ms。
+app smoke 达到 direct-YUV 默认路径 10/12ms。
 
 模型路线上我把 Real-ESRGAN 和 QuickSRNetSmall 分开看。QuickSRNet 更小、
 更保守，更适合 live ROI；Real-ESRGAN 更锐、更感知，适合做 QNN/HTP
@@ -61,9 +61,9 @@ app smoke 达到 15/19ms。
 | GPU Real-ESRGAN | about `126-148ms` inference |
 | AI Hub QCS8550 float profile | `5.9ms`, 74 ops on HTP |
 | Old app live ROI e2e | about `63/65ms` |
-| Latest default app live ROI e2e | `15/19ms` |
-| Latest postprocess | `1/1ms` |
-| 60s sustained smoke | `15/20ms -> 16/21ms` |
+| Latest default app live ROI e2e | `10/12ms` |
+| Current default direct-YUV live e2e | `10/12ms` |
+| Historical output-bulk-copy sustained smoke | `15/20ms -> 16/21ms` |
 | everyN=3 effective enhanced FPS | about `9.9` |
 | Real-ESRGAN -> QuickSRNet switch | about `369ms` |
 | QuickSRNetSmall W8A8 size | about `43.7KB` |
@@ -85,7 +85,7 @@ I keep it as the QNN/HTP milestone, comparison baseline, and post-capture path.
 Profiling showed the bottleneck was not QNN inference. The big win came from
 reducing full-frame CameraX conversion and output processing. Moving live
 ImageAnalysis from 4000x3000 to 1280x960 cut e2e from about 63/65ms to 22/25ms;
-output reuse and UINT8 bulk-copy then pushed the latest smoke to 15/19ms.
+output reuse and UINT8 bulk-copy then pushed the latest smoke to the current direct-YUV default 10/12ms.
 ```
 
 ### 3. Did you implement zero-copy?

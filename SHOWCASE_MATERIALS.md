@@ -91,6 +91,7 @@ default QuickSR live e2e p50/p95 after output reuse: 19.0 / 24.7ms
 20.0 / 25.0ms -> 21.0 / 26.0ms
 latest UINT8 output bulk-copy smoke: postprocess 1 / 1ms, e2e 15 / 19ms
 latest 60s sustained smoke: e2e first/last 20% p50/p95 = 15/20ms -> 16/21ms
+current direct-YUV default smoke: e2e 10 / 12ms
 ```
 
 Boundary:

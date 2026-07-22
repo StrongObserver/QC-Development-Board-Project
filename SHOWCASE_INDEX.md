@@ -1,15 +1,16 @@
 # RB5 Gen2 Showcase Index
 
-Updated: 2026-07-19
+Updated: 2026-07-23
 
 ## What This Project Proves
 
 ```text
 Android CameraX live ROI
 -> QuickSRNetSmall W8A8
+-> direct-YUV native ROI/RGB
 -> QNN TFLite Delegate
 -> Qualcomm HTP
--> display at about 15 / 19ms e2e p50/p95 in the latest app e2e smoke
+-> display at about 10 / 12ms e2e p50/p95 in the current default app smoke
 ```
 
 The project is not just a model demo. It shows deployment, profiling,
@@ -37,7 +38,7 @@ RB5 Gen2 / QCS8550 Android device.
 | --- | --- |
 | QNN Delegate app path works | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260718_app_qnn_delegate_fixed_live_rb5` |
 | Data path was the bottleneck | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260718_app_qnn_delegate_live_roi_breakdown` |
-| Default QuickSR live path | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20251110_output_reuse_default_live_roi` |
+| Default direct-YUV QuickSR live path | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260722_app_default_direct_yuv_live_roi_120f` |
 | Latest app e2e schema + output bulk-copy smoke | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_e2e_schema_output_reuse_120f` |
 | Latest 60s sustained app e2e smoke | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_e2e_schema_output_reuse_60s` |
 | Every-N temporal smoke | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_every_n3_live_roi_60s_final` |
@@ -56,6 +57,7 @@ RB5 Gen2 / QCS8550 Android device.
 | Old live ROI e2e before data-path fix | about `63 / 65ms` p50/p95 |
 | Default QuickSR live e2e after output reuse | `19.0 / 24.7ms` p50/p95 |
 | Latest QuickSR live e2e after UINT8 output bulk-copy | `15 / 19ms` p50/p95 |
+| Current direct-YUV default QuickSR live e2e | `10 / 12ms` p50/p95 |
 | Default QuickSR live inference | `1.0 / 1.0ms` p50/p95 |
 | Latest QuickSR live postprocess | `1 / 1ms` p50/p95 in 120-frame smoke |
 | 120s sustained e2e drift | `20.0/25.0ms -> 21.0/26.0ms` |
@@ -73,7 +75,7 @@ RB5 Gen2 / QCS8550 Android device.
 
 | Path | Decision |
 | --- | --- |
-| `QNN + QuickSRNetSmall W8A8` | default live ROI workhorse |
+| `QNN + QuickSRNetSmall W8A8 + direct-YUV native tensor input` | default live ROI workhorse |
 | `QNN + Real-ESRGAN W8A8` | QNN/HTP milestone, comparison, optional post-capture/perceptual path |
 | automatic live dual-model routing | not default |
 | tensor-ready live path | valid but not promoted after current recheck |

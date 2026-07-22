@@ -12,7 +12,7 @@ Updated: 2026-07-20
 这个项目的重点不是“模型能跑”，而是我把它做成了一个可 profiling、
 可评测、可解释取舍的端侧 pipeline。QNN inference 已经只有 1-3ms，
 真正瓶颈在 CameraX 转 Bitmap 和输出后处理。我把 live ROI e2e 从
-约 63/65ms 优化到最新 15/19ms p50/p95，并用固定 benchmark 和真实
+约 63/65ms 优化到最新 direct-YUV 默认路径 10/12ms p50/p95，并用固定 benchmark 和真实
 相机场景决定 QuickSRNetSmall 做 live workhorse，Real-ESRGAN 保留
 为感知增强和 post-capture 对照路线。
 ```
@@ -33,7 +33,7 @@ libQnnHtpV73Skel.so 打进 app，并调用 setSkelLibraryDir。
 QNN inference 已经只有几毫秒，老路径真正慢的是 4000x3000 全帧
 ImageProxy.toBitmap，大约 41/43ms。把 live analysis 收敛到 1280x960
 后，e2e 从约 63/65ms 降到 22/25ms。后面再做 buffer reuse、output
-Bitmap reuse 和 UINT8 output bulk-copy，最新 app smoke 达到 15/19ms。
+Bitmap reuse 和 UINT8 output bulk-copy，最新 app smoke 达到 direct-YUV 默认路径 10/12ms。
 
 模型路线上，我把 Real-ESRGAN 和 QuickSRNetSmall 分开看。QuickSRNet
 更小、更保守，更适合 live ROI；Real-ESRGAN 更锐、更感知，适合做
@@ -62,7 +62,7 @@ QNN/HTP 里程碑、对照和 post-capture tile。我也测了双模型切换，
 不是换模型，而是 profiling 后发现瓶颈不在 NPU inference。QNN 已经很快，
 老路径慢在 4000x3000 全帧转 Bitmap 和输出后处理。先把 live analysis
 分辨率收敛到 1280x960，再优化输出 buffer，最终把 e2e 从约 63/65ms
-推进到 15/19ms。
+推进到 direct-YUV 默认路径 10/12ms。
 ```
 
 ### 有没有做 zero-copy？
@@ -93,9 +93,9 @@ lane，不是当前 Kotlin 主线已经实现的能力。
 | GPU Real-ESRGAN | about `126-148ms` inference |
 | AI Hub QCS8550 float profile | `5.9ms`, 74 ops on HTP |
 | Old app live ROI e2e | about `63/65ms` |
-| Latest default app live ROI e2e | `15/19ms` |
-| Latest postprocess | `1/1ms` |
-| 60s sustained smoke | `15/20ms -> 16/21ms` |
+| Latest default app live ROI e2e | `10/12ms` |
+| Current default direct-YUV live e2e | `10/12ms` |
+| Historical output-bulk-copy sustained smoke | `15/20ms -> 16/21ms` |
 | everyN=3 effective enhanced FPS | about `9.9` |
 | Real-ESRGAN -> QuickSRNet switch | about `369ms` |
 | QuickSRNetSmall W8A8 size | about `43.7KB` |

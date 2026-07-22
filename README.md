@@ -26,9 +26,10 @@ Automatic dual-model live routing is intentionally not the default.
 | --- | --- |
 | QNN/HTP app path works | `20260718_app_qnn_delegate_fixed_live_rb5` |
 | Full-frame Bitmap conversion was the live bottleneck | `ImageProxy.toBitmap()` p50/p95 was about `41/43ms` before the 1280x960 live analysis fix |
-| Default live ROI route | `QNN + QuickSRNetSmall W8A8` |
+| Default live ROI route | `QNN + QuickSRNetSmall W8A8 + direct-YUV native tensor input` |
 | Default live ROI after output reuse | `19.0 / 24.7ms` e2e p50/p95 |
 | Latest live ROI after UINT8 output bulk-copy | `15 / 19ms` e2e p50/p95 in 120-frame app e2e smoke |
+| Current default direct-YUV live ROI | `10 / 12ms` e2e p50/p95 in compiled default app smoke |
 | Latest app e2e schema output | `20260720_app_e2e_schema_output_reuse_120f/app_e2e_log.csv` |
 | 120s default live run | 3551 frames, e2e first/last 20% p50/p95 `20.0/25.0ms -> 21.0/26.0ms` |
 | 60s latest live run | 1763 frames, e2e first/last 20% p50/p95 `15.0/20.0ms -> 16.0/21.0ms` |
@@ -107,8 +108,9 @@ The supported claim is narrower and stronger:
 
 ```text
 The project deploys SR models through QNN/HTP, profiles the real Android app
-path, identifies data movement and output processing as dominant costs, and
-makes a route decision from latency, quality, memory, and visual-review evidence.
+path, identifies data movement and output processing as dominant costs, moves
+the default live route to direct-YUV native ROI/RGB, and makes a route decision
+from latency, quality, memory, and visual-review evidence.
 ```
 
 See `push_readme.txt` for commit and push conventions.
