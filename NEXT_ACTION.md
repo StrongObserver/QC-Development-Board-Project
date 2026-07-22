@@ -2,11 +2,11 @@
 
 ## Current Conclusion
 
-Current checkpoint has advanced beyond the previous closeout. The app e2e
-schema export, output-path optimization, every-N smoke, shared-memory feasibility
-classification, Demo Mode evidence, app fixed-sample replay, AIMET feasibility
-evidence, and relation-sheet orientation fix have been reviewed, verified,
-pushed, and sealed on `origin/main`.
+Current checkpoint has advanced beyond the previous closeout and the phase-2
+engineering loop. The app e2e schema export, output-path optimization, every-N
+smoke, shared-memory feasibility classification, Demo Mode evidence, app
+fixed-sample replay, AIMET feasibility evidence, relation-sheet orientation fix,
+and direct-YUV data-path promotion have been reviewed locally with evidence.
 
 The stable deliverable is archived as:
 
@@ -37,6 +37,10 @@ RealSR 10-case lifecycle mini review
 Demo Mode live ROI screenrecord demo
 Demo Mode wide-preview / model-input / SR-output relation evidence
 App fixed-sample replay evidence
+Direct PlaneProxy ByteBuffer -> native ROI/RGB probe
+Direct-YUV default app live ROI validation
+AIMET CLE checkpoint exported through Qualcomm AI Hub Models local wrapper
+Real-ESRGAN w8a16 generated-exporter support check
 ```
 
 ## Highest Priority
@@ -44,18 +48,13 @@ App fixed-sample replay evidence
 Next priority:
 
 ```text
-The project is past the clean archive checkpoint and has completed bounded
-exploration steps: QNN shared-memory Phase 0/1/2, AIMET trigger search,
-TextZoom OCR mini diagnostics, RealSR lifecycle mini review, and a Demo Mode
-live ROI screenrecord demo with accepted display-aligned relation evidence.
-Continue the loop only when one of the remaining bounded lanes is explicitly
-unblocked:
-1. AIMET/CLE can continue only after WSL/Linux or another supported AIMET
-   toolchain is available.
-2. if continuing data-path engineering -> design a larger CameraX/native
-   integration path; invoke-level shared-memory probing itself is complete.
-3. if continuing video/product work -> start a full CameraX VideoCapture/Recorder
-   route only after the product/demo need is explicit.
+1. Treat direct-YUV as the current compiled default live ROI data path.
+2. Before committing, do a diff audit and decide whether to split source/script
+   changes from result documentation.
+3. AIMET/CLE remote W8A8 export requires explicit user approval because it
+   submits Qualcomm AI Hub quantize/compile/profile jobs.
+4. Full CameraX VideoCapture/Recorder remains a product/demo decision, not a
+   required continuation of the current live ROI path.
 ```
 
 Do not reopen as unfinished:
@@ -74,6 +73,63 @@ UINT8 output bulk-copy optimization
 EvalHub-compatible app e2e log export
 every-N ImageAnalysis smoke
 120s default live sustained validation
+direct-YUV same-frame correctness probe
+direct-YUV default live timing validation
+Real-ESRGAN generated-exporter w8a16 retry
+```
+
+## New Verified Evidence
+
+Direct-YUV single-frame correctness:
+
+```text
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\direct_yuv_roi_probe\20260722_direct_yuv_roi_probe
+array JNI path: 7ms
+direct ByteBuffer JNI path: 3ms
+MAD: 0.0
+```
+
+Direct-YUV sustained live:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260722_direct_yuv_live_roi_120s_sustained
+parsed frames: 167
+e2e p50/p95: 10/12ms
+first/last 20% e2e p50 stable at 10ms; last 20% p95 14ms
+```
+
+Compiled app default direct-YUV live:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260722_app_default_direct_yuv_live_roi_120f
+parsed frames: 154
+tensorPath=directYuv
+optimizedTensor=true
+e2e p50/p95: 10/12ms
+```
+
+Direct-YUV board-level power smoke:
+
+```text
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\power_probe\20260722_power_suite_direct_yuv_compare
+live_quicksr mean board power: 6361.678mW
+live_direct_yuv mean board power: 6504.587mW
+boundary: battery-node board-level estimate only; do not claim external-meter precision
+```
+
+AIMET CLE deployability:
+
+```text
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\aimet_deployability\20260722_aimet_cle_export_checkpoint
+status: passed
+boundary: local QAI Hub Models wrapper/export only; no remote quantize job completed
+```
+
+Mixed precision:
+
+```text
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\mixed_precision_probe\20260722_realesrgan_w8a16_support
+status: blocked_technical for current generated Real-ESRGAN exporter route
 ```
 
 ## Verified Evidence

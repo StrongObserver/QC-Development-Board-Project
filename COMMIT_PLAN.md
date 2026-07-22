@@ -1,6 +1,82 @@
 # Commit Plan
 
-Updated: 2026-07-20
+Updated: 2026-07-22
+
+## Current Local Closeout Plan - Direct YUV Default
+
+The current worktree contains a verified direct-YUV default-path milestone plus
+AIMET/mixed-precision support probes. The live oral template remains P0: do not
+commit or push until the user explicitly asks.
+
+Current logical commit split:
+
+```text
+1. perf(android): use direct yuv roi for default live sr
+2. test(sr-lab): add direct yuv and power probes
+3. test(aimet): add cle export checkpoint probe
+4. docs(route): record direct yuv default path
+```
+
+Explicit path groups:
+
+```text
+Commit 1:
+RB5VisionLab/app/src/main/cpp/rb5visionlab.cpp
+RB5VisionLab/app/src/main/java/com/cyf/rb5visionlab/MainActivity.kt
+
+Commit 2:
+RB5_SR_lab/app_e2e_export.py
+RB5_SR_lab/run_app_live_roi_benchmark.py
+RB5_SR_lab/run_power_probe.py
+RB5_SR_lab/run_app_direct_yuv_roi_probe.py
+RB5_SR_lab/summarize_strategy_shadow.py
+
+Commit 3:
+RB5_SR_lab/prepare_aimet_cle_export_checkpoint.py
+
+Commit 4:
+MODEL_ROUTE_DECISION.md
+NEXT_ACTION.md
+COMMIT_PLAN.md
+```
+
+Verification already run for this closeout:
+
+```bat
+python -m py_compile RB5_SR_lab\run_app_live_roi_benchmark.py RB5_SR_lab\run_app_direct_yuv_roi_probe.py RB5_SR_lab\app_e2e_export.py RB5_SR_lab\run_power_probe.py RB5_SR_lab\summarize_strategy_shadow.py RB5_SR_lab\prepare_aimet_cle_export_checkpoint.py
+cd /d C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5VisionLab && gradlew.bat --no-daemon :app:assembleDebug
+adb -s ff5d3ab4 install -r RB5VisionLab\app\build\outputs\apk\debug\app-debug.apk
+python RB5_SR_lab\run_app_direct_yuv_roi_probe.py --run-id 20260722_direct_yuv_roi_probe --install-apk --timeout-s 60
+python RB5_SR_lab\run_app_live_roi_benchmark.py --direct-yuv --min-frames 120 --duration-s 120 --timeout-s 180 --run-id 20260722_direct_yuv_live_roi_120s_sustained
+python RB5_SR_lab\run_app_live_roi_benchmark.py --use-app-default --min-frames 120 --timeout-s 120 --run-id 20260722_app_default_direct_yuv_live_roi_120f
+python RB5_SR_lab\run_power_probe.py --scenario suite_core --baseline-duration-s 10 --live-duration-s 15 --duration-s 30 --interval-s 1 --run-id 20260722_power_suite_direct_yuv_compare
+```
+
+Key evidence:
+
+```text
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\direct_yuv_roi_probe\20260722_direct_yuv_roi_probe
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260722_direct_yuv_live_roi_120s_sustained
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260722_app_default_direct_yuv_live_roi_120f
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\power_probe\20260722_power_suite_direct_yuv_compare
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\aimet_deployability\20260722_aimet_cle_export_checkpoint
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\mixed_precision_probe\20260722_realesrgan_w8a16_support
+```
+
+Do not stage:
+
+```text
+.state/
+RB5_SR_lab/__pycache__/
+RB5_SR_lab/results/
+RB5_SR_lab/export_assets/
+RB5VisionLab/.gradle/
+RB5VisionLab/app/build/
+evalhub_data/
+external result folders under C:\Users\Admin\Videos\
+```
+
+## Historical Local Closeout Plan
 
 ## Current Local Closeout Plan
 

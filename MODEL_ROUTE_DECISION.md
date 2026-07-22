@@ -1,6 +1,6 @@
 # Model Route Decision
 
-Updated: 2026-07-21
+Updated: 2026-07-22
 
 ## Decision
 
@@ -47,6 +47,7 @@ workhorse candidate:
 | Model size | about 43.7KB |
 | Structure-sensitive metrics | better PSNR/SSIM than Real-ESRGAN on three selected cases |
 | Real-camera showcase set | accepted with caveats; no retake required |
+| Direct YUV default path | default app live ROI now uses direct PlaneProxy ByteBuffer -> native ROI/RGB; app default run is e2e p50/p95 about 10/12ms |
 
 ## Why Small Remains Default
 
@@ -113,12 +114,32 @@ Do not enable automatic live dual-model routing as the default.
 The Android app default live SR path is now:
 
 ```text
-QNN backend + QuickSRNetSmall W8A8 + optimized native tensor input path
+QNN backend + QuickSRNetSmall W8A8 + direct YUV native tensor input path
 ```
 
-This is a default workhorse change, not automatic scene routing. Real-ESRGAN
-must remain explicitly reachable for comparison and optional post-capture /
-perceptual enhancement evidence.
+This is a default workhorse change, not automatic scene routing. The direct YUV
+path reads CameraX `PlaneProxy` direct `ByteBuffer`s in native code, converts the
+center ROI to RGB bytes, and feeds the existing QNN Delegate tensor path. It is
+not QNN input zero-copy.
+
+Evidence:
+
+```text
+single-frame direct-vs-array probe:
+RB5_SR_lab\results\direct_yuv_roi_probe\20260722_direct_yuv_roi_probe
+array JNI 7ms, direct ByteBuffer JNI 3ms, MAD 0.0
+
+direct-yuv isolated live run:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260722_direct_yuv_live_roi_120s_sustained
+e2e p50/p95 10/12ms
+
+compiled default app run:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260722_app_default_direct_yuv_live_roi_120f
+tensorPath=directYuv, optimizedTensor=true, e2e p50/p95 10/12ms
+```
+
+Real-ESRGAN must remain explicitly reachable for comparison and optional
+post-capture / perceptual enhancement evidence.
 
 ## Boundary Rules
 
@@ -129,6 +150,9 @@ perceptual enhancement evidence.
   gap that matters for the project story.
 - Keep bounded routing experiments open, but do not let them replace the stable
   default without cold-start, memory, power, and quality evidence.
+- Keep the old rotated-native tensor route available as a comparison/probe path;
+  direct YUV is the current default only because it passed a same-frame
+  correctness check and live timing gate.
 
 ## Interview Framing
 
