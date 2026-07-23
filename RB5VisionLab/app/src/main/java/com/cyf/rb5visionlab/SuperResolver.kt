@@ -292,13 +292,17 @@ class SuperResolver(
         qnnDelegate = null
     }
 
-    fun qnnProfilingSummary(): String {
+    fun qnnProfilingSummary(includeFullHex: Boolean = true): String {
         val delegate = qnnDelegate as? QnnDelegate ?: return "profile=unavailable reason=not_qnn_delegate"
         return try {
             val data = delegate.profilingResult ?: ByteArray(0)
             val prefix = data.take(16).joinToString("") { "%02x".format(it.toInt() and 0xFF) }
-            val full = data.joinToString("") { "%02x".format(it.toInt() and 0xFF) }
-            "profileBytes=${data.size} profileHex16=$prefix profileHex=$full"
+            if (includeFullHex) {
+                val full = data.joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+                "profileBytes=${data.size} profileHex16=$prefix profileHex=$full"
+            } else {
+                "profileBytes=${data.size} profileHex16=$prefix"
+            }
         } catch (e: Throwable) {
             "profile=unavailable reason=${e.javaClass.simpleName}:${e.message}"
         }

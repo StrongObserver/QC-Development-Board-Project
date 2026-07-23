@@ -15,6 +15,7 @@ import android.graphics.Paint
 import android.os.Bundle
 import android.os.Debug
 import android.os.Environment
+import android.os.Trace
 import android.provider.MediaStore
 import android.util.Size
 import android.util.Log
@@ -93,6 +94,7 @@ class MainActivity : AppCompatActivity() {
     private var latestSrSample: SrSample? = null
     private var liveOutputBitmap: Bitmap? = null
     private var tensorLiveOutputBitmap: Bitmap? = null
+    private val tensorLiveRgbBuffer = ByteArray(LIVE_MODEL_INPUT_SIDE * LIVE_MODEL_INPUT_SIDE * 3)
     @Volatile private var liveSrTensorDirectYuv = false
     private var highResResolver: SuperResolver? = null
     @Volatile private var pendingHighResSample = false
@@ -235,6 +237,22 @@ class MainActivity : AppCompatActivity() {
         outputSide: Int,
         rotationDegrees: Int,
     ): ByteArray
+    external fun nativeYuvToRgbRoiBytesRotatedDirectInto(
+        yBuffer: ByteBuffer,
+        uBuffer: ByteBuffer,
+        vBuffer: ByteBuffer,
+        width: Int,
+        height: Int,
+        yRowStride: Int,
+        yPixelStride: Int,
+        uRowStride: Int,
+        uPixelStride: Int,
+        vRowStride: Int,
+        vPixelStride: Int,
+        outputSide: Int,
+        rotationDegrees: Int,
+        output: ByteArray,
+    ): Boolean
     external fun nativeYuvToRgbRoi(
         yData: ByteArray,
         uData: ByteArray,
@@ -1314,46 +1332,58 @@ class MainActivity : AppCompatActivity() {
             val side = 128
             val degrees = imageProxy.imageInfo.rotationDegrees
             val tRgbStart = System.nanoTime()
-            var rgbBytes = if (liveSrTensorDirectYuv) {
-                val y = imageProxy.planes[0]
-                val u = imageProxy.planes[1]
-                val v = imageProxy.planes[2]
-                nativeYuvToRgbRoiBytesRotatedDirect(
-                    y.buffer.duplicate(),
-                    u.buffer.duplicate(),
-                    v.buffer.duplicate(),
-                    imageProxy.width,
-                    imageProxy.height,
-                    y.rowStride,
-                    y.pixelStride,
-                    u.rowStride,
-                    u.pixelStride,
-                    v.rowStride,
-                    v.pixelStride,
-                    side,
-                    degrees,
-                )
-            } else if (liveSrTensorRotatedNative) {
-                nativeYuv420ToRgbCenterRoiBytesRotated(imageProxy, side, degrees)
-            } else {
-                nativeYuv420ToRgbCenterRoiBytes(imageProxy, side)
-            }
-            if (!liveSrTensorRotatedNative && degrees != 0) {
-                val nativeBitmap = rgbBytesToBitmap(rgbBytes, side)
-                val matrix = Matrix().apply { postRotate(degrees.toFloat()) }
-                val rotated = Bitmap.createBitmap(nativeBitmap, 0, 0, side, side, matrix, true)
-                rgbBytes = bitmapToRgbBytes(rotated)
+            var rgbBytes = traceSection("rb5_direct_yuv_rgb") {
+                var bytes = if (liveSrTensorDirectYuv) {
+                    val y = imageProxy.planes[0]
+                    val u = imageProxy.planes[1]
+                    val v = imageProxy.planes[2]
+                    val wrote = nativeYuvToRgbRoiBytesRotatedDirectInto(
+                        y.buffer.duplicate(),
+                        u.buffer.duplicate(),
+                        v.buffer.duplicate(),
+                        imageProxy.width,
+                        imageProxy.height,
+                        y.rowStride,
+                        y.pixelStride,
+                        u.rowStride,
+                        u.pixelStride,
+                        v.rowStride,
+                        v.pixelStride,
+                        side,
+                        degrees,
+                        tensorLiveRgbBuffer,
+                    )
+                    if (!wrote) {
+                        error("native direct-YUV staging buffer write failed")
+                    }
+                    tensorLiveRgbBuffer
+                } else if (liveSrTensorRotatedNative) {
+                    nativeYuv420ToRgbCenterRoiBytesRotated(imageProxy, side, degrees)
+                } else {
+                    nativeYuv420ToRgbCenterRoiBytes(imageProxy, side)
+                }
+                if (!liveSrTensorRotatedNative && degrees != 0) {
+                    val nativeBitmap = rgbBytesToBitmap(bytes, side)
+                    val matrix = Matrix().apply { postRotate(degrees.toFloat()) }
+                    val rotated = Bitmap.createBitmap(nativeBitmap, 0, 0, side, side, matrix, true)
+                    bytes = bitmapToRgbBytes(rotated)
+                }
+                bytes
             }
             val nativeRgbMs = (System.nanoTime() - tRgbStart) / 1_000_000
-            val strategyShadow = computeStrategyShadow(rgbBytes)
+            val strategyShadow = traceSection("rb5_strategy_shadow") {
+                computeStrategyShadow(rgbBytes)
+            }
             val tEnhanceStart = System.nanoTime()
-            val (out, timing) = resolver!!.enhanceRgbBytesInto(rgbBytes, tensorLiveOutputBitmap)
+            val (out, timing) = traceSection("rb5_qnn_enhance") {
+                resolver!!.enhanceRgbBytesInto(rgbBytes, tensorLiveOutputBitmap)
+            }
             tensorLiveOutputBitmap = out
             val enhanceWallMs = (System.nanoTime() - tEnhanceStart) / 1_000_000
             val e2eMs = nativeRgbMs + timing.totalMs
             val analyzerWallMs = nativeRgbMs + enhanceWallMs
             val profileSummary = if (frameCount % LIVE_SAMPLE_CAPTURE_INTERVAL == 0) {
-                resolver!!.qnnProfilingSummary()
+                resolver!!.qnnProfilingSummary(includeFullHex = false)
             } else {
                 ""
             }
@@ -1368,14 +1398,16 @@ class MainActivity : AppCompatActivity() {
                     if (profileSummary.isNotEmpty()) " $profileSummary" else ""
             )
             runOnUiThread {
-                srResultView.setImageBitmap(out)
-                statusTextView.text =
-                    "${if (liveSrOptimizedTensor) "Optimized" else "Tensor-ready"} live ROI SR (QNN/QUICKSR_W8A8)\n" +
-                        "frame ${imageProxy.width}x${imageProxy.height} | ROI 128 | ${if (liveSrTensorDirectYuv) "direct YUV native" else if (liveSrTensorRotatedNative) "native rotated" else "Kotlin rotated"}\n" +
-                        "native RGB ${nativeRgbMs} ms | preprocess ${timing.preprocessMs} ms\n" +
-                        "shadow ${strategyShadow.decision} | Y ${"%.1f".format(Locale.US, strategyShadow.meanLuma)} | sharp ${"%.1f".format(Locale.US, strategyShadow.sharpness)}\n" +
-                        "inference ${timing.inferenceMs} ms | postprocess ${timing.postprocessMs} ms\n" +
-                        "end-to-end ~${e2eMs} ms"
+                traceSection("rb5_display_update") {
+                    srResultView.setImageBitmap(out)
+                    statusTextView.text =
+                        "${if (liveSrOptimizedTensor) "Optimized" else "Tensor-ready"} live ROI SR (QNN/QUICKSR_W8A8)\n" +
+                            "frame ${imageProxy.width}x${imageProxy.height} | ROI 128 | ${if (liveSrTensorDirectYuv) "direct YUV native" else if (liveSrTensorRotatedNative) "native rotated" else "Kotlin rotated"}\n" +
+                            "native RGB ${nativeRgbMs} ms | preprocess ${timing.preprocessMs} ms\n" +
+                            "shadow ${strategyShadow.decision} | Y ${"%.1f".format(Locale.US, strategyShadow.meanLuma)} | sharp ${"%.1f".format(Locale.US, strategyShadow.sharpness)}\n" +
+                            "inference ${timing.inferenceMs} ms | postprocess ${timing.postprocessMs} ms\n" +
+                            "end-to-end ~${e2eMs} ms"
+                }
             }
         } catch (e: Throwable) {
             Log.e(tag, "tensor-ready live SR failed", e)
@@ -2455,6 +2487,15 @@ class MainActivity : AppCompatActivity() {
             check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)) { "PNG compress failed" }
         } ?: error("Cannot open output stream for $fileName")
         return "/sdcard/$relativePath/$fileName"
+    }
+
+    private inline fun <T> traceSection(name: String, block: () -> T): T {
+        Trace.beginSection(name)
+        return try {
+            block()
+        } finally {
+            Trace.endSection()
+        }
     }
 
     private fun startCamera() {
