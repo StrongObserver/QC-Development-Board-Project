@@ -13,7 +13,7 @@ TFLite Delegate on HTP.
 The main engineering point was not just running a model. After QNN inference was
 down to 1-3ms, I profiled the app path and found the real bottleneck was camera
 frame conversion, tensor input, and output processing. I reduced app live e2e
-latency from about 63/65ms to about 10/12ms p50/p95 in the latest direct-YUV
+latency from about 63/65ms to about 8/9/9ms p50/p95/p99 in the latest direct-YUV native-staging
 app smoke, while keeping AI Hub profile, qnn-net-run profile, and app e2e as
 separate evidence lanes.
 ```
@@ -36,7 +36,9 @@ After that, I profiled the real app path. QNN inference was already only a few
 milliseconds, but full-frame CameraX to Bitmap conversion at 4000x3000 was about
 41/43ms p50/p95. Reducing live ImageAnalysis to 1280x960 cut the live ROI path
 from about 63/65ms to about 22/25ms. Later buffer reuse, output Bitmap reuse,
-and UINT8 output bulk-copy reduced the output path further; the later direct-YUV default QuickSR live smoke is about 10/12ms p50/p95.
+and UINT8 output bulk-copy reduced the output path further. The later native
+staging change removed another per-frame allocation/copy boundary, and the
+current direct-YUV default QuickSR live run is about 8/9/9ms p50/p95/p99.
 
 I also compared workload/model roles instead of treating PSNR as the only
 answer.
@@ -63,7 +65,7 @@ median, so I kept the default path and documented the boundary.
 | Local qnn-net-run QNN accelerator | about 9.75/10.39ms p50/p95 |
 | Old 4000x3000 live ROI app e2e | about 63/65ms p50/p95 |
 | Current default QuickSR live e2e after output reuse | 19.0/24.7ms p50/p95 |
-| Current default direct-YUV QuickSR live e2e | 10/12ms p50/p95 |
+| Current default direct-YUV native staging live e2e | 8/9/9ms p50/p95/p99 |
 | Historical output-bulk-copy sustained smoke | 15/20ms -> 16/21ms first/last p50/p95 |
 | 120s sustained default live | 20/25ms -> 21/26ms first/last p50/p95 |
 | Real-ESRGAN -> QuickSRNet switch | about 369ms |
@@ -90,16 +92,16 @@ behind the live path.
 The biggest gain came from profiling the app path, not from changing the model.
 QNN inference was already a few milliseconds. The main bottleneck was full-frame
 ImageProxy.toBitmap at 4000x3000. Reducing live ImageAnalysis to 1280x960 cut
-the path from about 63/65ms to about 22/25ms, and later output conversion work
-reduced the latest default live smoke to about 10/12ms.
+the path from about 63/65ms to about 22/25ms, and later output conversion plus
+native staging work reduced the current default live path to about 8/9/9ms.
 
 ### Did you implement zero-copy?
 
 No. I deliberately did not claim zero-copy. I tested Kotlin YUV ROI, native YUV
-ROI, and tensor-ready input. Native/tensor-ready paths were technically valid,
-but repeated live timing did not justify replacing the default path yet. True
-zero-copy would require a different level of Android buffer and QNN memory
-integration.
+ROI, tensor-ready input, and native staging. The staging-buffer path is now the
+default because it reduced e2e from 11/12/12ms to 8/9/9ms without claiming true
+zero-copy. True CameraX-to-QNN input zero-copy would still require a different
+level of Android buffer and QNN memory integration.
 
 ### How did you judge quality?
 

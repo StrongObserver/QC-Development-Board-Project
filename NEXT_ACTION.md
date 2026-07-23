@@ -19,15 +19,19 @@ shared-memory feasibility classification, Demo Mode evidence, app fixed-sample
 replay, AIMET feasibility evidence, relation-sheet orientation fix, and
 direct-YUV data-path promotion have been reviewed locally with evidence.
 
-RKNN-inspired Runtime exploration produced useful evidence, but the follow-up
-code changes were reverted at the user's request:
+RKNN-inspired Runtime exploration produced useful evidence. The useful
+collection/tooling pieces have now been restored:
 
 ```text
-stream-log live runner collection was tested, then reverted
-live profile log slimming was tested, then reverted
-P99 metrics in live runner output were tested, then reverted
-5-minute default direct-YUV stream-log evidence remains as ignored/local evidence
-5-minute board-level direct-YUV power estimate
+stream-log live runner collection is restored in run_app_live_roi_benchmark.py
+P99 metrics are restored in live runner stage summaries
+live tensor profile log slimming is restored
+20-minute current-source direct-YUV stream-log evidence
+20-minute board-level direct-YUV power estimate
+Perfetto direct-YUV timeline smoke
+native staging data-path optimization
+QNN Delegate profile diagnostic boundary
+current Demo Mode evidence package
 current-APK init/memory/switch probe
 100-run fixed-sample steady probe
 ```
@@ -38,8 +42,8 @@ Decision:
 Do not change the default live path to multi-instance execution, producer /
 consumer queueing, or true-zero-copy work in this loop.
 The useful transfer from the RKNN video is wall-time evidence discipline and
-runtime/logging overhead awareness. No RKNN-inspired source change is currently
-kept after rollback.
+runtime/logging overhead awareness. The restored source changes are collection
+and log-volume fixes, not model/runtime acceleration claims.
 ```
 
 The stable deliverable is archived as:
@@ -74,6 +78,7 @@ App fixed-sample replay evidence
 Direct PlaneProxy ByteBuffer -> native ROI/RGB probe
 Direct-YUV default app live ROI validation
 AIMET CLE checkpoint exported through Qualcomm AI Hub Models local wrapper
+AI Hub AIMET CLE W8A8 QNN export/profile completed
 Real-ESRGAN w8a16 generated-exporter support check
 ```
 
@@ -82,16 +87,22 @@ Real-ESRGAN w8a16 generated-exporter support check
 Next priority:
 
 ```text
-1. Keep direct-YUV as the current compiled default live ROI data path.
+1. Keep direct-YUV native staging as the current compiled default live ROI data path.
 2. Keep AI Hub profile, local qnn-net-run profile, and Android app e2e timing
    as separate evidence lanes; do not merge them into one latency claim.
-3. Build the compact final benchmark table from the new evidence.
-4. If mentioning stream-log/P99 evidence, label it as an explored-and-reverted
-   local experiment, not as current source behavior.
-5. AIMET/CLE remote W8A8 export requires explicit user approval because it
-   submits Qualcomm AI Hub quantize/compile/profile jobs.
+3. Use `FINAL_BENCHMARK_TABLE.md` as the compact evidence table.
+4. If mentioning stream-log/P99 evidence, label it as sustained app timing
+   evidence, not visual-quality or power evidence.
+5. AIMET/CLE remote W8A8 export/profile is complete; keep it as deployability
+   evidence and do not replace the app model.
 6. Full CameraX VideoCapture/Recorder remains a product/demo decision, not a
    required continuation of the current live ROI path.
+7. The 20-minute sustained/P99 run is complete for the current narrow claim;
+   rerun only if making a stronger product-grade sustained/thermal statement.
+8. Perfetto/QNN timeline is optional and should start from a small trace plan,
+   not from app feature changes.
+9. True CameraX-to-QNN input zero-copy remains a separate larger experiment;
+   `ZERO_COPY_SCOPE_PLAN.md` defines target, budget, metrics, and rollback.
 ```
 
 ## New RKNN-Idea Evidence
@@ -103,13 +114,31 @@ C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\runtime_e
 Runtime loop P0-P16 summary:
 C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\runtime_exploration\20260723_runtime_loop_p0_p16_summary
 
-5-minute default stream-log live:
-C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_loop_p2_default_streamlog_5min
-8941 frames, e2e p50/p95/p99 = 11/12/12ms
+20-minute current-source stream-log live:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_native_staging_default_live_roi_20min
+35719 frames, 0 skipped frames, e2e p50/p95/p99 = 8/9/9ms
 
-5-minute board-level power:
-C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\power_probe\20260723_loop_p3_power_live_direct_yuv_5min
-mean board power about 6.30W, battery temp 24.0C -> 24.0C
+20-minute board-level power:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\power_probe\20260723_power_live_native_staging_20min
+mean board power about 4.96W, battery temp 24.0C -> 24.0C
+
+Perfetto timeline smoke:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_perfetto_direct_yuv_trace_smoke_v4
+trace_bytes=222805, live frame logcat coverage present
+
+Native staging live ROI:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_native_staging_default_live_roi_20min
+35719 frames, 0 skipped frames, e2e p50/p95/p99 = 8/9/9ms
+
+QNN Delegate profile diagnostic:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\qnn_profile_diagnostic\20260723_fixed_sample_profile_boundary
+904-byte Java raw delegate profile buffer, 10/10 known event strings recognized,
+diagnostic-only because qnn-profile-viewer rejects the buffer as official format.
+
+Current Demo Mode evidence:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_demo_mode_direct_yuv_current_20s
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_demo_mode_direct_yuv_current_timing
+screenrecorded demo + app e2e p50/p95/p99 = 8/9/10ms
 
 current APK resource probe:
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_loop_p5_resource_probe_current_apk
@@ -118,6 +147,13 @@ Real init 2.4-2.9s, Quick init 155/624ms, Real->Quick switch 800ms
 100-run fixed steady probe:
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_loop_p6_resource_probe_steady100
 Quick steady total p50/p95/p99 = 18/19/19ms
+
+AIMET CLE W8A8 deployability:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\export_assets\real_esrgan_general_x4v3-cle-qnn-w8a8-qcs8550-20260723
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_cle_qnn_w8a8_full_rb5
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\aimet_deployability\20260723_cle_vs_baseline_full_qnn_compare
+AI Hub profile succeeds; local full 24-case passes; average delta vs current
+W8A8 is PSNR -0.011dB, SSIM +0.00180, QNN accelerator +208us.
 ```
 
 Do not reopen as unfinished:
@@ -152,7 +188,7 @@ direct ByteBuffer JNI path: 3ms
 MAD: 0.0
 ```
 
-Direct-YUV sustained live:
+Historical direct-YUV sustained live before native staging:
 
 ```text
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260722_direct_yuv_live_roi_120s_sustained
@@ -161,7 +197,7 @@ e2e p50/p95: 10/12ms
 first/last 20% e2e p50 stable at 10ms; last 20% p95 14ms
 ```
 
-Compiled app default direct-YUV live:
+Historical compiled app default direct-YUV live before native staging:
 
 ```text
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260722_app_default_direct_yuv_live_roi_120f

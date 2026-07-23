@@ -96,17 +96,17 @@ original project design unless there is concrete evidence that it cannot work.
 | order | id | state | task | success metric | stop trigger |
 | --- | --- | --- | --- | --- | --- |
 | 1 | runtime-harness-reframe | in_progress | Reframe Harness/Loop text around QCS8550 Runtime and heterogeneous optimization | entrypoint, queue, ledger, route/showcase/interview docs no longer center the project as only image enhancement | text sweep complete |
-| 2 | final-benchmark-table | in_progress | Consolidate final benchmark/result table | one compact table separates AI Hub profile, qnn-net-run accelerator, app e2e, cold/warm init, memory, and power boundaries | table generated or source evidence missing |
-| 3 | sustained-p99-thermal | conditional | Optional sustained app runtime run | RKNN-inspired stream-log runner produced useful evidence, but code was reverted at user request | rerun only if stream-log approach is re-approved |
+| 2 | final-benchmark-table | done | Consolidate final benchmark/result table | one compact table separates AI Hub profile, qnn-net-run accelerator, app e2e, cold/warm init, memory, and power boundaries | `FINAL_BENCHMARK_TABLE.md` generated |
+| 3 | sustained-p99-thermal | done | Optional sustained app runtime run | current native-staging 20-minute direct-YUV run has 35719 frames, e2e p50/p95/p99 `8/9/9ms`, and board-level battery-node power mean about `4.96W` with temp `24.0C -> 24.0C` | maintain as app timing plus board-level estimate only |
 | 4 | init-memory-table | done | Cold/warm init, model switching, and sticky memory summary | Resource probes record Real/Quick init, switch cost, PSS deltas, and sticky memory boundary | evidence complete |
-| 5 | perfetto-qnn-timeline | queued | Optional Perfetto/QNN timing timeline | app data path timeline can explain CameraX/native/tensor/QNN/display costs | tool/device unavailable or timeline captured |
-| 6 | aimet-remote-decision | blocked_needs_user | Decide whether to submit remote AI Hub CLE W8A8 export/profile jobs | explicit approval or deferral is recorded; no remote job is submitted silently | user approves or defers |
-| 7 | true-zerocopy-scope | blocked_needs_user | Scope larger CameraX-to-QNN buffer registration experiment | hypothesis/success metric/budget/rollback are defined beyond the 10/12ms direct-YUV baseline | user requests larger experiment or defers |
-| 8 | videocapture-scope | blocked_needs_user | Decide whether full CameraX VideoCapture/Recorder is needed | product/demo need is explicit; screenrecord evidence is not mislabeled | user requests product route or defers |
+| 5 | perfetto-qnn-timeline | done | Optional Perfetto/QNN timing timeline | app data path timeline can explain CameraX/native/tensor/QNN/display costs | `20260723_perfetto_direct_yuv_trace_smoke_v4` collected a non-empty trace with live frame coverage |
+| 6 | aimet-remote-decision | done | Decide whether to submit remote AI Hub CLE W8A8 export/profile jobs | user approved; remote AI Hub export/profile succeeded and local RB5 full 24-case comparison is complete | keep as evidence; do not replace app model |
+| 7 | true-zerocopy-scope | done | Scope larger CameraX-to-QNN buffer registration experiment | `ZERO_COPY_SCOPE_PLAN.md` defines staged goals, metrics, budget, rollback, and ROI beyond the 8/9/9ms native-staging baseline | reopen only for a larger data-path project |
+| 8 | videocapture-scope | done | Decide whether full CameraX VideoCapture/Recorder is needed | `DEMO_RUNBOOK.md` records screenrecord Demo Mode as the current high-ROI demo; full VideoCapture remains non-mainline | reopen only if a real product/video pipeline is required |
 
 ## Current Closeout Task
 
-Current active task: `final-benchmark-table`.
+Current active task: `runtime-harness-reframe`.
 
 Current open work is no longer tile, D8-config, output postprocess, app e2e
 schema bring-up, every-N smoke, invoke-level shared-memory probing, or
@@ -124,13 +124,13 @@ or lifecycle evidence, not the project center. Demo Mode wide-FoV video capture
 is validated through `adb screenrecord` on the live ROI UI; it is not a true
 VideoCapture SR pipeline.
 
-After the RKNN-inspired Runtime loop and the follow-up rollback, the default live
-path and source code are back to the pre-RKNN-experiment state. The experiment
-produced useful ignored evidence, but stream-log runner and live profile-slim
-code changes were reverted at the user's request. The current remaining Runtime
-lanes are a final benchmark table, optional Perfetto/QNN timing, remote
-AIMET/CLE export jobs, a larger CameraX-to-QNN buffer-registration experiment,
-or full CameraX VideoCapture/Recorder product work.
+After the RKNN-inspired Runtime loop and follow-up review, the default live path
+remains unchanged, but the useful evidence-tooling changes are restored:
+stream-log live collection, P99 live runner metrics, and slim live QNN profile
+logging. These are collection/log-volume fixes, not model/runtime acceleration
+claims. The current remaining Runtime lanes are the Runtime text sweep, optional
+Perfetto/QNN timing, a larger CameraX-to-QNN buffer-registration experiment, or
+full CameraX VideoCapture/Recorder product work.
 
 RKNN-inspired evidence preserved as ignored/local artifacts:
 
@@ -259,7 +259,7 @@ Current route boundaries:
 ```text
 0a. Current default QNN/QuickSR live ROI now uses the direct-YUV tensor path:
    CameraX PlaneProxy direct ByteBuffer -> native ROI/RGB -> UINT8 NHWC bulk
-   input -> QNN Delegate. Latest compiled default e2e p50/p95 is 10/12ms.
+   input -> QNN Delegate. Latest compiled default e2e p50/p95/p99 is 8/9/9ms.
    This is a measured data-path win, not true CameraX buffer -> QNN input
    zero-copy.
 0b. AIMET-CLE is no longer purely blocked: PyTorch FP source and AIMET-Torch CLE

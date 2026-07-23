@@ -9,7 +9,7 @@ PyTorch / TFLite / AI Hub / qnn-net-run / Android app
 -> W8A8 workloads
 -> QNN TFLite Delegate / Qualcomm HTP
 -> direct-YUV native tensor input
--> measured app e2e at about 10 / 12ms p50/p95 in the current default smoke
+-> measured app e2e at about 8 / 9 / 9ms p50/p95/p99 in the current native-staging default run
 ```
 
 The project is not just a model demo or an image-enhancement app. It shows
@@ -22,7 +22,9 @@ QCS8550 Android device.
 | Purpose | File |
 | --- | --- |
 | Repository overview | `README.md` |
-| Current checkpoint report | `CHECKPOINT_REPORT.md` |
+| Final benchmark table | `FINAL_BENCHMARK_TABLE.md` |
+| Zero-copy scope plan | `ZERO_COPY_SCOPE_PLAN.md` |
+| Perf/watt summary | `PERF_WATT_SUMMARY.md` |
 | Final interview package | `FINAL_INTERVIEW_PACKAGE.md` |
 | Evidence package | `SHOWCASE_MATERIALS.md` |
 | Interview story | `SHOWCASE_NARRATIVE.md` |
@@ -41,6 +43,9 @@ QCS8550 Android device.
 | QNN Delegate app path works | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260718_app_qnn_delegate_fixed_live_rb5` |
 | Data path was the bottleneck | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260718_app_qnn_delegate_live_roi_breakdown` |
 | Default direct-YUV QuickSR live path | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260722_app_default_direct_yuv_live_roi_120f` |
+| Native staging default live path | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_native_staging_default_live_roi_20min` |
+| Perfetto timeline smoke | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_perfetto_direct_yuv_trace_smoke_v4` |
+| Stream-log sustained default live path | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_default_streamlog_20min_current_source` |
 | Latest app e2e schema + output bulk-copy smoke | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_e2e_schema_output_reuse_120f` |
 | Latest 60s sustained app e2e smoke | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_app_e2e_schema_output_reuse_60s` |
 | Every-N temporal smoke | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_every_n3_live_roi_60s_final` |
@@ -61,11 +66,10 @@ QCS8550 Android device.
 | Old live ROI e2e before data-path fix | about `63 / 65ms` p50/p95 |
 | Default QuickSR live e2e after output reuse | `19.0 / 24.7ms` p50/p95 |
 | Latest QuickSR live e2e after UINT8 output bulk-copy | `15 / 19ms` p50/p95 |
-| Current direct-YUV default QuickSR live e2e | `10 / 12ms` p50/p95 |
-| RKNN-inspired stream-log experiment | local evidence only; source change reverted |
+| Current direct-YUV native staging QuickSR live e2e | `8 / 9 / 9ms` p50/p95/p99 over 20 minutes, 35719 frames |
 | Default QuickSR live inference | `1.0 / 1.0ms` p50/p95 |
-| App QNN inference in reverted 5-minute stream-log run | `2 / 2 / 2ms` p50/p95/p99, local evidence only |
-| Current board-level live direct-YUV power | about `6.30W` mean, battery-node estimate |
+| App QNN inference in 5-minute stream-log run | `2 / 2 / 2ms` p50/p95/p99 |
+| Current board-level live native staging power | about `4.96W` mean over 20 minutes, battery-node estimate |
 | Latest QuickSR live postprocess | `1 / 1ms` p50/p95 in 120-frame smoke |
 | 120s sustained e2e drift | `20.0/25.0ms -> 21.0/26.0ms` |
 | Latest 60s sustained e2e drift | `15.0/20.0ms -> 16.0/21.0ms` |

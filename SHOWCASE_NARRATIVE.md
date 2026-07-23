@@ -30,7 +30,7 @@ The engineering story is:
 8. Measured init, memory, and switch cost before rejecting automatic live dual-model routing as the default path.
 9. Optimized the UINT8 output conversion path and added EvalHub-compatible app e2e rows for live runs.
 10. Collected a minimal real-camera showcase set and used visual review to keep the route decision caveated.
-11. Tested native/tensor-ready ROI variants, then promoted direct-YUV native ROI/RGB after same-frame MAD 0.0 and default live e2e 10/12ms.
+11. Tested native/tensor-ready ROI variants, promoted direct-YUV native ROI/RGB after same-frame MAD 0.0, then added native RGB staging to reach 8/9/9ms p50/p95/p99 over 20 minutes.
 ```
 
 ## Evidence Chain
@@ -46,6 +46,7 @@ The engineering story is:
 | Output conversion was further reduced | `20260720_app_e2e_schema_output_reuse_120f` | postprocess p50/p95 1/1ms, e2e 15/19ms |
 | App e2e schema is now emitted | `20260720_app_e2e_schema_output_reuse_60s` | 60s sustained row under EvalHub app e2e shape |
 | Direct-YUV became the default data path | `20260722_app_default_direct_yuv_live_roi_120f` | default app e2e p50/p95 10/12ms |
+| Native staging improved the current default | `20260723_native_staging_default_live_roi_20min` | current app e2e p50/p95/p99 8/9/9ms |
 | Automatic switching is not free | `20260718_app_qnn_resource_probe` | Real-ESRGAN -> QuickSRNet switch about 369ms |
 | PSNR is not the only quality judge | `EVAL_METRIC_POLICY.md` and contact sheets | visual veto remains required |
 | Real-camera showcase is available | `20251110_045328_minimal_real_camera_set` | 8/8 scenes complete, accepted with caveats |
@@ -72,7 +73,7 @@ Old live ROI full 4000x3000 path: e2e about 63/65ms
 New live ROI 1280x960 path: e2e about 22/25ms
 QuickSRNet live ROI: inference about 2/2ms, e2e about 22/25ms
 Current default after output reuse: e2e about 19.0/24.7ms
-Current direct-YUV default: e2e about 10/12ms in compiled default smoke
+Current direct-YUV native staging default: e2e about 8/9/9ms over 20 minutes
 Historical output-bulk-copy sustained smoke: e2e first/last 20% 15/20ms -> 16/21ms
 120s sustained default run: e2e first/last 20% 20/25ms -> 21/26ms
 Real-ESRGAN -> QuickSRNet dynamic switch: about 369ms
@@ -84,8 +85,7 @@ Real-camera showcase set: 8 scenes / 32 standard images, accepted with caveats
 - Do not claim QuickSRNet is globally better than Real-ESRGAN just because PSNR is higher.
 - Do not claim Real-ESRGAN is worse just because it is more perceptual/GAN-style.
 - Do not claim automatic dual-model live routing is product-ready.
-- Do not claim sustained power or thermal stability until P7 is complete.
-- Do not claim full power/perf-watt characterization from the current short sustained run.
+- Do not claim external-meter power or product-grade battery life from battery-node estimates.
 - Do not claim true zero-copy or promote tensor-ready live as the default path.
 - Do not collapse AI Hub profile, local qnn-net-run profile, and Android app e2e
   timing into a single latency number.
@@ -101,7 +101,7 @@ inference was already only a few milliseconds; the real bottleneck was full-fram
 CameraX to Bitmap conversion and later output postprocessing. So I reduced the
 live analysis size from 4000x3000 to 1280x960 and cut app e2e latency from about
 63ms to about 22ms. Later output-path work removed per-channel direct buffer
-reads in the UINT8 postprocess loop; the later direct-YUV default path reaches about 10/12ms p50/p95.
+reads in the UINT8 postprocess loop. The later native staging path reuses the RGB staging buffer and reaches about 8/9/9ms p50/p95/p99 over 20 minutes.
 
 I also compared Real-ESRGAN and QuickSRNetSmall. Real-ESRGAN is more perceptual
 and sharper, while QuickSRNetSmall is much smaller and more conservative on
@@ -125,7 +125,7 @@ The minimum showcase should use:
 ```text
 1. AI Hub / qnn-net-run / Android app evidence separation.
 2. QNN Delegate fixed-sample evidence.
-3. Live ROI 63ms -> 22ms -> 10/12ms data-path optimization table.
+3. Live ROI 63ms -> 22ms -> 10/12ms -> 8/9/9ms data-path optimization table.
 4. QuickSRNet vs Real-ESRGAN workload tradeoff table.
 5. Three structure-sensitive app cases.
 6. Real-camera showcase contact sheet.
@@ -135,6 +135,6 @@ The minimum showcase should use:
 Before making stronger claims, complete:
 
 ```text
-1. Longer power/perf-watt characterization if making sustained-use claims.
+1. External power-meter measurement if making product-grade perf/watt claims.
 2. Deeper tensor-ready or YUV ROI work only if more live-path latency reduction is needed.
 ```

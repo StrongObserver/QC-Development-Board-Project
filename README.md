@@ -15,6 +15,7 @@ models as representative workloads:
 CameraX ImageAnalysis
 -> PlaneProxy direct ByteBuffer
 -> native C++ center ROI / rotation / YUV->RGB
+-> reusable native staging RGB buffer
 -> UINT8 NHWC tensor input
 -> QuickSRNetSmall W8A8 TFLite
 -> QNN TFLite Delegate / HTP
@@ -47,9 +48,9 @@ PyTorch / TFLite / ONNX
 | Default live ROI route | `QNN + QuickSRNetSmall W8A8 + direct-YUV native tensor input` |
 | Default live ROI after output reuse | `19.0 / 24.7ms` e2e p50/p95 |
 | Latest live ROI after UINT8 output bulk-copy | `15 / 19ms` e2e p50/p95 in 120-frame app e2e smoke |
-| Current default direct-YUV live ROI | `10 / 12ms` e2e p50/p95 in compiled default app smoke |
-| RKNN-inspired stream-log/profile experiment | useful local evidence collected, then source changes reverted at user request |
-| Board-level live direct-YUV power | 5-minute battery-node estimate, mean about `6.30W`, temp `24.0C -> 24.0C` |
+| Current default direct-YUV native staging live ROI | `8 / 9 / 9ms` e2e p50/p95/p99 over 35719 frames |
+| Current board-level live direct-YUV power | 20-minute battery-node estimate, mean about `4.96W`, temp `24.0C -> 24.0C` |
+| Perfetto timeline smoke | non-empty 222805-byte trace with live frame logcat coverage |
 | Latest app e2e schema output | `20260720_app_e2e_schema_output_reuse_120f/app_e2e_log.csv` |
 | 120s default live run | 3551 frames, e2e first/last 20% p50/p95 `20.0/25.0ms -> 21.0/26.0ms` |
 | 60s latest live run | 1763 frames, e2e first/last 20% p50/p95 `15.0/20.0ms -> 16.0/21.0ms` |
@@ -80,6 +81,11 @@ tracked by default.
 - `eval_hub/`: evaluation registry, lifecycle layers, and metric-role policy.
 - `knowledge_base/`: external research cards and reference index.
 - `SHOWCASE_MATERIALS.md`: current minimum evidence package.
+- `FINAL_BENCHMARK_TABLE.md`: compact evidence table separating AI Hub,
+  qnn-net-run, app e2e, sustained, memory, power, and boundary claims.
+- `ZERO_COPY_SCOPE_PLAN.md`: staged true-zero-copy / data-path scope and ROI
+  boundary.
+- `PERF_WATT_SUMMARY.md`: board-level power and energy-per-frame summary.
 - `SHOWCASE_INDEX.md`: one-page navigation for presentation materials.
 - `SHOWCASE_NARRATIVE.md`: interview-ready project story.
 - `FINAL_INTERVIEW_PACKAGE.md`: compact pre-interview review sheet.

@@ -25,9 +25,9 @@ Use this separation whenever discussing latency:
 | --- | --- | ---: |
 | AI Hub QCS8550 Proxy | hosted QNN context profile, not app e2e | W8A8 p50 about `1.778ms`, NPU 72 |
 | local qnn-net-run | local runner context execution, not Android UI | QNN accelerator p50/p95 about `9.75/10.39ms` |
-| Android app e2e | CameraX/native/tensor/QNN/display path | current direct-YUV default `10/12ms` |
-| Android app sustained | stream-log app wall-time evidence | local RKNN-inspired experiment only; source change reverted |
-| board-level power | rooted battery-node estimate, not external meter | 5-minute live direct-YUV mean about `6.30W`, temp `24.0C -> 24.0C` |
+| Android app e2e | CameraX/native/tensor/QNN/display path | current native staging default `8/9/9ms` p50/p95/p99 |
+| Android app sustained | stream-log app wall-time evidence | 20-minute native staging e2e `8/9/9ms` p50/p95/p99 |
+| board-level power | rooted battery-node estimate, not external meter | 20-minute live native staging mean about `4.96W`, temp `24.0C -> 24.0C` |
 
 Boundary:
 
@@ -111,7 +111,7 @@ default QuickSR live e2e p50/p95 after output reuse: 19.0 / 24.7ms
 20.0 / 25.0ms -> 21.0 / 26.0ms
 latest UINT8 output bulk-copy smoke: postprocess 1 / 1ms, e2e 15 / 19ms
 latest 60s sustained smoke: e2e first/last 20% p50/p95 = 15/20ms -> 16/21ms
-current direct-YUV default smoke: e2e 10 / 12ms
+current direct-YUV native staging 20min: e2e 8 / 9 / 9ms
 ```
 
 Boundary:
@@ -205,24 +205,54 @@ Boundary:
 This is short-run stability, not full power/perf-watt proof.
 ```
 
-2026-07-23 Runtime follow-up, now reverted:
+2026-07-23 Runtime follow-up:
 
 ```text
-C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_loop_p2_default_streamlog_5min
-frames=8941
-app e2e p50/p95/p99=11/12/12ms
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_native_staging_default_live_roi_20min
+frames=35719
+app e2e p50/p95/p99=8/9/9ms
+nativeRgb p50/p95/p99=4/5/5ms
 QNN inference p50/p95/p99=2/2/2ms
-boundary: source changes for stream-log/P99 collection were reverted at user request; treat as local exploratory evidence, not current runner behavior.
+skipped frames=0
+boundary: stream-log/P99 collection is restored in the live ROI runner; this is sustained app timing evidence, not visual-quality evidence.
 ```
 
 Board-level power companion:
 
 ```text
-C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\power_probe\20260723_loop_p3_power_live_direct_yuv_5min
-mean_power_mw_abs=6295.293
-min/max=5802.111/7769.492
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\power_probe\20260723_power_live_native_staging_20min
+mean_power_mw_abs=4958.714
+min/max=4653.274/5963.690
 battery temp=24.0C -> 24.0C
 boundary: battery-node board-level estimate only
+```
+
+Native staging evidence:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_native_staging_default_live_roi_120f
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_native_staging_default_live_roi_20min
+before: e2e 11/12/12ms, nativeRgb 7/8/8ms
+after: e2e 8/9/9ms, nativeRgb 4/5/5ms
+boundary: near-zero-copy staging buffer win, not true QNN input zero-copy
+```
+
+Perfetto trace evidence:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_perfetto_direct_yuv_trace_smoke_v4
+trace_bytes=222805
+boundary: timeline evidence for inspection, not a benchmark by itself
+```
+
+QNN Delegate profile diagnostic:
+
+```text
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\qnn_profile_diagnostic\20260723_fixed_sample_profile_boundary
+profile_bytes=904
+known_events=10
+recognized_events=10
+boundary: Java raw delegate profile buffer is diagnostic-only; qnn-profile-viewer rejects it as an official log format
 ```
 
 ## 7.5 Every-N Temporal Smoke
@@ -249,6 +279,66 @@ Message:
 The every-N ImageAnalysis route is technically valid as a temporal/cadence
 probe. It reduces enhancement frequency, not the latency of each enhanced frame.
 Full CameraX VideoCapture remains a separate product/demo decision.
+```
+
+## 7.6 AIMET CLE Deployability
+
+Evidence:
+
+```text
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\export_assets\real_esrgan_general_x4v3-cle-qnn-w8a8-qcs8550-20260723
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_cle_qnn_w8a8_full_rb5
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\aimet_deployability\20260723_cle_vs_baseline_full_qnn_compare
+```
+
+Use numbers:
+
+```text
+AI Hub profile: estimated inference 1.7ms, 72 NPU ops, 0 CPU/GPU fallback
+hosted inference PSNR vs local CPU: 34.2585
+local RB5 full 24-case: 23 pass + 1 conditional
+average delta vs current W8A8: PSNR -0.011dB, SSIM +0.00180, QNN accelerator +208us
+```
+
+Message:
+
+```text
+AIMET CLE is now deployable through the AI Hub W8A8/QNN path, but current
+evidence does not justify replacing the app model. This is strong quantization
+due-diligence evidence, not a new default route.
+```
+
+Boundary:
+
+```text
+Do not claim CLE improves the current Android app path. It is a completed
+deployability/profiling experiment with no replacement decision.
+```
+
+## 7.7 Current Demo Evidence
+
+Evidence:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_demo_mode_direct_yuv_current_20s
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_demo_mode_direct_yuv_current_timing
+```
+
+Use numbers:
+
+```text
+video_bytes=29295878
+timing frames=141
+app e2e p50/p95/p99=8/9/10ms
+nativeRgb p50/p95/p99=4/5/6ms
+QNN inference p50/p95/p99=2/2/2ms
+```
+
+Boundary:
+
+```text
+This is a screenrecorded Demo Mode UI package plus timing evidence. It is not a
+true CameraX VideoCapture/Recorder SR pipeline.
 ```
 
 ## 8. Real-Camera Showcase Set
@@ -326,7 +416,7 @@ Use the real-camera set as final showcase credibility evidence with caveats.
 2. Runtime evidence separation: AI Hub profile vs qnn-net-run vs app e2e.
 3. QNN/HTP deployment path: W8A8 TFLite -> QNN Delegate -> HTP.
 4. Profiling finding: inference was not the live bottleneck.
-5. Data-path optimization: 63/65ms -> 22/25ms -> 10/12ms.
+5. Data-path optimization: 63/65ms -> 22/25ms -> 10/12ms -> 8/9/9ms.
 6. Workload tradeoff: Real-ESRGAN vs QuickSRNetSmall.
 7. Resource-aware route decision: no default automatic dual-model routing.
 8. Real-camera showcase evidence and remaining boundaries.
