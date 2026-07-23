@@ -129,6 +129,57 @@ review_template.csv
 Do not collect more real-camera images unless a new claim specifically needs
 targeted low-light or text evidence.
 
+## Demo Mode Video Capture
+
+Use this when you need a short interview/demo video. This is a screenrecorded
+live ROI UI demo, not a true CameraX VideoCapture/Recorder SR pipeline.
+
+Start Demo Mode:
+
+```bat
+adb shell am force-stop com.cyf.rb5visionlab
+adb shell am start -n com.cyf.rb5visionlab/.MainActivity --ez demo_mode true --ez start_live_sr_direct_yuv true
+```
+
+Record a 20-second MP4:
+
+```bat
+adb shell screenrecord --time-limit 20 /sdcard/Movies/rb5_demo_mode_direct_yuv_20s.mp4
+adb pull /sdcard/Movies/rb5_demo_mode_direct_yuv_20s.mp4 "C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\manual_demo_mode_direct_yuv_20s.mp4"
+```
+
+Collect matching timing evidence:
+
+```bat
+cd /d C:\Users\Admin\Desktop\QC-Development-Board-Project
+RB5_SR_lab\.venv-eval\Scripts\python.exe RB5_SR_lab\run_app_live_roi_benchmark.py --use-app-default --min-frames 120 --timeout-s 90 --run-id manual_demo_mode_timing_recheck
+```
+
+Reference evidence:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_demo_mode_wide_clear_20s
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_demo_relation_aligned_v3\demo_relation
+```
+
+What the demo proves:
+
+```text
+QNN/QuickSR live ROI is running.
+The displayed overlay reports real app timing.
+The wide preview makes the video visually inspectable.
+The relation sheet explains preview / model input / SR output correspondence.
+```
+
+What it does not prove:
+
+```text
+true VideoCapture/Recorder SR
+temporal SR quality
+full-frame SR
+external-meter power
+```
+
 ## Experimental Paths
 
 Tensor-ready input experiment:
@@ -165,5 +216,6 @@ zero-copy.
 - Do not use the old tensor-ready path as the default path.
 - Do not enable automatic dual-model routing.
 - Do not claim true zero-copy.
+- Do not call screenrecord Demo Mode a true VideoCapture/Recorder SR pipeline.
 - Do not use raw benchmark outputs as real-camera evidence.
 - Do not commit generated images, logs, APKs, or build outputs.

@@ -1,69 +1,106 @@
 # Commit Plan
 
-Updated: 2026-07-22
+Updated: 2026-07-23
 
-## Current Local Closeout Plan - Direct YUV Default
+## Current Closeout Plan - Runtime Evidence And Native Staging
 
-The current worktree contains a verified direct-YUV default-path milestone plus
-AIMET/mixed-precision support probes. The live oral template remains P0: do not
-commit or push until the user explicitly asks.
+The current worktree contains the verified follow-up after the Runtime reframe:
+stream-log/P99 tooling, AIMET CLE deployability, native staging data-path
+optimization, Perfetto trace collection, QNN profile diagnostics, current demo
+evidence, and updated showcase/route docs.
 
-Current logical commit split:
+Use explicit staging only. Do not use `git add .`.
+
+## Logical Commit Split
 
 ```text
-1. perf(android): use direct yuv roi for default live sr
-2. test(sr-lab): add direct yuv and power probes
-3. test(aimet): add cle export checkpoint probe
-4. docs(route): record direct yuv default path
+1. test(sr-lab): support runtime evidence collection
+2. perf(android): reduce direct yuv staging overhead
+3. docs(runtime): record final benchmark boundaries
+4. docs(demo): update runtime demo and zero-copy scope
 ```
 
-Explicit path groups:
+## Explicit Path Groups
+
+Commit 1:
 
 ```text
-Commit 1:
-RB5VisionLab/app/src/main/cpp/rb5visionlab.cpp
-RB5VisionLab/app/src/main/java/com/cyf/rb5visionlab/MainActivity.kt
+.gitignore
+RB5_SR_lab/compare_qnn_runs.py
+RB5_SR_lab/parse_qnn_delegate_profile_buffer.py
+RB5_SR_lab/run_app_live_roi_benchmark.py
+RB5_SR_lab/run_app_perfetto_trace.py
+RB5_SR_lab/run_qnn_smoke_benchmark.py
+```
 
 Commit 2:
-RB5_SR_lab/app_e2e_export.py
-RB5_SR_lab/run_app_live_roi_benchmark.py
-RB5_SR_lab/run_power_probe.py
-RB5_SR_lab/run_app_direct_yuv_roi_probe.py
-RB5_SR_lab/summarize_strategy_shadow.py
+
+```text
+RB5VisionLab/app/src/main/cpp/rb5visionlab.cpp
+RB5VisionLab/app/src/main/java/com/cyf/rb5visionlab/MainActivity.kt
+RB5VisionLab/app/src/main/java/com/cyf/rb5visionlab/SuperResolver.kt
+```
 
 Commit 3:
-RB5_SR_lab/prepare_aimet_cle_export_checkpoint.py
+
+```text
+FINAL_BENCHMARK_TABLE.md
+PERF_WATT_SUMMARY.md
+README.md
+RESUME_PROJECT_DRAFT.md
+SHOWCASE_INDEX.md
+SHOWCASE_MATERIALS.md
+FINAL_INTERVIEW_PACKAGE.md
+PROJECT_FULL_SCOPE_LEDGER.md
+LOOP_TASK_QUEUE.md
+NEXT_ACTION.md
+```
 
 Commit 4:
-MODEL_ROUTE_DECISION.md
-NEXT_ACTION.md
+
+```text
+DEMO_RUNBOOK.md
+ZERO_COPY_SCOPE_PLAN.md
 COMMIT_PLAN.md
 ```
 
-Verification already run for this closeout:
+## Verification Already Run
 
 ```bat
-python -m py_compile RB5_SR_lab\run_app_live_roi_benchmark.py RB5_SR_lab\run_app_direct_yuv_roi_probe.py RB5_SR_lab\app_e2e_export.py RB5_SR_lab\run_power_probe.py RB5_SR_lab\summarize_strategy_shadow.py RB5_SR_lab\prepare_aimet_cle_export_checkpoint.py
+RB5_SR_lab\.venv-eval\Scripts\python.exe -m py_compile RB5_SR_lab\run_app_perfetto_trace.py RB5_SR_lab\run_app_live_roi_benchmark.py RB5_SR_lab\run_qnn_smoke_benchmark.py RB5_SR_lab\compare_qnn_runs.py RB5_SR_lab\parse_qnn_delegate_profile_buffer.py
 cd /d C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5VisionLab && gradlew.bat --no-daemon :app:assembleDebug
 adb -s ff5d3ab4 install -r RB5VisionLab\app\build\outputs\apk\debug\app-debug.apk
-python RB5_SR_lab\run_app_direct_yuv_roi_probe.py --run-id 20260722_direct_yuv_roi_probe --install-apk --timeout-s 60
-python RB5_SR_lab\run_app_live_roi_benchmark.py --direct-yuv --min-frames 120 --duration-s 120 --timeout-s 180 --run-id 20260722_direct_yuv_live_roi_120s_sustained
-python RB5_SR_lab\run_app_live_roi_benchmark.py --use-app-default --min-frames 120 --timeout-s 120 --run-id 20260722_app_default_direct_yuv_live_roi_120f
-python RB5_SR_lab\run_power_probe.py --scenario suite_core --baseline-duration-s 10 --live-duration-s 15 --duration-s 30 --interval-s 1 --run-id 20260722_power_suite_direct_yuv_compare
+RB5_SR_lab\.venv-eval\Scripts\python.exe RB5_SR_lab\run_app_perfetto_trace.py --duration-s 15 --run-id 20260723_perfetto_direct_yuv_trace_smoke_v4
+RB5_SR_lab\.venv-eval\Scripts\python.exe RB5_SR_lab\run_app_live_roi_benchmark.py --use-app-default --min-frames 120 --timeout-s 90 --run-id 20260723_native_staging_default_live_roi_120f
+RB5_SR_lab\.venv-eval\Scripts\python.exe RB5_SR_lab\run_app_live_roi_benchmark.py --use-app-default --min-frames 1200 --timeout-s 1500 --duration-s 1200 --run-id 20260723_native_staging_default_live_roi_20min
+RB5_SR_lab\.venv-eval\Scripts\python.exe RB5_SR_lab\run_power_probe.py --scenario live_direct_yuv --duration-s 1200 --interval-s 5 --run-id 20260723_power_live_native_staging_20min
+RB5_SR_lab\.venv-eval\Scripts\python.exe RB5_SR_lab\parse_qnn_delegate_profile_buffer.py --profile "C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260721_loop_p4_qnn_profile_decode_attempt\profiles\offline_text_edge_128.png_QUICKSR_W8A8_profile.bin" --outdir "C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\qnn_profile_diagnostic\20260723_fixed_sample_profile_boundary"
+git diff --check
 ```
 
-Key evidence:
+P6 AIMET CLE remote export/profile and local RB5 comparison were also completed:
 
 ```text
-C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\direct_yuv_roi_probe\20260722_direct_yuv_roi_probe
-C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260722_direct_yuv_live_roi_120s_sustained
-C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260722_app_default_direct_yuv_live_roi_120f
-C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\power_probe\20260722_power_suite_direct_yuv_compare
-C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\aimet_deployability\20260722_aimet_cle_export_checkpoint
-C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\mixed_precision_probe\20260722_realesrgan_w8a16_support
+AI Hub profile succeeds: estimated inference 1.7ms, 72 NPU ops.
+Local RB5 full 24-case CLE run: 23 pass + 1 conditional.
+CLE vs current W8A8: PSNR -0.011dB, SSIM +0.00180, QNN accelerator +208us.
+Decision: keep as quantization due-diligence evidence, do not replace app model.
 ```
 
-Do not stage:
+## Key Evidence
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_native_staging_default_live_roi_20min
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\power_probe\20260723_power_live_native_staging_20min
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_perfetto_direct_yuv_trace_smoke_v4
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\qnn_profile_diagnostic\20260723_fixed_sample_profile_boundary
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_demo_mode_direct_yuv_current_20s
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_demo_mode_direct_yuv_current_timing
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_cle_qnn_w8a8_full_rb5
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\aimet_deployability\20260723_cle_vs_baseline_full_qnn_compare
+```
+
+## Do Not Stage
 
 ```text
 .state/
@@ -72,8 +109,10 @@ RB5_SR_lab/results/
 RB5_SR_lab/export_assets/
 RB5VisionLab/.gradle/
 RB5VisionLab/app/build/
+RB5VisionLab/app/.cxx/
 evalhub_data/
 external result folders under C:\Users\Admin\Videos\
+APK files
 ```
 
 ## Historical Local Closeout Plan
