@@ -2,7 +2,82 @@
 
 Updated: 2026-07-23
 
-## Current Closeout Plan - Runtime Documentation Sweep
+## Current Closeout Plan - Stage D Probe And Temporal Fix
+
+The current worktree contains the P1-P6 engineering loop after the runtime docs
+checkpoint `b42b3c0`. It adds a CameraX direct-YUV -> QNN custom tensor compare
+probe, native data-path breakdown logging, optimized-tensor every-N cadence
+support, and matching result documentation.
+
+Use explicit staging only. Do not use `git add .`.
+
+## Logical Commit Split
+
+```text
+test(runtime): add camera tensor allocation probe
+docs(runtime): record stage d and cadence evidence
+```
+
+## Explicit Path Groups
+
+Commit 1:
+
+```text
+RB5VisionLab/app/src/main/cpp/rb5visionlab.cpp
+RB5VisionLab/app/src/main/java/com/cyf/rb5visionlab/MainActivity.kt
+RB5_SR_lab/run_qnn_shared_memory_probe.py
+RB5_SR_lab/run_app_live_roi_benchmark.py
+```
+
+Commit 2:
+
+```text
+FINAL_BENCHMARK_TABLE.md
+PROJECT_FULL_SCOPE_LEDGER.md
+LOOP_TASK_QUEUE.md
+NEXT_ACTION.md
+COMMIT_PLAN.md
+```
+
+## Verification For This Loop
+
+```bat
+RB5_SR_lab\.venv-eval\Scripts\python.exe -m py_compile RB5_SR_lab\run_qnn_shared_memory_probe.py RB5_SR_lab\run_app_live_roi_benchmark.py
+cd /d C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5VisionLab
+set "JAVA_HOME=C:\Program Files\Android\Android Studio\jbr"
+gradlew.bat --no-daemon :app:assembleDebug
+adb -s ff5d3ab4 install -r RB5VisionLab\app\build\outputs\apk\debug\app-debug.apk
+RB5_SR_lab\.venv-eval\Scripts\python.exe RB5_SR_lab\run_qnn_shared_memory_probe.py --phase phase3 --repeats 50 --timeout-s 90 --run-id 20260723_qnn_shared_camera_tensor_phase3_v2
+RB5_SR_lab\.venv-eval\Scripts\python.exe RB5_SR_lab\run_app_live_roi_benchmark.py --use-app-default --min-frames 120 --timeout-s 120 --run-id 20260723_native_datapath_breakdown_120f
+RB5_SR_lab\.venv-eval\Scripts\python.exe RB5_SR_lab\run_app_fixed_sample_replay.py --assets offline_text_edge_128.png --model QUICKSR_W8A8 --timeout-s 60 --run-id 20260723_qnn_profile_current_apk_recheck
+RB5_SR_lab\.venv-eval\Scripts\python.exe RB5_SR_lab\parse_qnn_delegate_profile_buffer.py --profile "C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_qnn_profile_current_apk_recheck\profiles\offline_text_edge_128.png_QUICKSR_W8A8_profile.bin" --outdir "C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\qnn_profile_diagnostic\20260723_current_apk_profile_boundary"
+RB5_SR_lab\.venv-eval\Scripts\python.exe RB5_SR_lab\run_app_live_roi_benchmark.py --use-app-default --every-n 3 --min-frames 80 --duration-s 30 --timeout-s 90 --run-id 20260723_every_n3_optimized_tensor_fixed
+git diff --check
+```
+
+## Key Evidence
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_qnn_shared_camera_tensor_phase3_v2
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_native_datapath_breakdown_120f
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_qnn_profile_current_apk_recheck
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\qnn_profile_diagnostic\20260723_current_apk_profile_boundary
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_every_n3_optimized_tensor_fixed
+```
+
+## Do Not Stage
+
+```text
+RB5_SR_lab/results/
+RB5_SR_lab/export_assets/
+evalhub_data/
+RB5VisionLab/app/build/
+RB5VisionLab/app/.cxx/
+external result folders under C:\Users\Admin\Videos\
+APK files
+```
+
+## Historical Closeout Plan - Runtime Documentation Sweep
 
 The current worktree is a documentation-only sweep triggered by the latest oral
 template. It aligns the Runtime/Heterogeneous framing, current native-staging

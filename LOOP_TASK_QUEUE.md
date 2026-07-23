@@ -101,8 +101,8 @@ original project design unless there is concrete evidence that it cannot work.
 | 4 | init-memory-table | done | Cold/warm init, model switching, and sticky memory summary | Resource probes record Real/Quick init, switch cost, PSS deltas, and sticky memory boundary | evidence complete |
 | 5 | perfetto-qnn-timeline | done | Optional Perfetto/QNN timing timeline | app data path timeline can explain CameraX/native/tensor/QNN/display costs | `20260723_perfetto_direct_yuv_trace_smoke_v4` collected a non-empty trace with live frame coverage |
 | 6 | aimet-remote-decision | done | Decide whether to submit remote AI Hub CLE W8A8 export/profile jobs | user approved; remote AI Hub export/profile succeeded and local RB5 full 24-case comparison is complete | keep as evidence; do not replace app model |
-| 7 | true-zerocopy-scope | done | Scope larger CameraX-to-QNN buffer registration experiment | `ZERO_COPY_SCOPE_PLAN.md` defines staged goals, metrics, budget, rollback, and ROI beyond the 8/9/9ms native-staging baseline | reopen only for a larger data-path project |
-| 8 | videocapture-scope | done | Decide whether full CameraX VideoCapture/Recorder is needed | `DEMO_RUNBOOK.md` records screenrecord Demo Mode as the current high-ROI demo; full VideoCapture remains non-mainline | reopen only if a real product/video pipeline is required |
+| 7 | true-zerocopy-scope | done | Scope larger CameraX-to-QNN buffer registration experiment | `ZERO_COPY_SCOPE_PLAN.md` defines staged goals; phase3 now proves CameraX direct-YUV ROI can feed normal/custom QNN tensors with matching checksum, but true buffer registration remains separate | reopen only for a larger data-path project |
+| 8 | videocapture-scope | done | Decide whether full CameraX VideoCapture/Recorder is needed | `DEMO_RUNBOOK.md` records screenrecord Demo Mode as the current high-ROI demo; every-N now works on the optimized tensor default path; full VideoCapture remains non-mainline | reopen only if a real product/video pipeline is required |
 
 ## Current Closeout Task
 
@@ -119,6 +119,9 @@ heterogeneous optimization.
 Direct PlaneProxy ByteBuffer -> native ROI/RGB -> reusable native RGB staging
 is now the compiled default QNN/QuickSR live path. QNN shared-memory Phase 2 has
 validated normal-vs-shared tensor comparison with matching output checksum.
+Phase 3 further validates a real CameraX direct-YUV ROI written into normal and
+QNN custom input tensors with matching output checksum; this is still staging,
+not true CameraX buffer registration.
 AIMET CLE deployable W8A8 QNN export/profile and local RB5 full comparison are
 complete, but the result does not justify replacing the app model. TextZoom/OCR
 and RealSR are diagnostic or lifecycle evidence, not the project center. Demo
@@ -129,9 +132,10 @@ After the RKNN-inspired Runtime loop and follow-up review, the useful
 evidence-tooling changes are restored: stream-log live collection, P99 live
 runner metrics, and slim live QNN profile logging. The additional native staging
 work is the measured data-path win; collection/log-volume fixes are not
-model/runtime acceleration claims. The current remaining Runtime lanes are a
-larger CameraX-to-QNN buffer-registration experiment or full CameraX
-VideoCapture/Recorder product work, both trigger-gated.
+model/runtime acceleration claims. Current every-N cadence is also fixed for
+the optimized tensor default path. The remaining Runtime lanes are true
+CameraX-to-QNN buffer registration or full CameraX VideoCapture/Recorder product
+work, both trigger-gated.
 
 RKNN-inspired evidence preserved as ignored/local artifacts:
 

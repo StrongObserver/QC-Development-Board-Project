@@ -31,6 +31,9 @@ latency claim.
 | Resource cost | Current APK init/memory/switch probe | Real init `2.4-2.9s`; Quick init `155/624ms`; Real->Quick switch about `800ms`; close-both PSS still about `+83MB` vs start | Blocks automatic live model switching from being treated as free | Long-run memory stability | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_loop_p5_resource_probe_current_apk` |
 | Fixed replay steady state | 100-run fixed-sample resource probe | Quick total p50/p95/p99 `18/19/19ms`; Real total `18/20/25ms` | Warm fixed-sample regression evidence | Live-camera quality | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_loop_p6_resource_probe_steady100` |
 | Shared-memory probe | QNN Delegate custom allocation Phase 2 500 repeats | normal `1028us`, shared `1004us`, delta about `-24us`, checksum match | Invoke-level shared allocation feasibility | CameraX buffer binding or true zero-copy | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_rknn_shared_memory_phase2_500` |
+| Camera direct-YUV to custom tensor probe | One CameraX frame, normal tensor vs QNN custom allocation input/output | checksum match; normal input fill `928us`, shared input fill `884us`; normal invoke avg `1089us`, shared invoke avg `985us` | Near-zero-copy data-path due diligence and custom tensor binding with real CameraX input | True CameraX YUV buffer registration | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_qnn_shared_camera_tensor_phase3_v2` |
+| Native data-path breakdown | Current app default live ROI, 139 frames | nativeRgb `4/5/5ms`; YUV fill about `4.6/5.5/5.8ms`; bitmap rotate fallback `0/0/0ms` | Shows native YUV->RGB fill dominates current nativeRgb cost | Kernel-level per-op QNN timing | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_native_datapath_breakdown_120f` |
+| Optimized tensor every-N cadence | Current app default with `everyN=3`, 30s | enhanced `287`, skipped `574`, effective enhanced FPS p50/p95 `9.8/9.8`, enhanced-frame e2e `8/9/10ms` | Cadence/product boundary now works on the optimized tensor path | Lower latency per enhanced frame | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_every_n3_optimized_tensor_fixed` |
 | AIMET local feasibility | AIMET-Torch CLE + QuantSim slice | average simulated INT8 PSNR delta about `+0.115dB` | Quantization recovery research evidence | Deployed CLE-W8A8 TFLite/QNN model | `RB5_SR_lab/results/aimet_torch_quantsim_compare/20260721_realesrgan128_fixed_slice` |
 | AIMET deployable export | CLE checkpoint -> AI Hub W8A8 QNN context -> RB5 qnn-net-run full 24-case | AI Hub profile succeeds, estimated inference `1.7ms`, NPU 72; local RB5 full run passes 23 pass + 1 conditional; average PSNR delta vs current W8A8 `-0.011dB`, SSIM delta `+0.00180`, QNN accel delta `+208us` | End-to-end AIMET deployability proof and quantization-optimization due diligence | Replacing current Android app model | `RB5_SR_lab/export_assets/real_esrgan_general_x4v3-cle-qnn-w8a8-qcs8550-20260723`; `RB5_SR_lab/results/aimet_deployability/20260723_cle_vs_baseline_full_qnn_compare` |
 
@@ -43,7 +46,7 @@ latency claim.
 | Live QNN profile log slimming | restored for tensor-live logs | live path emits no full `profileHex=`; fixed-sample diagnostics still can keep full hex |
 | 20-minute sustained runner | validated on current source | `20260723_native_staging_default_live_roi_20min` parsed 35719 frames with e2e `8/9/9ms` p50/p95/p99 |
 | Perfetto timeline smoke | collected on device | `20260723_perfetto_direct_yuv_trace_smoke_v4` produced a non-empty 222805-byte trace with live frame logcat coverage |
-| QNN Delegate profile diagnostic | improved best-effort parser | fixed-sample raw delegate profile is 904 bytes; 10/10 known event strings recognized; `qnn-profile-viewer` still rejects the buffer, so this is diagnostic-only |
+| QNN Delegate profile diagnostic | rechecked on current APK | fixed-sample raw delegate profile is 904 bytes; 10/10 known event strings recognized; `qnn-profile-viewer` still rejects the buffer, so this is diagnostic-only |
 
 ## Route Decisions
 
@@ -53,7 +56,7 @@ latency claim.
 | Real-ESRGAN role | Keep as QNN/HTP milestone, comparison baseline, and post-capture route | stronger perceptual path but heavier and more aggressive |
 | Automatic dual-model live routing | Not default | switching has visible cold path and sticky memory behavior |
 | True CameraX -> QNN input zero-copy | Not implemented; larger experiment only | direct PlaneProxy read and shared allocation probes are not buffer registration |
-| True zero-copy staged plan | Scoped, not active mainline | `ZERO_COPY_SCOPE_PLAN.md` defines Stage A-D goals, success metrics, budget, rollback, and ROI |
+| True zero-copy staged plan | Stage C/near-zero-copy evidence strengthened, Stage D still not active mainline | phase3 proves direct-YUV ROI can feed normal/custom QNN tensors with matching output, but true CameraX buffer registration remains unresolved |
 | Full VideoCapture/Recorder SR | Not current mainline | Demo Mode screenrecord is enough for current showcase; `DEMO_RUNBOOK.md` records reproducible screenrecord workflow and boundaries |
 | AIMET CLE deployable export | Done, not promoted | remote AI Hub export/profile and local RB5 full benchmark succeeded, but quality/latency deltas do not justify replacing the current app model |
 

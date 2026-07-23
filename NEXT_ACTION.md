@@ -148,6 +148,39 @@ Real init 2.4-2.9s, Quick init 155/624ms, Real->Quick switch 800ms
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_loop_p6_resource_probe_steady100
 Quick steady total p50/p95/p99 = 18/19/19ms
 
+Current P0-P6 engineering-loop evidence:
+P0 docs checkpoint:
+b42b3c0 docs(runtime): align final runtime evidence boundaries
+
+P2 near-zero-copy / camera tensor compare:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_qnn_shared_camera_tensor_phase3_v2
+normal/shared output checksum match; normal input fill 928us, shared input fill
+884us; normal invoke avg 1089us, shared invoke avg 985us. Boundary: real
+CameraX direct-YUV ROI into normal/custom QNN tensors, not true YUV buffer
+registration.
+
+P3 native data-path breakdown:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_native_datapath_breakdown_120f
+nativeRgb p50/p95/p99 4/5/5ms; YUV fill about 4.6/5.5/5.8ms; bitmap rotate
+fallback 0/0/0ms.
+
+P4 current APK QNN profile boundary:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_qnn_profile_current_apk_recheck
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\qnn_profile_diagnostic\20260723_current_apk_profile_boundary
+904-byte raw Java delegate profile buffer; 10/10 known event strings recognized;
+qnn-profile-viewer still rejects it as corrupted flatbuffer, so diagnostic-only.
+
+P5 optimized tensor every-N:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_every_n3_optimized_tensor_fixed
+enhanced 287, skipped 574, effective enhanced FPS p50/p95 9.8/9.8, enhanced
+frame e2e 8/9/10ms. Boundary: cadence works, but per-enhanced-frame latency is
+not reduced.
+
+P6 quality trigger:
+No new `fail` visual-review item appeared. Existing conditional cases remain
+caveated route evidence; do not start a new quality/model change without a
+fresh human-visible failure crop.
+
 AIMET CLE W8A8 deployability:
 C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\export_assets\real_esrgan_general_x4v3-cle-qnn-w8a8-qcs8550-20260723
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_cle_qnn_w8a8_full_rb5
