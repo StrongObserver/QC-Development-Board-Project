@@ -17,8 +17,8 @@ added deliberately.
 | L3 artificial IQA calibration | Adding LPIPS/DISTS/VSI/NR-IQA or metric thresholds | CSIQ first, then TID/LIVE/KADID if needed | metric-human alignment sanity, no SR claim | CSIQ downloaded; others registered |
 | L4 real degradation SR | Claiming real camera robustness | RealSR/DRealSR/real degradation data | paired real LR/HR or high-quality reference review | RealSR V3 x4 Test derived |
 | L5 text fidelity | Claiming text/signage robustness or text category fails | TextZoom / text-specific SR resources | text readability, OCR/recognition if available, visual veto | TextZoom test splits derived |
-| L6 app/device e2e | Moving from runner to product demo | Android app logs + device profiling | e2e latency, memory, power/thermal, fallback behavior | Schema/protocol ready; needs app integration |
-| L7 video/temporal | Moving from still image to video | future clips/sequences | flicker, temporal consistency, thermal sustained run | Future only |
+| L6 app/device e2e | Moving from runner to product demo | Android app logs + device profiling | e2e latency, memory, power/thermal, fallback behavior | Active: app_e2e rows, native-staging live runs, phase3 tensor compare, profile diagnostic, resource, and power evidence exist |
+| L7 video/temporal | Moving from still image to video | future clips/sequences | flicker, temporal consistency, thermal sustained run | Partial: screenrecord Demo Mode and every-N cadence evidence exist; full VideoCapture/Recorder remains product-scope gated |
 
 ## Promotion Rules
 
@@ -44,4 +44,40 @@ evaluation work is:
 5. Use RealSR/TextZoom as lifecycle layers when the project is ready to make
    real-camera or text-specific quality claims. They should not replace the
    main fixed gate.
+
+## Runtime Evidence Addendum
+
+Updated: 2026-07-23
+
+The app/device e2e layer is now active for Runtime evidence, not only schema:
+
+```text
+phase3 CameraX direct-YUV -> normal/custom QNN tensor compare:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_qnn_shared_camera_tensor_phase3_v2
+
+HardwareBuffer / AHardwareBuffer reachability:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_hardware_buffer_probe_stage_d
+
+Native YUV data-path breakdown:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_native_yuv_breakdown_internal
+
+Current app profile boundary:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_qnn_profile_basic_recheck_v2
+
+QNN profile alignment:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\runtime_exploration\20260723_profile_alignment
+
+Init / memory / switch alignment:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\runtime_exploration\20260723_init_memory_alignment
+
+Power matrix:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\runtime_exploration\20260723_power_matrix
+```
+
+Boundary:
+
+```text
+These are Runtime/device evidence layers. They do not replace fixed-image
+quality gates, visual review, or full VideoCapture/Recorder validation.
+```
 

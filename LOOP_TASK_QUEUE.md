@@ -122,6 +122,10 @@ validated normal-vs-shared tensor comparison with matching output checksum.
 Phase 3 further validates a real CameraX direct-YUV ROI written into normal and
 QNN custom input tensors with matching output checksum; this is still staging,
 not true CameraX buffer registration.
+AHardwareBuffer reachability is now proven for ImageAnalysis frames, and QNN
+SDK headers/examples show DMA_BUF/native memory registration support, but
+connecting that to the current app requires a larger native QNN lane rather
+than the Java TFLite Delegate path.
 AIMET CLE deployable W8A8 QNN export/profile and local RB5 full comparison are
 complete, but the result does not justify replacing the app model. TextZoom/OCR
 and RealSR are diagnostic or lifecycle evidence, not the project center. Demo
@@ -135,7 +139,8 @@ work is the measured data-path win; collection/log-volume fixes are not
 model/runtime acceleration claims. Current every-N cadence is also fixed for
 the optimized tensor default path. The remaining Runtime lanes are true
 CameraX-to-QNN buffer registration or full CameraX VideoCapture/Recorder product
-work, both trigger-gated.
+work, both trigger-gated. Java QNN Delegate profiling remains raw diagnostic
+data; official detailed profiling should use qnn-net-run or a native QNN route.
 
 RKNN-inspired evidence preserved as ignored/local artifacts:
 

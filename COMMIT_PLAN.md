@@ -2,7 +2,86 @@
 
 Updated: 2026-07-23
 
-## Current Closeout Plan - Stage D Probe And Temporal Fix
+## Current Closeout Plan - Stage D Continuation And Runtime Matrix
+
+The current worktree contains the continuation after `c58cd44`: HardwareBuffer /
+AHardwareBuffer reachability, native YUV kernel breakdown, integer YUV math
+check, Java QNN profile-mode boundary, runtime profile alignment, power matrix,
+EvalHub lifecycle update, and VideoCapture route matrix.
+
+Use explicit staging only. Do not use `git add .`.
+
+## Logical Commit Split
+
+```text
+test(runtime): probe hardware buffer and yuv internals
+docs(runtime): record profile and lifecycle decisions
+```
+
+## Explicit Path Groups
+
+Commit 1:
+
+```text
+RB5VisionLab/app/src/main/cpp/rb5visionlab.cpp
+RB5VisionLab/app/src/main/java/com/cyf/rb5visionlab/MainActivity.kt
+RB5VisionLab/app/src/main/java/com/cyf/rb5visionlab/SuperResolver.kt
+RB5_SR_lab/run_app_fixed_sample_replay.py
+RB5_SR_lab/run_app_hardware_buffer_probe.py
+RB5_SR_lab/run_app_native_yuv_breakdown_probe.py
+```
+
+Commit 2:
+
+```text
+FINAL_BENCHMARK_TABLE.md
+PROJECT_FULL_SCOPE_LEDGER.md
+LOOP_TASK_QUEUE.md
+NEXT_ACTION.md
+COMMIT_PLAN.md
+eval_hub/registries/lifecycle_matrix.md
+```
+
+## Verification For This Loop
+
+```bat
+RB5_SR_lab\.venv-eval\Scripts\python.exe -m py_compile RB5_SR_lab\run_app_hardware_buffer_probe.py RB5_SR_lab\run_app_native_yuv_breakdown_probe.py RB5_SR_lab\run_app_fixed_sample_replay.py
+cd /d C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5VisionLab
+set "JAVA_HOME=C:\Program Files\Android\Android Studio\jbr"
+gradlew.bat --no-daemon :app:assembleDebug
+adb -s ff5d3ab4 install -r RB5VisionLab\app\build\outputs\apk\debug\app-debug.apk
+RB5_SR_lab\.venv-eval\Scripts\python.exe RB5_SR_lab\run_app_hardware_buffer_probe.py --run-id 20260723_hardware_buffer_probe_stage_d --timeout-s 60
+RB5_SR_lab\.venv-eval\Scripts\python.exe RB5_SR_lab\run_app_native_yuv_breakdown_probe.py --run-id 20260723_native_yuv_breakdown_internal --timeout-s 60
+RB5_SR_lab\.venv-eval\Scripts\python.exe RB5_SR_lab\run_app_live_roi_benchmark.py --use-app-default --min-frames 120 --timeout-s 120 --run-id 20260723_integer_yuv_live_roi_120f
+RB5_SR_lab\.venv-eval\Scripts\python.exe RB5_SR_lab\run_app_fixed_sample_replay.py --assets offline_text_edge_128.png --model QUICKSR_W8A8 --profile-mode basic --timeout-s 60 --run-id 20260723_qnn_profile_basic_recheck_v2
+git diff --check
+```
+
+## Key Evidence
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_hardware_buffer_probe_stage_d
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_native_yuv_breakdown_internal
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_integer_yuv_live_roi_120f
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\runtime_exploration\20260723_profile_alignment
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\runtime_exploration\20260723_init_memory_alignment
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\runtime_exploration\20260723_power_matrix
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\runtime_exploration\20260723_videocapture_route_matrix
+```
+
+## Do Not Stage
+
+```text
+RB5_SR_lab/results/
+RB5_SR_lab/export_assets/
+evalhub_data/
+RB5VisionLab/app/build/
+RB5VisionLab/app/.cxx/
+external result folders under C:\Users\Admin\Videos\
+APK files
+```
+
+## Historical Closeout Plan - Stage D Probe And Temporal Fix
 
 The current worktree contains the P1-P6 engineering loop after the runtime docs
 checkpoint `b42b3c0`. It adds a CameraX direct-YUV -> QNN custom tensor compare

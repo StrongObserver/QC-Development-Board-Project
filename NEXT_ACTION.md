@@ -181,6 +181,38 @@ No new `fail` visual-review item appeared. Existing conditional cases remain
 caveated route evidence; do not start a new quality/model change without a
 fresh human-visible failure crop.
 
+Current P0-P14 continuation evidence:
+P2 HardwareBuffer reachability:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_hardware_buffer_probe_stage_d
+ImageProxy.image.hardwareBuffer is reachable; AHardwareBuffer lockPlanes passes
+with 3 YUV planes. Boundary: no QNN registration yet.
+
+P4 phase3 stability:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\runtime_exploration\20260723_phase3_stability_summary
+5/5 phase3 runs pass with checksum match.
+
+P5/P6 native YUV path:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_native_yuv_breakdown_internal
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_integer_yuv_live_roi_120f
+JNI address/pin/release overhead is tiny; pixel loop dominates. Integer YUV
+formula keeps MAD 0.0 and preserves live e2e 8/9/9ms, with only small YUV-fill
+benefit.
+
+P8/P9 profile decision:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\runtime_exploration\20260723_profile_alignment
+Internal Qualcomm-AI answer confirms Java QNN Delegate profile data is raw and
+not qnn-profile-viewer compatible; official detailed profiling should use
+qnn-net-run/native QNN routes.
+
+P10/P11/P12 runtime lifecycle:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\runtime_exploration\20260723_init_memory_alignment
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\runtime_exploration\20260723_power_matrix
+EvalHub L6 app/device layer is active; Video L7 remains partial.
+
+P13/P14 decisions:
+Full CameraX VideoCapture/Recorder remains product-scope gated. No new visual
+`fail` exists, so no quality/model change is started.
+
 AIMET CLE W8A8 deployability:
 C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\export_assets\real_esrgan_general_x4v3-cle-qnn-w8a8-qcs8550-20260723
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_cle_qnn_w8a8_full_rb5
