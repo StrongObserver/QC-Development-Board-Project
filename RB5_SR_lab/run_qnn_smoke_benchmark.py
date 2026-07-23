@@ -30,7 +30,7 @@ QAIRT_ROOT = Path(r"C:\Qualcomm\QAIRT\v2.45.0.260326\qairt\2.45.0.260326")
 QNN_LOCAL_RUN = REPO_ROOT / "RB5_SR_lab" / "qnn_local_run"
 DEVICE_SERIAL = "ff5d3ab4"
 DEVICE_DIR = "/data/local/tmp/qnn_sr"
-CONTEXT_BINARY = (
+DEFAULT_CONTEXT_BINARY = (
     REPO_ROOT
     / "RB5_SR_lab"
     / "export_assets"
@@ -39,8 +39,8 @@ CONTEXT_BINARY = (
     / "real_esrgan_general_x4v3.bin"
 )
 
-OUTPUT_SCALE = 0.005237185396254063
-OUTPUT_ZERO_POINT = 25
+DEFAULT_OUTPUT_SCALE = 0.005237185396254063
+DEFAULT_OUTPUT_ZERO_POINT = 25
 
 
 @dataclass(frozen=True)
@@ -122,13 +122,13 @@ def image_to_raw_rgb(path: Path, raw_path: Path) -> None:
     raw_path.write_bytes(rgb.tobytes())
 
 
-def qnn_raw_to_bgr(raw_path: Path) -> np.ndarray:
+def qnn_raw_to_bgr(raw_path: Path, output_scale: float, output_zero_point: int) -> np.ndarray:
     raw = np.fromfile(raw_path, dtype=np.uint8)
     expected = 1 * 512 * 512 * 3
     if raw.size != expected:
         raise ValueError(f"expected {expected} bytes, got {raw.size}: {raw_path}")
     y = raw.reshape(1, 512, 512, 3)[0]
-    rgb_f32 = np.clip((y.astype(np.float32) - OUTPUT_ZERO_POINT) * OUTPUT_SCALE, 0.0, 1.0)
+    rgb_f32 = np.clip((y.astype(np.float32) - output_zero_point) * output_scale, 0.0, 1.0)
     rgb_u8 = (rgb_f32 * 255.0 + 0.5).astype(np.uint8)
     return cv2.cvtColor(rgb_u8, cv2.COLOR_RGB2BGR)
 
@@ -472,9 +472,9 @@ def write_blocked_closeout(
     (out_root / "NEXT_ACTION.md").write_text("\n".join(next_action) + "\n", encoding="utf-8")
 
 
-def preflight_check() -> tuple[bool, str, str]:
+def preflight_check(context_binary: Path) -> tuple[bool, str, str]:
     messages: list[str] = []
-    for path in [QAIRT_ROOT, CONTEXT_BINARY, QNN_LOCAL_RUN / "run_on_device.sh"]:
+    for path in [QAIRT_ROOT, context_binary, QNN_LOCAL_RUN / "run_on_device.sh"]:
         if not path.exists():
             messages.append(f"MISSING_PATH: {path}")
     devices = run(["adb", "devices"], check=False)
@@ -689,7 +689,7 @@ def write_next_action(
     (out_root / "NEXT_ACTION.md").write_text("\n".join(next_action) + "\n", encoding="utf-8")
 
 
-def stage_common_files() -> None:
+def stage_common_files(context_binary: Path) -> None:
     adb("root")
     adb("shell", f"mkdir -p {DEVICE_DIR}")
     pushes = [
@@ -700,7 +700,7 @@ def stage_common_files() -> None:
         (QAIRT_ROOT / "lib" / "aarch64-android" / "libQnnHtpV73Stub.so", f"{DEVICE_DIR}/libQnnHtpV73Stub.so"),
         (QAIRT_ROOT / "lib" / "aarch64-android" / "libQnnHtpPrepare.so", f"{DEVICE_DIR}/libQnnHtpPrepare.so"),
         (QAIRT_ROOT / "lib" / "aarch64-android" / "libQnnSystem.so", f"{DEVICE_DIR}/libQnnSystem.so"),
-        (CONTEXT_BINARY, f"{DEVICE_DIR}/real_esrgan_general_x4v3.bin"),
+        (context_binary, f"{DEVICE_DIR}/real_esrgan_general_x4v3.bin"),
         (QNN_LOCAL_RUN / "HtpConfigFile.json", f"{DEVICE_DIR}/HtpConfigFile.json"),
         (QNN_LOCAL_RUN / "PerfSetting.conf", f"{DEVICE_DIR}/PerfSetting.conf"),
         (QNN_LOCAL_RUN / "run_on_device.sh", f"{DEVICE_DIR}/run_on_device.sh"),
@@ -721,6 +721,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--repeats", type=int, default=1, help="Run each selected case this many times for p50/p95 timing.")
     parser.add_argument("--run-id", default="", help="Optional result folder name.")
+    parser.add_argument(
+        "--context-binary",
+        type=Path,
+        default=DEFAULT_CONTEXT_BINARY,
+        help="QNN context binary to stage as real_esrgan_general_x4v3.bin.",
+    )
+    parser.add_argument("--output-scale", type=float, default=DEFAULT_OUTPUT_SCALE)
+    parser.add_argument("--output-zero-point", type=int, default=DEFAULT_OUTPUT_ZERO_POINT)
     return parser.parse_args()
 
 
@@ -737,7 +745,8 @@ def main() -> None:
     out_root.mkdir(parents=True, exist_ok=True)
     raw_inputs.mkdir(parents=True, exist_ok=True)
 
-    preflight_ok, blocked_by, preflight_stdout = preflight_check()
+    context_binary = args.context_binary.resolve()
+    preflight_ok, blocked_by, preflight_stdout = preflight_check(context_binary)
     if not preflight_ok:
         loop_state = environment_blocked_payload(
             run_id=run_id,
@@ -751,11 +760,11 @@ def main() -> None:
         print(f"[blocked] wrote {out_root}")
         return
 
-    for path in [QAIRT_ROOT, CONTEXT_BINARY, QNN_LOCAL_RUN / "run_on_device.sh"]:
+    for path in [QAIRT_ROOT, context_binary, QNN_LOCAL_RUN / "run_on_device.sh"]:
         require_file(path)
 
     print(f"[stage] {DEVICE_DIR}")
-    stage_common_files()
+    stage_common_files(context_binary)
 
     cases = load_cases(args.input_set)
     rows: list[dict[str, str]] = []
@@ -797,7 +806,7 @@ def main() -> None:
             raw_out = current_pull_dir / "output" / "Result_0" / "upscaled_image_native.raw"
             require_file(raw_out)
             raw_out_size = raw_out.stat().st_size
-            qnn_bgr = qnn_raw_to_bgr(raw_out)
+            qnn_bgr = qnn_raw_to_bgr(raw_out, args.output_scale, args.output_zero_point)
             repeat_profiles.append(parse_profile(current_pull_dir / "output" / "profile_viewer.csv"))
 
         if qnn_bgr is None:
@@ -832,6 +841,9 @@ def main() -> None:
             "source_id": case.source_id,
             "main_variable": f"local RB5 QNN W8A8 {run_scope_label(args.input_set)} timing and validity",
             "frozen_variables": f"{input_csv_label(args.input_set)}; Real-ESRGAN W8A8 QNN context; 128 input; 512 output; qnn-net-run retrieve_context",
+            "context_binary": str(context_binary),
+            "output_scale": f"{args.output_scale:.12g}",
+            "output_zero_point": str(args.output_zero_point),
             "repeat_count": str(args.repeats),
             "wall_ms": wall_avg,
             "wall_p50_ms": wall_p50,

@@ -120,6 +120,12 @@ def write_csv(path: Path, rows: list[dict[str, object]]) -> None:
         writer.writerows(rows)
 
 
+def write_empty_csv(path: Path, fieldnames: list[str]) -> None:
+    with path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+
+
 def percentile(values: list[float], q: float) -> float:
     if not values:
         raise ValueError("cannot summarize an empty timing list")
@@ -141,6 +147,7 @@ def summarize_stage(run_id: str, stage: str, values: list[float]) -> dict[str, o
         "min_ms": f"{min(values):.1f}",
         "p50_ms": f"{percentile(values, 0.50):.1f}",
         "p95_ms": f"{percentile(values, 0.95):.1f}",
+        "p99_ms": f"{percentile(values, 0.99):.1f}",
         "max_ms": f"{max(values):.1f}",
         "metric_role": "supporting_evidence" if stage not in {"sampleCopy"} else "diagnostic",
     }
@@ -238,6 +245,7 @@ def add_normalized_session_indices(rows: list[dict[str, object]], skip_rows: lis
 
 
 def collect_logcat(
+    out_dir: Path,
     model: str,
     min_frames: int,
     timeout_s: int,
@@ -274,21 +282,19 @@ def collect_logcat(
         raise RuntimeError(f"{PACKAGE_NAME} did not stop cleanly before collection")
     adb("logcat", "-c")
     prepare_device_interactive()
-    started = adb(*start_cmd, check=False)
-    if started.returncode != 0:
-        raise RuntimeError(started.stdout)
-
+    log_path = out_dir / "raw_logcat.txt"
     final_log = ""
     final_rows: list[dict[str, object]] = []
     start_time = time.time()
     deadline = start_time + timeout_s
     duration_deadline = start_time + duration_s if duration_s > 0 else 0.0
-    try:
-        while time.time() < deadline:
-            time.sleep(2)
-            dump = adb(
+    with log_path.open("w", encoding="utf-8") as log_file:
+        proc = subprocess.Popen(
+            [
+                "adb",
+                "-s",
+                DEVICE_SERIAL,
                 "logcat",
-                "-d",
                 "-v",
                 "time",
                 "RB5_SR:D",
@@ -296,19 +302,35 @@ def collect_logcat(
                 "RB5_QNN:D",
                 "AndroidRuntime:E",
                 "*:S",
-                check=False,
-            )
-            final_log = dump.stdout
-            parse_source = final_log if tensor_ready else latest_session_log(final_log)
-            if tensor_ready:
-                final_rows = parse_live_rows(parse_source, model, True, session_id)
-            else:
-                final_rows, _ = parse_live_rows_with_optimized_fallback(parse_source, model, session_id)
-            duration_done = duration_s <= 0 or time.time() >= duration_deadline
-            if len(final_rows) >= min_frames and duration_done:
-                break
-    finally:
-        adb("shell", "am", "force-stop", PACKAGE_NAME, check=False)
+            ],
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        try:
+            started = adb(*start_cmd, check=False)
+            if started.returncode != 0:
+                raise RuntimeError(started.stdout)
+            while time.time() < deadline:
+                time.sleep(2)
+                final_log = log_path.read_text(encoding="utf-8", errors="replace")
+                parse_source = final_log if tensor_ready else latest_session_log(final_log)
+                if tensor_ready:
+                    final_rows = parse_live_rows(parse_source, model, True, "")
+                else:
+                    final_rows, _ = parse_live_rows_with_optimized_fallback(parse_source, model, session_id)
+                duration_done = duration_s <= 0 or time.time() >= duration_deadline
+                if len(final_rows) >= min_frames and duration_done:
+                    break
+        finally:
+            adb("shell", "am", "force-stop", PACKAGE_NAME, check=False)
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
+    final_log = log_path.read_text(encoding="utf-8", errors="replace")
     return final_log, final_rows
 
 
@@ -390,11 +412,11 @@ def write_summary(
     app_e2e_mirror: Path,
     skip_rows: list[dict[str, object]],
 ) -> None:
-    def stage_pair(stage: str) -> tuple[str, str]:
+    def stage_triplet(stage: str) -> tuple[str, str, str]:
         for row in stage_rows:
             if row["stage"] == stage:
-                return str(row["p50_ms"]), str(row["p95_ms"])
-        return "", ""
+                return str(row["p50_ms"]), str(row["p95_ms"]), str(row.get("p99_ms", ""))
+        return "", "", ""
 
     lines = [
         f"# App Live ROI Summary - {model}",
@@ -408,7 +430,7 @@ def write_summary(
         "",
         "## Key Timing",
         "",
-        "| stage | Real-ESRGAN W8A8 baseline p50/p95 ms | this run p50/p95 ms |",
+        "| stage | Real-ESRGAN W8A8 baseline p50/p95 ms | this run p50/p95/p99 ms |",
         "| --- | ---: | ---: |",
     ]
     stage_map = [
@@ -426,10 +448,11 @@ def write_summary(
         "e2e_ms": "e2e",
     }
     for baseline_stage, script_stage, label in stage_map:
-        p50, p95 = stage_pair(stage_lookup[script_stage])
+        p50, p95, p99 = stage_triplet(stage_lookup[script_stage])
         base = baseline.get(baseline_stage, ("", ""))
         base_text = f"{base[0]} / {base[1]}" if base[0] else "n/a"
-        lines.append(f"| `{label}` | {base_text} | {p50} / {p95} |")
+        this_text = f"{p50} / {p95} / {p99}" if p99 else f"{p50} / {p95}"
+        lines.append(f"| `{label}` | {base_text} | {this_text} |")
     lines.extend(
         [
             "",
@@ -507,6 +530,7 @@ def main() -> None:
     if tensor_mode and every_n > 1:
         raise SystemExit("[blocked] --every-n is only supported for the Bitmap live ROI path")
     log_text, frame_rows = collect_logcat(
+        out_dir,
         model_label,
         args.min_frames,
         args.timeout_s,
@@ -529,10 +553,26 @@ def main() -> None:
         session_log_text = full_session_log_text if optimized_tensor_fallback else filter_session_lines(full_session_log_text, run_id)
         skip_rows = parse_skip_rows(session_log_text, run_id)
     add_normalized_session_indices(frame_rows, skip_rows)
-    (out_dir / "raw_logcat.txt").write_text(log_text, encoding="utf-8")
     (out_dir / "session_logcat.txt").write_text(session_log_text, encoding="utf-8")
     write_csv(out_dir / "frame_metrics.csv", frame_rows)
-    write_csv(out_dir / "skip_metrics.csv", skip_rows)
+    if skip_rows:
+        write_csv(out_dir / "skip_metrics.csv", skip_rows)
+    else:
+        write_empty_csv(
+            out_dir / "skip_metrics.csv",
+            [
+                "index",
+                "backend",
+                "model",
+                "session_id",
+                "every_n",
+                "frame_index",
+                "enhanced_index",
+                "raw_log_prefix",
+                "session_frame_index",
+                "session_enhanced_index",
+            ],
+        )
 
     blocked_by = "" if len(frame_rows) >= args.min_frames else f"parsed {len(frame_rows)} frames, expected at least {args.min_frames}"
     loop_state = make_loop_state(run_id, out_dir, model_label, len(frame_rows), args.min_frames, blocked_by, every_n, len(skip_rows))

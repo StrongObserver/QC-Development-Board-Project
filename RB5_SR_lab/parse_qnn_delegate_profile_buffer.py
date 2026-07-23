@@ -32,10 +32,8 @@ def parse_events(data: bytes) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     for event in KNOWN_EVENTS:
         start = data.find(event)
-        if start < 0:
-            continue
         window_start = max(0, start - 64)
-        prefix = data[window_start:start]
+        prefix = data[window_start:start] if start >= 0 else b""
         ints = []
         for i in range(0, max(0, len(prefix) - 3), 4):
             value = int.from_bytes(prefix[i : i + 4], "little", signed=False)
@@ -44,7 +42,8 @@ def parse_events(data: bytes) -> list[dict[str, object]]:
         rows.append(
             {
                 "event": event.decode("ascii"),
-                "offset": start,
+                "present": start >= 0,
+                "offset": start if start >= 0 else "",
                 "candidate_values_little_endian": ";".join(str(v) for v in ints[-6:]),
                 "note": "best-effort diagnostic; value units/fields are not officially decoded",
             }
@@ -73,24 +72,52 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     data = profile.read_bytes()
     rows = parse_events(data)
+    strings = printable_strings(data)
+    present_rows = [row for row in rows if row["present"]]
     with (out_dir / "profile_events_diagnostic.csv").open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
             f,
-            fieldnames=["event", "offset", "candidate_values_little_endian", "note"],
+            fieldnames=["event", "present", "offset", "candidate_values_little_endian", "note"],
         )
         writer.writeheader()
         writer.writerows(rows)
-    (out_dir / "profile_strings.txt").write_text("\n".join(printable_strings(data)) + "\n", encoding="utf-8")
+    (out_dir / "profile_strings.txt").write_text("\n".join(strings) + "\n", encoding="utf-8")
+    with (out_dir / "diagnostic_summary.csv").open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=[
+                "profile",
+                "bytes",
+                "known_events",
+                "recognized_events",
+                "printable_strings",
+                "viewer_boundary",
+            ],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "profile": str(profile),
+                "bytes": len(data),
+                "known_events": len(KNOWN_EVENTS),
+                "recognized_events": len(present_rows),
+                "printable_strings": len(strings),
+                "viewer_boundary": "qnn-profile-viewer rejected Java raw delegate buffer; this is diagnostic-only, not official per-op decode",
+            }
+        )
     summary = [
         "# QNN Delegate Profile Buffer Diagnostic",
         "",
         f"- profile: `{profile}`",
         f"- bytes: {len(data)}",
-        f"- recognized_events: {len(rows)}",
+        f"- known_events: {len(KNOWN_EVENTS)}",
+        f"- recognized_events: {len(present_rows)}",
+        f"- printable_strings: {len(strings)}",
         "- boundary: best-effort event/string extraction; qnn-profile-viewer rejected this raw delegate buffer",
         "",
         "## Outputs",
         "",
+        f"- summary: `{out_dir / 'diagnostic_summary.csv'}`",
         f"- events: `{out_dir / 'profile_events_diagnostic.csv'}`",
         f"- strings: `{out_dir / 'profile_strings.txt'}`",
     ]
