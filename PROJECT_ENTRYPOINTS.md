@@ -336,6 +336,6 @@ Current next engineering direction is usually:
 3. pursue AIMET deployable export only with explicit approval for remote AI Hub
    jobs, or
 4. scope a larger CameraX-to-QNN memory/data-path experiment only if it has a
-   clear target beyond the current 10/12ms direct-YUV baseline.
+   clear target beyond the current 8/9/9ms native-staging direct-YUV baseline.
 
 Always let the user's current oral-template prompt choose between these.

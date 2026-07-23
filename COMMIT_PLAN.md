@@ -2,7 +2,62 @@
 
 Updated: 2026-07-23
 
-## Current Closeout Plan - Runtime Evidence And Native Staging
+## Current Closeout Plan - Runtime Documentation Sweep
+
+The current worktree is a documentation-only sweep triggered by the latest oral
+template. It aligns the Runtime/Heterogeneous framing, current native-staging
+`8/9/9ms` app evidence, current Demo Mode evidence, and trigger-gated
+zero-copy/video boundaries.
+
+Use explicit staging only. Do not use `git add .`.
+
+## Logical Commit Split
+
+```text
+docs(runtime): align final runtime evidence boundaries
+```
+
+## Explicit Path Group
+
+```text
+README.md
+SHOWCASE_INDEX.md
+FINAL_BENCHMARK_TABLE.md
+INTERVIEW_ORAL_SCRIPT.md
+DEMO_RUNBOOK.md
+CHECKPOINT_REPORT.md
+PROJECT_ENTRYPOINTS.md
+HARNESS_LOOP_ENGINEERING.md
+LOOP_TASK_QUEUE.md
+PROJECT_FULL_SCOPE_LEDGER.md
+COMMIT_PLAN.md
+```
+
+## Verification For This Sweep
+
+```bat
+git diff --check
+rg -n "current.*10/12|Current.*10/12|latest.*10/12|Latest.*10/12|当前.*10/12|target beyond.*10/12|10/12ms direct-YUV baseline|around 10/12ms|display at about 10/12ms|AIMET deployable export \| blocked_needs_user" README.md SHOWCASE_INDEX.md FINAL_BENCHMARK_TABLE.md FINAL_INTERVIEW_PACKAGE.md SHOWCASE_MATERIALS.md SHOWCASE_NARRATIVE.md INTERVIEW_ORAL_SCRIPT.md INTERVIEW_TALK_TRACK.md RESUME_PROJECT_DRAFT.md DEMO_RUNBOOK.md ZERO_COPY_SCOPE_PLAN.md NEXT_ACTION.md CHECKPOINT_REPORT.md PROJECT_ENTRYPOINTS.md LOOP_TASK_QUEUE.md PROJECT_FULL_SCOPE_LEDGER.md HARNESS_LOOP_ENGINEERING.md
+rg -n "8/9/9ms|20260723_native_staging_default_live_roi_20min|20260723_demo_mode_direct_yuv_current_timing|runtime-harness-reframe|showcase \| Runtime" README.md SHOWCASE_INDEX.md FINAL_BENCHMARK_TABLE.md FINAL_INTERVIEW_PACKAGE.md SHOWCASE_MATERIALS.md SHOWCASE_NARRATIVE.md INTERVIEW_ORAL_SCRIPT.md INTERVIEW_TALK_TRACK.md RESUME_PROJECT_DRAFT.md DEMO_RUNBOOK.md ZERO_COPY_SCOPE_PLAN.md NEXT_ACTION.md CHECKPOINT_REPORT.md PROJECT_ENTRYPOINTS.md LOOP_TASK_QUEUE.md PROJECT_FULL_SCOPE_LEDGER.md HARNESS_LOOP_ENGINEERING.md
+```
+
+No device rerun is required for this sweep because it only updates documents to
+point at already-collected evidence.
+
+## Do Not Stage
+
+```text
+C:\Users\Admin\Nutstore\1\Typora_save\自己的项目\RB5 Gen2_AI上下文.md
+RB5_SR_lab/results/
+RB5_SR_lab/export_assets/
+evalhub_data/
+RB5VisionLab/app/build/
+RB5VisionLab/app/.cxx/
+external result folders under C:\Users\Admin\Videos\
+APK files
+```
+
+## Historical Closeout Plan - Runtime Evidence And Native Staging
 
 The current worktree contains the verified follow-up after the Runtime reframe:
 stream-log/P99 tooling, AIMET CLE deployability, native staging data-path

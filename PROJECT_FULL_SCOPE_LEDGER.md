@@ -62,19 +62,17 @@ only an image-enhancement app.
 | eval-lifecycle | RealSR/TextZoom lifecycle diagnostics | done | RealSR mini and TextZoom OCR mini exist; both are diagnostic/lifecycle evidence | Do not replace 24-case main gate |
 | temporal | every-N cadence and demo video boundary | done | `sr_every_n=3` smoke, Demo Mode screenrecord, and `DEMO_RUNBOOK.md` video capture boundary exist | Do not claim full VideoCapture/Recorder |
 | tile | post-capture tile workload evidence | done | Host MVP, host comparison, Android app tile entry, same-frame QuickSR vs Real-ESRGAN evidence exist | Treat as supporting workload evidence |
-| showcase | Runtime resume / README / demo / interview package | in_progress | Materials exist but are being reframed from image-enhancement to Runtime | Finish text sweep |
+| showcase | Runtime resume / README / demo / interview package | done | Runtime README, showcase, demo, benchmark, oral, interview, and checkpoint materials use the QCS8550 Runtime framing and current `8/9/9ms` native-staging evidence | Maintain only when new evidence appears |
 
 ## Current Required Next Unfinished Items
 
 The current checkpoint is strong enough for showcase. The remaining items are
 Runtime-evidence or explicit-decision lanes, not old SR feature gaps:
 
-1. `showcase`: finish the Runtime/Heterogeneous wording sweep around the final
-   benchmark table.
-2. `zero-copy`: only reopen as a larger CameraX-to-QNN buffer-registration
+1. `zero-copy`: only reopen as a larger CameraX-to-QNN buffer-registration
    experiment with target, budget, and rollback beyond the 8/9/9ms native-staging
    baseline.
-3. `video`: full CameraX VideoCapture/Recorder still needs explicit product
+2. `video`: full CameraX VideoCapture/Recorder still needs explicit product
    need because it is a different pipeline from the current screenrecorded live
    ROI demo.
 

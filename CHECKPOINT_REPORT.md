@@ -10,9 +10,10 @@ The project is at a clean, trigger-gated Runtime checkpoint.
 QCS8550 Android app Runtime
 -> CameraX PlaneProxy direct ByteBuffer
 -> native ROI / rotation / YUV->RGB
+-> reusable native RGB staging buffer
 -> QuickSRNetSmall W8A8 TFLite
 -> QNN TFLite Delegate / HTP
--> display at about 10/12ms app e2e p50/p95
+-> display at about 8/9/9ms app e2e p50/p95/p99
 ```
 
 Local and remote state:
@@ -31,11 +32,11 @@ stable rollback tag: rb5-stable-20260720
 | Local qnn-net-run route works | full 24-case QNN accelerator p50/p95 about `9.75/10.39ms` |
 | Android app QNN/HTP path works | `20260718_app_qnn_delegate_fixed_live_rb5` |
 | App bottleneck was not QNN inference | `ImageProxy.toBitmap()` was about `41/43ms` before the 1280x960 fix |
-| Current default live route is usable | latest app smoke reaches `10/12ms` e2e p50/p95 |
-| RKNN-inspired runner/logging experiment | Explored stream-log collection and live profile slimming, then reverted code; keep as ignored evidence only |
+| Current default live route is usable | native staging 20-minute run reaches `8/9/9ms` e2e p50/p95/p99 with 35719 frames and 0 skipped |
+| RKNN-inspired runner/logging experiment | Restored useful stream-log collection, P99 metrics, live profile slimming, and native staging evidence; keep generated artifacts ignored |
 | Output conversion was reduced | latest postprocess p50/p95 is `1/1ms` |
-| Board-level power boundary exists | 5-minute direct-YUV mean about `6.30W`, battery-node estimate only |
-| Sustained short run is stable enough for showcase | 60s e2e first/last p50/p95 `15/20ms -> 16/21ms` |
+| Board-level power boundary exists | 20-minute native-staging direct-YUV mean about `4.96W`, battery-node estimate only |
+| Sustained run is stable enough for the current narrow claim | 20-minute app e2e p50/p95/p99 `8/9/9ms`, battery temp `24.0C -> 24.0C` |
 | every-N route is classified | `everyN=3` gives about `9.9` effective enhanced FPS, not lower per-frame latency |
 | post-capture tile route is available | Real-ESRGAN tile is the quality-priority still route; QuickSR remains speed/conservative baseline |
 | route decisions are evidence-based | automatic dual-model live routing is not default because switching costs about `369ms` |
@@ -61,8 +62,8 @@ AI Hub profile, local qnn-net-run profile, and app e2e timing as one number
 | Output postprocess | closed | Reopen only on regression |
 | every-N ImageAnalysis | done | Cadence evidence only, not latency win |
 | Java/Kotlin shared memory | blocked_technical | `qtld-release.aar` Java wrapper exposes no custom allocation API |
-| C++ shared-memory probe | gated | Only start with target beyond `10/12ms` app e2e and rollback plan |
-| AIMET deployable export | blocked_needs_user | Local CLE deployability exists, but remote AI Hub quantize/compile/profile needs explicit approval |
+| C++ shared-memory probe | gated | Only start with target beyond `8/9/9ms` app e2e and rollback plan |
+| AIMET deployable export | done | Remote AI Hub W8A8 QNN export/profile and local RB5 full run succeeded, but deltas do not justify replacing the app model |
 | mixed precision | blocked_technical | Current generated Real-ESRGAN exporter rejects w8a16 |
 | LPIPS / NIQE / OCR | blocked_needs_user | Requires visual/metric conflict or text-readability claim |
 | CameraX VideoCapture | blocked_needs_user | Requires explicit demo/product need |
@@ -118,8 +119,8 @@ Continue only when one of these becomes true:
 ```text
 1. A concrete W8A8-vs-float failure crop appears.
 2. Visual review conflicts with PSNR/SSIM, or a text/OCR claim is required.
-3. A deeper zero-copy probe has a clear target beyond the 10/12ms direct-YUV baseline.
+3. A deeper zero-copy probe has a clear target beyond the 8/9/9ms native-staging direct-YUV baseline.
 4. A video demo/product path is explicitly needed.
-5. A longer Runtime stability claim needs 20-30 minute p50/p95/p99, frame, and temperature evidence.
+5. A stronger Runtime stability claim needs a rerun or additional evidence beyond the current 20-minute p50/p95/p99, frame, and temperature record.
 6. A cold/warm init or sticky-memory claim needs a consolidated table or rerun.
 ```

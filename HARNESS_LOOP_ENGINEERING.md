@@ -229,8 +229,9 @@ Real-ESRGAN remains the QNN/HTP deployment milestone and perceptual comparison w
 Automatic dual-model live routing is not justified as the default path yet.
 every-N ImageAnalysis is a valid cadence/product probe, not a per-frame latency win.
 QNN shared memory is a C++ delegate/native probe lane, not a direct Kotlin wrapper patch.
-Direct-YUV native tensor input is the default app data path, around 10/12ms e2e
-p50/p95 in the current smoke. It is still not true QNN input zero-copy.
+Direct-YUV native staging tensor input is the default app data path, around
+8/9/9ms e2e p50/p95/p99 in the current 20-minute run. It is still not true QNN
+input zero-copy.
 AIMET, cold/warm init, sticky memory, sustained P99, QNN profile boundaries,
 shared-memory probes, and real-camera or video expansion remain valid future
 Runtime evidence lanes when their triggers are met.

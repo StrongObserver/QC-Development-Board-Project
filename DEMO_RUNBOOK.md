@@ -10,7 +10,7 @@ timing record.
 Current default:
 
 ```text
-QNN backend + QuickSRNetSmall W8A8 + direct-YUV native tensor input path
+QNN backend + QuickSRNetSmall W8A8 + direct-YUV native staging tensor input path
 ```
 
 Real-ESRGAN remains available for comparison through explicit UI / intent
@@ -68,22 +68,25 @@ RB5_SR_lab\.venv-eval\Scripts\python.exe RB5_SR_lab\run_app_live_roi_benchmark.p
 Reference result:
 
 ```text
-C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260722_app_default_direct_yuv_live_roi_120f
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_native_staging_default_live_roi_120f
 ```
 
 Current reference numbers:
 
 ```text
-app e2e p50/p95: 10.0 / 12.0 ms
-analyzer p50/p95: 10.0 / 13.0 ms
+app e2e p50/p95/p99: 8.0 / 9.0 / 10.0 ms
+analyzer p50/p95/p99: 8.0 / 10.0 / 10.6 ms
 QNN inference p50/p95: 2.0 / 2.0 ms
 postprocess p50/p95: 2.0 / 2.0 ms
 ```
 
-Reference result:
+20-minute sustained reference:
 
 ```text
-C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260722_direct_yuv_live_roi_120s_sustained
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_native_staging_default_live_roi_20min
+frames=35719
+skipped=0
+app e2e p50/p95/p99=8/9/9ms
 ```
 
 ## Short Sustained Check
@@ -95,7 +98,7 @@ cd /d C:\Users\Admin\Desktop\QC-Development-Board-Project
 RB5_SR_lab\.venv-eval\Scripts\python.exe RB5_SR_lab\run_app_sustained_live_roi.py --model QUICKSR_W8A8 --duration-s 120 --thermal-interval-s 30 --run-id 20251110_output_reuse_quicksr_live_roi_120s
 ```
 
-Reference result:
+Historical output-reuse reference:
 
 ```text
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20251110_output_reuse_quicksr_live_roi_120s
@@ -158,7 +161,8 @@ RB5_SR_lab\.venv-eval\Scripts\python.exe RB5_SR_lab\run_app_live_roi_benchmark.p
 Reference evidence:
 
 ```text
-C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_demo_mode_wide_clear_20s
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_demo_mode_direct_yuv_current_20s
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_demo_mode_direct_yuv_current_timing
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260720_demo_relation_aligned_v3\demo_relation
 ```
 
@@ -205,10 +209,11 @@ Reason:
 ```text
 old tensor-ready e2e p50/p95: 20.0 / 25.7 ms
 old native-rotated tensor e2e p50/p95: 14.0 / 20.0 ms
-direct-YUV default e2e p50/p95: 10.0 / 12.0 ms
-The current default reads CameraX PlaneProxy direct ByteBuffers in native code
-and keeps the existing QNN Delegate tensor path. This is not true QNN input
-zero-copy.
+direct-YUV default before native staging e2e p50/p95: 10.0 / 12.0 ms
+current direct-YUV native staging e2e p50/p95/p99: 8.0 / 9.0 / 9.0 ms over 20 minutes
+The current default reads CameraX PlaneProxy direct ByteBuffers in native code,
+reuses a native RGB staging buffer, and keeps the existing QNN Delegate tensor
+path. This is not true QNN input zero-copy.
 ```
 
 ## What Not To Do

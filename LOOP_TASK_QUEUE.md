@@ -95,7 +95,7 @@ original project design unless there is concrete evidence that it cannot work.
 
 | order | id | state | task | success metric | stop trigger |
 | --- | --- | --- | --- | --- | --- |
-| 1 | runtime-harness-reframe | in_progress | Reframe Harness/Loop text around QCS8550 Runtime and heterogeneous optimization | entrypoint, queue, ledger, route/showcase/interview docs no longer center the project as only image enhancement | text sweep complete |
+| 1 | runtime-harness-reframe | done | Reframe Harness/Loop text around QCS8550 Runtime and heterogeneous optimization | entrypoint, queue, ledger, route/showcase/interview docs no longer center the project as only image enhancement | text sweep complete |
 | 2 | final-benchmark-table | done | Consolidate final benchmark/result table | one compact table separates AI Hub profile, qnn-net-run accelerator, app e2e, cold/warm init, memory, and power boundaries | `FINAL_BENCHMARK_TABLE.md` generated |
 | 3 | sustained-p99-thermal | done | Optional sustained app runtime run | current native-staging 20-minute direct-YUV run has 35719 frames, e2e p50/p95/p99 `8/9/9ms`, and board-level battery-node power mean about `4.96W` with temp `24.0C -> 24.0C` | maintain as app timing plus board-level estimate only |
 | 4 | init-memory-table | done | Cold/warm init, model switching, and sticky memory summary | Resource probes record Real/Quick init, switch cost, PSS deltas, and sticky memory boundary | evidence complete |
@@ -106,7 +106,8 @@ original project design unless there is concrete evidence that it cannot work.
 
 ## Current Closeout Task
 
-Current active task: `runtime-harness-reframe`.
+Current active task: `runtime-harness-reframe` is closed by the Runtime wording
+and evidence sweep.
 
 Current open work is no longer tile, D8-config, output postprocess, app e2e
 schema bring-up, every-N smoke, invoke-level shared-memory probing, or
@@ -115,22 +116,22 @@ closed unless a regression appears. The new open work is to make the Harness and
 Loop system match the refined project design: Runtime / deployment / profiling /
 heterogeneous optimization.
 
-Direct PlaneProxy ByteBuffer -> native ROI/RGB is now the compiled default
-QNN/QuickSR live path. QNN shared-memory Phase 2 has validated normal-vs-shared
-tensor comparison with matching output checksum. AIMET-Torch CLE is locally
-feasible, but a deployable CLE W8A8 TFLite/QNN artifact still requires an
-explicit remote AI Hub export decision. TextZoom/OCR and RealSR are diagnostic
-or lifecycle evidence, not the project center. Demo Mode wide-FoV video capture
-is validated through `adb screenrecord` on the live ROI UI; it is not a true
-VideoCapture SR pipeline.
+Direct PlaneProxy ByteBuffer -> native ROI/RGB -> reusable native RGB staging
+is now the compiled default QNN/QuickSR live path. QNN shared-memory Phase 2 has
+validated normal-vs-shared tensor comparison with matching output checksum.
+AIMET CLE deployable W8A8 QNN export/profile and local RB5 full comparison are
+complete, but the result does not justify replacing the app model. TextZoom/OCR
+and RealSR are diagnostic or lifecycle evidence, not the project center. Demo
+Mode wide-FoV video capture is validated through `adb screenrecord` on the live
+ROI UI; it is not a true VideoCapture SR pipeline.
 
-After the RKNN-inspired Runtime loop and follow-up review, the default live path
-remains unchanged, but the useful evidence-tooling changes are restored:
-stream-log live collection, P99 live runner metrics, and slim live QNN profile
-logging. These are collection/log-volume fixes, not model/runtime acceleration
-claims. The current remaining Runtime lanes are the Runtime text sweep, optional
-Perfetto/QNN timing, a larger CameraX-to-QNN buffer-registration experiment, or
-full CameraX VideoCapture/Recorder product work.
+After the RKNN-inspired Runtime loop and follow-up review, the useful
+evidence-tooling changes are restored: stream-log live collection, P99 live
+runner metrics, and slim live QNN profile logging. The additional native staging
+work is the measured data-path win; collection/log-volume fixes are not
+model/runtime acceleration claims. The current remaining Runtime lanes are a
+larger CameraX-to-QNN buffer-registration experiment or full CameraX
+VideoCapture/Recorder product work, both trigger-gated.
 
 RKNN-inspired evidence preserved as ignored/local artifacts:
 

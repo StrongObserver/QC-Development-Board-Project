@@ -12,7 +12,7 @@ qnn-net-run 和 Android QNN Delegate 到 HTP 的验证路径。
 这个项目的重点不是“模型能跑”，而是把 Runtime 路径做成可 profiling、
 可评测、可解释取舍的工程闭环。QNN inference 已经只有 1-3ms，
 真正瓶颈在 CameraX 转 Bitmap、tensor 写入和输出后处理。我把 app live
-ROI e2e 从约 63/65ms 优化到最新 direct-YUV 默认路径 10/12ms p50/p95，
+ROI e2e 从约 63/65ms 优化到最新 direct-YUV native staging 默认路径 8/9/9ms p50/p95/p99，
 并用固定 benchmark 和真实相机场景决定 QuickSRNetSmall 做 live workhorse，
 Real-ESRGAN 保留为 QNN/HTP 里程碑和 post-capture 对照路线。
 ```
@@ -33,7 +33,7 @@ libQnnHtpV73Skel.so 打进 app，并调用 setSkelLibraryDir。
 QNN inference 已经只有几毫秒，老路径真正慢的是 4000x3000 全帧
 ImageProxy.toBitmap，大约 41/43ms。把 live analysis 收敛到 1280x960
 后，e2e 从约 63/65ms 降到 22/25ms。后面再做 buffer reuse、output
-Bitmap reuse、direct PlaneProxy ByteBuffer 和 UINT8 tensor bulk-copy，最新 app smoke 达到 direct-YUV 默认路径 10/12ms。
+Bitmap reuse、direct PlaneProxy ByteBuffer、UINT8 tensor bulk-copy 和 native RGB staging，20 分钟 live run 达到 direct-YUV 默认路径 8/9/9ms p50/p95/p99。
 
 模型路线上，我把 Real-ESRGAN 和 QuickSRNetSmall 分开看。QuickSRNet
 更小、更保守，更适合 live ROI；Real-ESRGAN 更锐、更感知，适合做
@@ -62,8 +62,8 @@ QNN/HTP 里程碑、对照和 post-capture tile。我也测了双模型切换，
 ```text
 不是换模型，而是 profiling 后发现瓶颈不在 NPU inference。QNN 已经很快，
 老路径慢在 4000x3000 全帧转 Bitmap 和输出后处理。先把 live analysis
-分辨率收敛到 1280x960，再优化输出 buffer，最终把 e2e 从约 63/65ms
-推进到 direct-YUV 默认路径 10/12ms。
+分辨率收敛到 1280x960，再优化输出 buffer、direct-YUV native ROI/RGB 和
+native staging buffer，最终把 e2e 从约 63/65ms 推进到 8/9/9ms p50/p95/p99。
 ```
 
 ### 有没有做 zero-copy？
@@ -96,8 +96,8 @@ lane，不是当前 Kotlin 主线已经实现的能力。
 | AI Hub QCS8550 W8A8 QNN profile | about `1.778ms` p50, NPU 72 |
 | Local qnn-net-run QNN accelerator | about `9.75/10.39ms` p50/p95 |
 | Old app live ROI e2e | about `63/65ms` |
-| Latest default app live ROI e2e | `10/12ms` |
-| Current default direct-YUV live e2e | `10/12ms` |
+| Latest default app live ROI e2e | `8/9/9ms` p50/p95/p99 |
+| Current default direct-YUV native staging live e2e | `8/9/9ms` p50/p95/p99 |
 | Historical output-bulk-copy sustained smoke | `15/20ms -> 16/21ms` |
 | everyN=3 effective enhanced FPS | about `9.9` |
 | Real-ESRGAN -> QuickSRNet switch | about `369ms` |

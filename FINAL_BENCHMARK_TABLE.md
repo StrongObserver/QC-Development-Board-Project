@@ -41,7 +41,7 @@ latency claim.
 | Stream-log live runner | restored in `RB5_SR_lab/run_app_live_roi_benchmark.py` | `20260723_streamlog_p99_profileslim_smoke` parsed 80 direct-YUV frames |
 | P99 live metrics | restored in `metrics.csv` and `SUMMARY.md` | smoke e2e p50/p95/p99 `10.0/12.0/12.2ms` |
 | Live QNN profile log slimming | restored for tensor-live logs | live path emits no full `profileHex=`; fixed-sample diagnostics still can keep full hex |
-| 20-minute sustained runner | validated on current source | `20260723_default_streamlog_20min_current_source` parsed 35742 frames with e2e `11/12/12ms` p50/p95/p99 |
+| 20-minute sustained runner | validated on current source | `20260723_native_staging_default_live_roi_20min` parsed 35719 frames with e2e `8/9/9ms` p50/p95/p99 |
 | Perfetto timeline smoke | collected on device | `20260723_perfetto_direct_yuv_trace_smoke_v4` produced a non-empty 222805-byte trace with live frame logcat coverage |
 | QNN Delegate profile diagnostic | improved best-effort parser | fixed-sample raw delegate profile is 904 bytes; 10/10 known event strings recognized; `qnn-profile-viewer` still rejects the buffer, so this is diagnostic-only |
 
