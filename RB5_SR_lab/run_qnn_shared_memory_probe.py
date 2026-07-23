@@ -35,6 +35,13 @@ def adb(*args: str, check: bool = True, timeout: int | None = None) -> subproces
     return run(["adb", "-s", DEVICE_SERIAL, *args], check=check, timeout=timeout)
 
 
+def prepare_device_interactive() -> None:
+    adb("shell", "input", "keyevent", "KEYCODE_WAKEUP", check=False)
+    adb("shell", "wm", "dismiss-keyguard", check=False)
+    adb("shell", "cmd", "statusbar", "collapse", check=False)
+    time.sleep(0.3)
+
+
 def write_csv(path: Path, rows: list[dict[str, object]]) -> None:
     if not rows:
         return
@@ -82,6 +89,12 @@ def make_loop_state(run_id: str, out_dir: Path, row: dict[str, object], phase: s
         passed_next = "Use this as invoke-level comparison evidence; CameraX buffer binding remains a separate route."
         failed_next = "Inspect normal/shared TFLite C API compare probe before attempting any e2e data-path claim."
         notes = "Phase 2 compares normal TFLite tensor buffers and QNN shared custom allocations on the same synthetic input; it is still not CameraX buffer binding."
+    elif phase == "phase3":
+        passed_status = "shared_camera_tensor_compare_validated"
+        passed_stop = "camera_direct_yuv_to_custom_tensor_compare_collected"
+        passed_next = "Use this as near-zero-copy data-path evidence; true CameraX buffer registration remains a separate Stage D route."
+        failed_next = "Inspect CameraX direct-plane access and QNN custom tensor binding before attempting any default-path change."
+        notes = "Phase 3 writes one CameraX direct-YUV ROI into normal and QNN custom input tensor buffers, then compares outputs. It is still not CameraX YUV buffer registration."
     else:
         passed_status = "shared_memory_alloc_free_validated"
         passed_stop = "qnn_delegate_shared_memory_api_available"
@@ -103,8 +116,11 @@ def make_loop_state(run_id: str, out_dir: Path, row: dict[str, object], phase: s
 
 
 def collect_probe_log(timeout_s: int, phase: str, repeats: int) -> str:
+    prepare_device_interactive()
     adb("shell", "am", "force-stop", PACKAGE_NAME, check=False)
+    time.sleep(0.5)
     adb("logcat", "-c")
+    prepare_device_interactive()
     started = adb(
         "shell",
         "am",
@@ -112,6 +128,9 @@ def collect_probe_log(timeout_s: int, phase: str, repeats: int) -> str:
         "-n",
         APP_COMPONENT,
         "--ez",
+        "run_qnn_shared_camera_tensor_compare_probe"
+        if phase == "phase3"
+        else
         "run_qnn_shared_tensor_compare_probe"
         if phase == "phase2"
         else "run_qnn_shared_tensor_probe"
@@ -135,6 +154,7 @@ def collect_probe_log(timeout_s: int, phase: str, repeats: int) -> str:
             "-v",
             "time",
             "RB5_QNN_SHARED:D",
+        "RB5_SR:D",
             "RB5_NATIVE:D",
             "AndroidRuntime:E",
             "*:S",
@@ -154,6 +174,8 @@ def write_summary(out_dir: Path, run_id: str, row: dict[str, object], loop_state
         f"- run_id: `{run_id}`",
         "- scope: dlopen/dlsym + alloc/free for QNN TFLite Delegate shared-memory C API"
         if phase == "phase0"
+        else "- scope: CameraX direct-YUV ROI -> normal/custom QNN Delegate input tensor compare"
+        if phase == "phase3"
         else "- scope: TFLite C API interpreter + custom allocation + QNN Delegate invoke",
         f"- status: `{loop_state['status']}`",
         f"- next_priority_task: `{loop_state['next_priority_task']}`",
@@ -199,6 +221,7 @@ def write_summary(out_dir: Path, run_id: str, row: dict[str, object], loop_state
         "normalOutputBound",
         "normalChecksum",
         "normalCompletedRuns",
+        "normalInputFillUs",
         "normalDelegateUs",
         "normalInvokeAvgUs",
         "normalInvokeMinUs",
@@ -211,6 +234,9 @@ def write_summary(out_dir: Path, run_id: str, row: dict[str, object], loop_state
         "sharedOutputBound",
         "sharedChecksum",
         "sharedCompletedRuns",
+        "normalInputFillUs",
+        "sharedInputFillUs",
+        "inputFillDeltaUs",
         "sharedDelegateUs",
         "sharedInvokeAvgUs",
         "sharedInvokeMinUs",
@@ -228,7 +254,7 @@ def write_summary(out_dir: Path, run_id: str, row: dict[str, object], loop_state
             "## Boundary",
             "",
             "This is not CameraX buffer binding and not true zero-copy.",
-            "Phase 0 only proves shared-memory API access and alloc/free. Phase 1 additionally proves tensor custom allocation and one TFLite/QNN invoke. Phase 2 compares normal tensor buffers against shared custom allocation on the same synthetic input.",
+            "Phase 0 only proves shared-memory API access and alloc/free. Phase 1 additionally proves tensor custom allocation and one TFLite/QNN invoke. Phase 2 compares normal tensor buffers against shared custom allocation on the same synthetic input. Phase 3 writes one CameraX direct-YUV ROI into normal and QNN custom input tensors, but it still performs YUV->RGB and tensor staging.",
             "",
             "## Outputs",
             "",
@@ -242,7 +268,7 @@ def write_summary(out_dir: Path, run_id: str, row: dict[str, object], loop_state
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--phase", choices=["phase0", "phase1", "phase2"], default="phase0")
+    parser.add_argument("--phase", choices=["phase0", "phase1", "phase2", "phase3"], default="phase0")
     parser.add_argument("--repeats", type=int, default=20)
     parser.add_argument("--run-id", default="")
     parser.add_argument("--timeout-s", type=int, default=20)

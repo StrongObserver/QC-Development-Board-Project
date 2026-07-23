@@ -86,6 +86,10 @@ struct TfLiteCustomAllocationNative {
     size_t bytes;
 };
 
+void yuvToRgb(int y, int u, int v, jbyte* out);
+int normalizeRotation(int rotation_degrees);
+int rotatedOutputIndex(int x, int y, int side, int rotation_degrees);
+
 using TfLiteModelCreateFn = TfLiteModel* (*)(const void*, size_t);
 using TfLiteModelDeleteFn = void (*)(TfLiteModel*);
 using TfLiteInterpreterOptionsCreateFn = TfLiteInterpreterOptions* (*)();
@@ -461,6 +465,7 @@ struct TensorProbeRun {
     size_t outputTensorBytes = 0;
     OutputSample outputSample;
     size_t completedRuns = 0;
+    int64_t inputFillUs = -1;
     int64_t delegateUs = -1;
     int64_t invokeAvgUs = -1;
     int64_t invokeMinUs = -1;
@@ -591,6 +596,344 @@ TensorProbeRun runTensorProbeVariant(
     api.modelDelete(model);
     if (custom_input_ptr != nullptr) free_mem(custom_input_ptr);
     if (custom_output_ptr != nullptr) free_mem(custom_output_ptr);
+    return result;
+}
+
+bool fillDirectYuvRoiRgb(
+        const uint8_t* y_bytes,
+        const uint8_t* u_bytes,
+        const uint8_t* v_bytes,
+        int width,
+        int height,
+        int y_row_stride,
+        int y_pixel_stride,
+        int u_row_stride,
+        int u_pixel_stride,
+        int v_row_stride,
+        int v_pixel_stride,
+        int output_side,
+        int rotation_degrees,
+        uint8_t* output_rgb) {
+    if (y_bytes == nullptr || u_bytes == nullptr || v_bytes == nullptr || output_rgb == nullptr ||
+        width <= 0 || height <= 0 || output_side <= 0 ||
+        y_row_stride <= 0 || u_row_stride <= 0 || v_row_stride <= 0 ||
+        y_pixel_stride <= 0 || u_pixel_stride <= 0 || v_pixel_stride <= 0) {
+        return false;
+    }
+    const int crop_side = std::max(
+            output_side,
+            std::min({width * output_side / 640, width, height}));
+    const int left = (width - crop_side) / 2;
+    const int top = (height - crop_side) / 2;
+    auto* out = reinterpret_cast<jbyte*>(output_rgb);
+    for (int oy = 0; oy < output_side; ++oy) {
+        const int src_y = top + (oy * crop_side + crop_side / (output_side * 2)) / output_side;
+        const int y_base = src_y * y_row_stride;
+        const int uv_y = src_y / 2;
+        const int u_base = uv_y * u_row_stride;
+        const int v_base = uv_y * v_row_stride;
+        for (int ox = 0; ox < output_side; ++ox) {
+            const int src_x = left + (ox * crop_side + crop_side / (output_side * 2)) / output_side;
+            const int uv_x = src_x / 2;
+            const int y_value = y_bytes[y_base + src_x * y_pixel_stride];
+            const int u_value = u_bytes[u_base + uv_x * u_pixel_stride];
+            const int v_value = v_bytes[v_base + uv_x * v_pixel_stride];
+            const int out_index = rotatedOutputIndex(ox, oy, output_side, rotation_degrees) * 3;
+            yuvToRgb(y_value, u_value, v_value, out + out_index);
+        }
+    }
+    return true;
+}
+
+TensorProbeRun runCameraTensorProbeVariant(
+        const TfLiteApi& api,
+        const std::vector<uint8_t>& model_bytes,
+        intptr_t delegate_handle,
+        bool use_custom_allocation,
+        QnnDelegateAllocCustomMemFn alloc_mem,
+        QnnDelegateFreeCustomMemFn free_mem,
+        int repeats,
+        const uint8_t* y_bytes,
+        const uint8_t* u_bytes,
+        const uint8_t* v_bytes,
+        int width,
+        int height,
+        int y_row_stride,
+        int y_pixel_stride,
+        int u_row_stride,
+        int u_pixel_stride,
+        int v_row_stride,
+        int v_pixel_stride,
+        int output_side,
+        int rotation_degrees) {
+    constexpr size_t kTfLiteDefaultTensorAlignment = 64;
+    constexpr size_t kInputBytes = 128 * 128 * 3;
+    constexpr size_t kOutputBytes = 512 * 512 * 3;
+    TensorProbeRun result;
+    void* custom_input_ptr = nullptr;
+    void* custom_output_ptr = nullptr;
+
+    if (output_side != 128) {
+        result.blockedStage = "unsupported_output_side";
+        return result;
+    }
+
+    TfLiteModel* model = api.modelCreate(model_bytes.data(), model_bytes.size());
+    if (model == nullptr) {
+        result.blockedStage = "model_create";
+        return result;
+    }
+    TfLiteInterpreterOptions* options = api.optionsCreate();
+    if (options == nullptr) {
+        api.modelDelete(model);
+        result.blockedStage = "options_create";
+        return result;
+    }
+    api.optionsSetThreads(options, 1);
+    TfLiteInterpreter* interpreter = api.interpreterCreate(model, options);
+    api.optionsDelete(options);
+    if (interpreter == nullptr) {
+        api.modelDelete(model);
+        result.blockedStage = "interpreter_create";
+        return result;
+    }
+
+    result.inputIndex = api.inputIndex(interpreter, 0);
+    result.outputIndex = api.outputIndex(interpreter, 0);
+    if (result.inputIndex < 0 || result.outputIndex < 0) {
+        result.blockedStage = "tensor_index";
+        api.interpreterDelete(interpreter);
+        api.modelDelete(model);
+        return result;
+    }
+
+    if (use_custom_allocation) {
+        custom_input_ptr = alloc_mem(kInputBytes, kTfLiteDefaultTensorAlignment);
+        custom_output_ptr = alloc_mem(kOutputBytes, kTfLiteDefaultTensorAlignment);
+        if (custom_input_ptr == nullptr || custom_output_ptr == nullptr) {
+            result.blockedStage = "custom_alloc";
+            if (custom_input_ptr != nullptr) free_mem(custom_input_ptr);
+            if (custom_output_ptr != nullptr) free_mem(custom_output_ptr);
+            api.interpreterDelete(interpreter);
+            api.modelDelete(model);
+            return result;
+        }
+        TfLiteCustomAllocationNative input_alloc{custom_input_ptr, kInputBytes};
+        TfLiteCustomAllocationNative output_alloc{custom_output_ptr, kOutputBytes};
+        result.inputAllocStatus =
+                api.setCustomAllocation(interpreter, result.inputIndex, &input_alloc, 0);
+        result.outputAllocStatus =
+                api.setCustomAllocation(interpreter, result.outputIndex, &output_alloc, 0);
+    } else {
+        result.inputAllocStatus = 0;
+        result.outputAllocStatus = 0;
+    }
+
+    result.allocateStatus = api.allocateTensors(interpreter);
+    TfLiteTensor* input_tensor = api.getInputTensor(interpreter, 0);
+    const TfLiteTensor* output_tensor = api.getOutputTensor(interpreter, 0);
+    void* input_ptr = input_tensor != nullptr ? api.tensorData(input_tensor) : nullptr;
+    const void* output_ptr = output_tensor != nullptr ? api.tensorData(output_tensor) : nullptr;
+    result.inputTensorBytes = input_tensor != nullptr ? api.tensorByteSize(input_tensor) : 0;
+    result.outputTensorBytes = output_tensor != nullptr ? api.tensorByteSize(output_tensor) : 0;
+    result.inputBound = use_custom_allocation ? input_ptr == custom_input_ptr : input_ptr != nullptr;
+    result.outputBound = use_custom_allocation ? output_ptr == custom_output_ptr : output_ptr != nullptr;
+
+    const auto delegate_start = std::chrono::steady_clock::now();
+    result.delegateStatus =
+            api.modifyGraph(interpreter, reinterpret_cast<TfLiteOpaqueDelegate*>(delegate_handle));
+    const auto delegate_end = std::chrono::steady_clock::now();
+    result.delegateUs = std::chrono::duration_cast<std::chrono::microseconds>(
+            delegate_end - delegate_start).count();
+
+    input_tensor = api.getInputTensor(interpreter, 0);
+    output_tensor = api.getOutputTensor(interpreter, 0);
+    input_ptr = input_tensor != nullptr ? api.tensorData(input_tensor) : input_ptr;
+    output_ptr = output_tensor != nullptr ? api.tensorData(output_tensor) : output_ptr;
+    result.inputTensorBytes = input_tensor != nullptr ? api.tensorByteSize(input_tensor) : result.inputTensorBytes;
+    result.outputTensorBytes = output_tensor != nullptr ? api.tensorByteSize(output_tensor) : result.outputTensorBytes;
+    result.inputBound = use_custom_allocation ? input_ptr == custom_input_ptr : input_ptr != nullptr;
+    result.outputBound = use_custom_allocation ? output_ptr == custom_output_ptr : output_ptr != nullptr;
+
+    const auto fill_start = std::chrono::steady_clock::now();
+    const bool filled = fillDirectYuvRoiRgb(
+            y_bytes,
+            u_bytes,
+            v_bytes,
+            width,
+            height,
+            y_row_stride,
+            y_pixel_stride,
+            u_row_stride,
+            u_pixel_stride,
+            v_row_stride,
+            v_pixel_stride,
+            output_side,
+            rotation_degrees,
+            reinterpret_cast<uint8_t*>(input_ptr));
+    const auto fill_end = std::chrono::steady_clock::now();
+    result.inputFillUs = std::chrono::duration_cast<std::chrono::microseconds>(
+            fill_end - fill_start).count();
+    if (!filled) {
+        result.blockedStage = "fill_yuv_input";
+    }
+
+    std::vector<int64_t> invoke_times_us;
+    result.invokeStatus = result.delegateStatus;
+    if (filled && result.delegateStatus == 0) {
+        for (int i = 0; i < repeats; ++i) {
+            const auto invoke_start = std::chrono::steady_clock::now();
+            result.invokeStatus = api.invoke(interpreter);
+            const auto invoke_end = std::chrono::steady_clock::now();
+            invoke_times_us.push_back(std::chrono::duration_cast<std::chrono::microseconds>(
+                    invoke_end - invoke_start).count());
+            if (result.invokeStatus != 0) {
+                break;
+            }
+        }
+    }
+    result.completedRuns = invoke_times_us.size();
+    result.invokeAvgUs = averageMicros(invoke_times_us);
+    result.invokeMinUs = minMicros(invoke_times_us);
+    result.invokeMaxUs = maxMicros(invoke_times_us);
+    result.outputSample = sampleOutputBytes(
+            reinterpret_cast<const uint8_t*>(output_ptr),
+            std::min(result.outputTensorBytes, kOutputBytes));
+    result.passed = result.inputAllocStatus == 0 && result.outputAllocStatus == 0 &&
+                    result.allocateStatus == 0 && result.delegateStatus == 0 &&
+                    result.invokeStatus == 0 && result.inputBound && result.outputBound &&
+                    filled &&
+                    result.inputTensorBytes <= kInputBytes &&
+                    result.outputTensorBytes <= kOutputBytes;
+
+    api.interpreterDelete(interpreter);
+    api.modelDelete(model);
+    if (custom_input_ptr != nullptr) free_mem(custom_input_ptr);
+    if (custom_output_ptr != nullptr) free_mem(custom_output_ptr);
+    return result;
+}
+
+std::string qnnDelegateSharedCameraTensorCompareProbe(
+        JNIEnv* env,
+        jobject asset_manager,
+        const char* model_asset,
+        intptr_t normal_delegate_handle,
+        intptr_t shared_delegate_handle,
+        jobject y_buffer,
+        jobject u_buffer,
+        jobject v_buffer,
+        int width,
+        int height,
+        int y_row_stride,
+        int y_pixel_stride,
+        int u_row_stride,
+        int u_pixel_stride,
+        int v_row_stride,
+        int v_pixel_stride,
+        int output_side,
+        int rotation_degrees,
+        int repeats) {
+    if (normal_delegate_handle == 0 || shared_delegate_handle == 0 ||
+        y_buffer == nullptr || u_buffer == nullptr || v_buffer == nullptr) {
+        return "status=blocked stage=argument error=null_input";
+    }
+    const auto* y_bytes = static_cast<const uint8_t*>(env->GetDirectBufferAddress(y_buffer));
+    const auto* u_bytes = static_cast<const uint8_t*>(env->GetDirectBufferAddress(u_buffer));
+    const auto* v_bytes = static_cast<const uint8_t*>(env->GetDirectBufferAddress(v_buffer));
+    if (y_bytes == nullptr || u_bytes == nullptr || v_bytes == nullptr) {
+        return "status=blocked stage=direct_buffer error=null_address";
+    }
+
+    std::vector<uint8_t> model_bytes;
+    if (!readAssetBytes(env, asset_manager, model_asset, model_bytes)) {
+        return "status=blocked stage=asset error=read_model_failed";
+    }
+    DynamicLibrary tflite("libtensorflowlite_jni.so");
+    if (tflite.handle == nullptr) {
+        return "status=blocked stage=dlopen library=libtensorflowlite_jni.so";
+    }
+    DynamicLibrary qnn("libQnnTFLiteDelegate.so");
+    if (qnn.handle == nullptr) {
+        return "status=blocked stage=dlopen library=libQnnTFLiteDelegate.so";
+    }
+    const TfLiteApi api = loadTfLiteApi(tflite.handle);
+    auto alloc_mem = loadSymbol<QnnDelegateAllocCustomMemFn>(qnn.handle, "TfLiteQnnDelegateAllocCustomMem");
+    auto free_mem = loadSymbol<QnnDelegateFreeCustomMemFn>(qnn.handle, "TfLiteQnnDelegateFreeCustomMem");
+    if (!hasRequiredTfLiteApi(api, true) || alloc_mem == nullptr || free_mem == nullptr) {
+        return "status=blocked stage=dlsym error=missing_tflite_or_qnn_symbol";
+    }
+
+    const int safe_repeats = std::max(1, repeats);
+    TensorProbeRun normal = runCameraTensorProbeVariant(
+            api, model_bytes, normal_delegate_handle, false, alloc_mem, free_mem, safe_repeats,
+            y_bytes, u_bytes, v_bytes, width, height,
+            y_row_stride, y_pixel_stride, u_row_stride, u_pixel_stride, v_row_stride, v_pixel_stride,
+            output_side, rotation_degrees);
+    TensorProbeRun shared = runCameraTensorProbeVariant(
+            api, model_bytes, shared_delegate_handle, true, alloc_mem, free_mem, safe_repeats,
+            y_bytes, u_bytes, v_bytes, width, height,
+            y_row_stride, y_pixel_stride, u_row_stride, u_pixel_stride, v_row_stride, v_pixel_stride,
+            output_side, rotation_degrees);
+    const bool checksum_match = normal.outputSample.checksum == shared.outputSample.checksum;
+    const int64_t fill_delta_us =
+            (shared.inputFillUs >= 0 && normal.inputFillUs >= 0)
+            ? shared.inputFillUs - normal.inputFillUs
+            : 0;
+    const int64_t invoke_delta_us =
+            (shared.invokeAvgUs >= 0 && normal.invokeAvgUs >= 0)
+            ? shared.invokeAvgUs - normal.invokeAvgUs
+            : 0;
+    const bool passed = normal.passed && shared.passed && checksum_match;
+
+    char result[4096];
+    snprintf(result, sizeof(result),
+             "status=%s stage=camera_tensor_buffer_compare modelBytes=%zu repeats=%d "
+             "frame=%dx%d outputSide=%d rotation=%d "
+             "normalPass=%s normalStage=%s normalDelegate=%d normalInvoke=%d "
+             "normalInputBound=%s normalOutputBound=%s normalChecksum=%u "
+             "normalCompletedRuns=%zu normalInputFillUs=%lld normalDelegateUs=%lld "
+             "normalInvokeAvgUs=%lld normalInvokeMinUs=%lld normalInvokeMaxUs=%lld "
+             "sharedPass=%s sharedStage=%s sharedDelegate=%d sharedInvoke=%d "
+             "sharedInputBound=%s sharedOutputBound=%s sharedChecksum=%u "
+             "sharedCompletedRuns=%zu sharedInputFillUs=%lld sharedDelegateUs=%lld "
+             "sharedInvokeAvgUs=%lld sharedInvokeMinUs=%lld sharedInvokeMaxUs=%lld "
+             "checksumMatch=%s inputFillDeltaUs=%lld invokeAvgDeltaUs=%lld",
+             passed ? "pass" : "blocked",
+             model_bytes.size(),
+             safe_repeats,
+             width,
+             height,
+             output_side,
+             normalizeRotation(rotation_degrees),
+             normal.passed ? "true" : "false",
+             normal.blockedStage.empty() ? "ok" : normal.blockedStage.c_str(),
+             normal.delegateStatus,
+             normal.invokeStatus,
+             normal.inputBound ? "true" : "false",
+             normal.outputBound ? "true" : "false",
+             normal.outputSample.checksum,
+             normal.completedRuns,
+             static_cast<long long>(normal.inputFillUs),
+             static_cast<long long>(normal.delegateUs),
+             static_cast<long long>(normal.invokeAvgUs),
+             static_cast<long long>(normal.invokeMinUs),
+             static_cast<long long>(normal.invokeMaxUs),
+             shared.passed ? "true" : "false",
+             shared.blockedStage.empty() ? "ok" : shared.blockedStage.c_str(),
+             shared.delegateStatus,
+             shared.invokeStatus,
+             shared.inputBound ? "true" : "false",
+             shared.outputBound ? "true" : "false",
+             shared.outputSample.checksum,
+             shared.completedRuns,
+             static_cast<long long>(shared.inputFillUs),
+             static_cast<long long>(shared.delegateUs),
+             static_cast<long long>(shared.invokeAvgUs),
+             static_cast<long long>(shared.invokeMinUs),
+             static_cast<long long>(shared.invokeMaxUs),
+             checksum_match ? "true" : "false",
+             static_cast<long long>(fill_delta_us),
+             static_cast<long long>(invoke_delta_us));
     return result;
 }
 
@@ -831,6 +1174,63 @@ Java_com_cyf_rb5visionlab_MainActivity_qnnSharedMemoryTensorCompareProbe(
             std::max(1, static_cast<int>(repeats)));
     env->ReleaseStringUTFChars(model_asset, model_asset_chars);
     LOGD("qnnSharedMemoryTensorCompareProbe %s", result.c_str());
+    return env->NewStringUTF(result.c_str());
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_com_cyf_rb5visionlab_MainActivity_qnnSharedCameraTensorCompareProbe(
+        JNIEnv* env,
+        jobject /* thiz */,
+        jobject asset_manager,
+        jstring model_asset,
+        jlong normal_delegate_handle,
+        jlong shared_delegate_handle,
+        jobject y_buffer,
+        jobject u_buffer,
+        jobject v_buffer,
+        jint width,
+        jint height,
+        jint y_row_stride,
+        jint y_pixel_stride,
+        jint u_row_stride,
+        jint u_pixel_stride,
+        jint v_row_stride,
+        jint v_pixel_stride,
+        jint output_side,
+        jint rotation_degrees,
+        jint repeats) {
+    if (asset_manager == nullptr || model_asset == nullptr ||
+        normal_delegate_handle == 0 || shared_delegate_handle == 0 ||
+        y_buffer == nullptr || u_buffer == nullptr || v_buffer == nullptr) {
+        return env->NewStringUTF("status=blocked stage=argument error=null_input");
+    }
+    const char* model_asset_chars = env->GetStringUTFChars(model_asset, nullptr);
+    if (model_asset_chars == nullptr) {
+        return env->NewStringUTF("status=blocked stage=argument error=model_asset_string");
+    }
+    const std::string result = qnnDelegateSharedCameraTensorCompareProbe(
+            env,
+            asset_manager,
+            model_asset_chars,
+            static_cast<intptr_t>(normal_delegate_handle),
+            static_cast<intptr_t>(shared_delegate_handle),
+            y_buffer,
+            u_buffer,
+            v_buffer,
+            width,
+            height,
+            y_row_stride,
+            y_pixel_stride,
+            u_row_stride,
+            u_pixel_stride,
+            v_row_stride,
+            v_pixel_stride,
+            output_side,
+            rotation_degrees,
+            std::max(1, static_cast<int>(repeats)));
+    env->ReleaseStringUTFChars(model_asset, model_asset_chars);
+    LOGD("qnnSharedCameraTensorCompareProbe %s", result.c_str());
     return env->NewStringUTF(result.c_str());
 }
 

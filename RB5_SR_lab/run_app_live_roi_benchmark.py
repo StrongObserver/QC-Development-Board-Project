@@ -54,8 +54,12 @@ TENSOR_LIVE_RE = re.compile(
     r"backend=(?P<backend>\w+) model=(?P<log_model>\w+) tensorLive crop=(?P<crop_side>\d+)->128->512 "
     r"frame=(?P<frame_width>\d+)x(?P<frame_height>\d+) "
     r"nativeRgb=(?P<native_rgb_ms>\d+) rotate=(?P<rotation_degrees>\d+) "
+    r"(?:(?:yuvFillUs=(?P<yuv_fill_us>\d+) bitmapRotateUs=(?P<bitmap_rotate_us>\d+) )?)"
     r"pre=(?P<pre_ms>\d+) inf=(?P<inf_ms>\d+) post=(?P<post_ms>\d+) "
     r"enhanceWall=(?P<enhance_wall_ms>\d+) analyzer=(?P<analyzer_ms>\d+) e2e=(?P<e2e_ms>\d+)ms"
+    r"(?: tensorPath=(?P<tensor_path>\w+) optimizedTensor=(?P<optimized_tensor>\w+))?"
+    r"(?: session=(?P<session_id>\S+) everyN=(?P<every_n>\d+) frameIndex=(?P<frame_index>\d+) "
+    r"enhancedIndex=(?P<enhanced_index>\d+) effectiveEnhancedFps=(?P<effective_enhanced_fps>[\d.]+))?"
 )
 
 
@@ -196,6 +200,8 @@ def parse_live_rows(log_text: str, model: str, tensor_ready: bool, session_id: s
         for key, value in values.items():
             if key == "backend":
                 row[key] = value
+            elif key in {"tensor_path", "optimized_tensor"}:
+                row[key] = value or ""
             elif key == "effective_enhanced_fps":
                 row[key] = float(value) if value is not None else ""
             elif value is not None:
@@ -435,6 +441,8 @@ def write_summary(
     ]
     stage_map = [
         ("frameBitmap_full_conversion", "frame_bitmap_ms", "ImageProxy.toBitmap()"),
+        ("native_yuv_fill", "yuv_fill_ms", "native YUV->RGB fill"),
+        ("native_bitmap_rotate", "bitmap_rotate_ms", "bitmap rotate fallback"),
         ("qnn_inference", "inf_ms", "QNN inference"),
         ("postprocess", "post_ms", "postprocess"),
         ("analyzer_wall", "analyzer_ms", "analyzer wall"),
@@ -442,6 +450,8 @@ def write_summary(
     ]
     stage_lookup = {
         "frame_bitmap_ms": "frameBitmap",
+        "yuv_fill_ms": "yuvFill",
+        "bitmap_rotate_ms": "bitmapRotate",
         "inf_ms": "inf",
         "post_ms": "post",
         "analyzer_ms": "analyzer",
@@ -581,6 +591,8 @@ def main() -> None:
         for key, label in [
             ("frame_bitmap_ms", "frameBitmap"),
             ("native_rgb_ms", "nativeRgb"),
+            ("yuv_fill_us", "yuvFill"),
+            ("bitmap_rotate_us", "bitmapRotate"),
             ("cap_ms", "cap"),
             ("roi_ms", "roi"),
             ("rotate_ms", "rotate"),
@@ -593,7 +605,8 @@ def main() -> None:
             ("e2e_ms", "e2e"),
         ]:
             if key in frame_rows[0]:
-                stage_rows.append(summarize_stage(run_id, label, [float(row[key]) for row in frame_rows]))
+                scale = 0.001 if key.endswith("_us") else 1.0
+                stage_rows.append(summarize_stage(run_id, label, [float(row[key]) * scale for row in frame_rows]))
         if "effective_enhanced_fps" in frame_rows[0]:
             fps_values = [float(row["effective_enhanced_fps"]) for row in frame_rows if row.get("effective_enhanced_fps") not in ("", None)]
             if fps_values:

@@ -163,6 +163,13 @@ class MainActivity : AppCompatActivity() {
         val initMs: Long,
     )
 
+    private data class DirectYuvRgbTiming(
+        val rgbBytes: ByteArray,
+        val yuvFillUs: Long,
+        val bitmapRotateUs: Long,
+        val totalMs: Long,
+    )
+
     private val realCameraScenes = listOf(
         RealCameraScene(
             "text_signage_01",
@@ -220,6 +227,26 @@ class MainActivity : AppCompatActivity() {
     external fun qnnSharedMemoryProbe(inputBytes: Int, outputBytes: Int): String
     external fun qnnSharedMemoryTensorProbe(assetManager: AssetManager, modelAsset: String, delegateHandle: Long, repeats: Int): String
     external fun qnnSharedMemoryTensorCompareProbe(assetManager: AssetManager, modelAsset: String, normalDelegateHandle: Long, sharedDelegateHandle: Long, repeats: Int): String
+    external fun qnnSharedCameraTensorCompareProbe(
+        assetManager: AssetManager,
+        modelAsset: String,
+        normalDelegateHandle: Long,
+        sharedDelegateHandle: Long,
+        yBuffer: ByteBuffer,
+        uBuffer: ByteBuffer,
+        vBuffer: ByteBuffer,
+        width: Int,
+        height: Int,
+        yRowStride: Int,
+        yPixelStride: Int,
+        uRowStride: Int,
+        uPixelStride: Int,
+        vRowStride: Int,
+        vPixelStride: Int,
+        outputSide: Int,
+        rotationDegrees: Int,
+        repeats: Int,
+    ): String
     external fun processYPlane(yData: ByteArray, width: Int, height: Int, rowStride: Int): String
     external fun directBufferProbe(yBuffer: ByteBuffer, uBuffer: ByteBuffer, vBuffer: ByteBuffer): String
     external fun nativeYuvToRgbRoiBytesRotatedDirect(
@@ -329,6 +356,7 @@ class MainActivity : AppCompatActivity() {
         val autoRunQnnSharedMemoryProbe = boolIntentExtra("run_qnn_shared_memory_probe")
         val autoRunQnnSharedTensorProbe = boolIntentExtra("run_qnn_shared_tensor_probe")
         val autoRunQnnSharedTensorCompareProbe = boolIntentExtra("run_qnn_shared_tensor_compare_probe")
+        val autoRunQnnSharedCameraTensorCompareProbe = boolIntentExtra("run_qnn_shared_camera_tensor_compare_probe")
         val autoRunYuvRoiProbe = boolIntentExtra("run_yuv_roi_probe")
         val autoRunTensorReadyProbe = boolIntentExtra("run_tensor_ready_probe")
         val autoRunDirectBufferProbe = boolIntentExtra("run_direct_buffer_probe")
@@ -344,6 +372,7 @@ class MainActivity : AppCompatActivity() {
                 "run_qnn_shared_memory_probe=$autoRunQnnSharedMemoryProbe " +
                 "run_qnn_shared_tensor_probe=$autoRunQnnSharedTensorProbe " +
                 "run_qnn_shared_tensor_compare_probe=$autoRunQnnSharedTensorCompareProbe " +
+                "run_qnn_shared_camera_tensor_compare_probe=$autoRunQnnSharedCameraTensorCompareProbe " +
                 "run_yuv_roi_probe=$autoRunYuvRoiProbe run_tensor_ready_probe=$autoRunTensorReadyProbe run_direct_buffer_probe=$autoRunDirectBufferProbe " +
                 "probe_mode=$requestedProbeMode extras=${intent.extras?.keySet()?.joinToString()}"
         )
@@ -379,6 +408,8 @@ class MainActivity : AppCompatActivity() {
                 Thread.sleep(500)
                 runQnnSharedMemoryTensorCompareProbeOnWorker()
             }
+        } else if (autoRunQnnSharedCameraTensorCompareProbe || requestedProbeMode == "qnn_shared_camera_tensor") {
+            pendingProbeMode = "qnn_shared_camera_tensor"
         } else if (autoRunQnnFixed) {
             srExecutor.execute {
                 Thread.sleep(500)
@@ -864,6 +895,59 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun runQnnSharedCameraTensorCompareProbe(imageProxy: ImageProxy) {
+        val tag = "RB5_QNN_SHARED"
+        val modelAsset = SrModelVariant.QUICKSR_W8A8.assetName
+        val repeats = intIntentExtra("shared_tensor_repeats", 20).coerceAtLeast(1)
+        val y = imageProxy.planes[0]
+        val u = imageProxy.planes[1]
+        val v = imageProxy.planes[2]
+        runOnUiThread {
+            offlineEvalActive = true
+            statusTextView.text = "QNN shared camera-tensor compare probe running..."
+        }
+        var normalDelegate: QnnDelegate? = null
+        var sharedDelegate: QnnDelegate? = null
+        try {
+            normalDelegate = createQnnDelegateForProbe()
+            sharedDelegate = createQnnDelegateForProbe()
+            val result = qnnSharedCameraTensorCompareProbe(
+                assets,
+                modelAsset,
+                normalDelegate.getNativeHandle(),
+                sharedDelegate.getNativeHandle(),
+                y.buffer.duplicate(),
+                u.buffer.duplicate(),
+                v.buffer.duplicate(),
+                imageProxy.width,
+                imageProxy.height,
+                y.rowStride,
+                y.pixelStride,
+                u.rowStride,
+                u.pixelStride,
+                v.rowStride,
+                v.pixelStride,
+                LIVE_MODEL_INPUT_SIDE,
+                imageProxy.imageInfo.rotationDegrees,
+                repeats,
+            )
+            Log.d(tag, "camera tensor compare probe result $result")
+            runOnUiThread {
+                offlineEvalActive = false
+                statusTextView.text = "QNN shared camera-tensor compare probe\n$result"
+            }
+        } catch (e: Throwable) {
+            Log.e(tag, "camera tensor compare probe failed", e)
+            runOnUiThread {
+                offlineEvalActive = false
+                statusTextView.text = "QNN shared camera-tensor compare probe failed: ${e.message}"
+            }
+        } finally {
+            normalDelegate?.close()
+            sharedDelegate?.close()
+        }
+    }
+
     private fun runQnnSharedMemoryProbeOnWorker() {
         val tag = "RB5_QNN_SHARED"
         val inputBytes = 128 * 128 * 3
@@ -886,6 +970,67 @@ class MainActivity : AppCompatActivity() {
                 statusTextView.text = "QNN shared-memory probe failed: ${e.message}"
             }
         }
+    }
+
+    private fun buildTensorRgbBytes(
+        imageProxy: ImageProxy,
+        side: Int,
+        degrees: Int,
+    ): DirectYuvRgbTiming {
+        var yuvFillUs = 0L
+        var bitmapRotateUs = 0L
+        val tTotal0 = System.nanoTime()
+        var bytes = if (liveSrTensorDirectYuv) {
+            val y = imageProxy.planes[0]
+            val u = imageProxy.planes[1]
+            val v = imageProxy.planes[2]
+            val tFill0 = System.nanoTime()
+            val wrote = nativeYuvToRgbRoiBytesRotatedDirectInto(
+                y.buffer.duplicate(),
+                u.buffer.duplicate(),
+                v.buffer.duplicate(),
+                imageProxy.width,
+                imageProxy.height,
+                y.rowStride,
+                y.pixelStride,
+                u.rowStride,
+                u.pixelStride,
+                v.rowStride,
+                v.pixelStride,
+                side,
+                degrees,
+                tensorLiveRgbBuffer,
+            )
+            yuvFillUs = (System.nanoTime() - tFill0) / 1_000
+            if (!wrote) {
+                error("native direct-YUV staging buffer write failed")
+            }
+            tensorLiveRgbBuffer
+        } else if (liveSrTensorRotatedNative) {
+            val tFill0 = System.nanoTime()
+            val result = nativeYuv420ToRgbCenterRoiBytesRotated(imageProxy, side, degrees)
+            yuvFillUs = (System.nanoTime() - tFill0) / 1_000
+            result
+        } else {
+            val tFill0 = System.nanoTime()
+            val result = nativeYuv420ToRgbCenterRoiBytes(imageProxy, side)
+            yuvFillUs = (System.nanoTime() - tFill0) / 1_000
+            result
+        }
+        if (!liveSrTensorRotatedNative && degrees != 0) {
+            val tRotate0 = System.nanoTime()
+            val nativeBitmap = rgbBytesToBitmap(bytes, side)
+            val matrix = Matrix().apply { postRotate(degrees.toFloat()) }
+            val rotated = Bitmap.createBitmap(nativeBitmap, 0, 0, side, side, matrix, true)
+            bytes = bitmapToRgbBytes(rotated)
+            bitmapRotateUs = (System.nanoTime() - tRotate0) / 1_000
+        }
+        return DirectYuvRgbTiming(
+            rgbBytes = bytes,
+            yuvFillUs = yuvFillUs,
+            bitmapRotateUs = bitmapRotateUs,
+            totalMs = (System.nanoTime() - tTotal0) / 1_000_000,
+        )
     }
 
     private fun runResourceProbeOnWorker() {
@@ -1317,6 +1462,17 @@ class MainActivity : AppCompatActivity() {
 
     private fun runTensorReadyLiveSr(imageProxy: ImageProxy) {
         val tag = "RB5_SR_TENSOR"
+        liveSrSeenFrames += 1
+        val everyN = liveSrEveryN.coerceAtLeast(1)
+        if (everyN > 1 && ((liveSrSeenFrames - 1) % everyN != 0)) {
+            Log.d(
+                "RB5_SR",
+                "backend=QNN live ROI skip everyN=$everyN frameIndex=$liveSrSeenFrames " +
+                    "enhancedIndex=$liveSrEnhancedFrames model=QUICKSR_W8A8 session=$liveSrSessionId"
+            )
+            return
+        }
+        liveSrEnhancedFrames += 1
         try {
             if (resolver?.backend != SrBackend.QNN || resolver?.modelAsset != SrModelVariant.QUICKSR_W8A8.assetName) {
                 resolver?.close()
@@ -1331,46 +1487,11 @@ class MainActivity : AppCompatActivity() {
             }
             val side = 128
             val degrees = imageProxy.imageInfo.rotationDegrees
-            val tRgbStart = System.nanoTime()
-            var rgbBytes = traceSection("rb5_direct_yuv_rgb") {
-                var bytes = if (liveSrTensorDirectYuv) {
-                    val y = imageProxy.planes[0]
-                    val u = imageProxy.planes[1]
-                    val v = imageProxy.planes[2]
-                    val wrote = nativeYuvToRgbRoiBytesRotatedDirectInto(
-                        y.buffer.duplicate(),
-                        u.buffer.duplicate(),
-                        v.buffer.duplicate(),
-                        imageProxy.width,
-                        imageProxy.height,
-                        y.rowStride,
-                        y.pixelStride,
-                        u.rowStride,
-                        u.pixelStride,
-                        v.rowStride,
-                        v.pixelStride,
-                        side,
-                        degrees,
-                        tensorLiveRgbBuffer,
-                    )
-                    if (!wrote) {
-                        error("native direct-YUV staging buffer write failed")
-                    }
-                    tensorLiveRgbBuffer
-                } else if (liveSrTensorRotatedNative) {
-                    nativeYuv420ToRgbCenterRoiBytesRotated(imageProxy, side, degrees)
-                } else {
-                    nativeYuv420ToRgbCenterRoiBytes(imageProxy, side)
-                }
-                if (!liveSrTensorRotatedNative && degrees != 0) {
-                    val nativeBitmap = rgbBytesToBitmap(bytes, side)
-                    val matrix = Matrix().apply { postRotate(degrees.toFloat()) }
-                    val rotated = Bitmap.createBitmap(nativeBitmap, 0, 0, side, side, matrix, true)
-                    bytes = bitmapToRgbBytes(rotated)
-                }
-                bytes
+            val rgbTiming = traceSection("rb5_direct_yuv_rgb") {
+                buildTensorRgbBytes(imageProxy, side, degrees)
             }
-            val nativeRgbMs = (System.nanoTime() - tRgbStart) / 1_000_000
+            val rgbBytes = rgbTiming.rgbBytes
+            val nativeRgbMs = rgbTiming.totalMs
             val strategyShadow = traceSection("rb5_strategy_shadow") {
                 computeStrategyShadow(rgbBytes)
             }
@@ -1382,6 +1503,8 @@ class MainActivity : AppCompatActivity() {
             val enhanceWallMs = (System.nanoTime() - tEnhanceStart) / 1_000_000
             val e2eMs = nativeRgbMs + timing.totalMs
             val analyzerWallMs = nativeRgbMs + enhanceWallMs
+            val elapsedNs = (System.nanoTime() - liveSrStartNs).coerceAtLeast(1L)
+            val effectiveEnhancedFps = liveSrEnhancedFrames * 1_000_000_000.0 / elapsedNs.toDouble()
             val profileSummary = if (frameCount % LIVE_SAMPLE_CAPTURE_INTERVAL == 0) {
                 resolver!!.qnnProfilingSummary(includeFullHex = false)
             } else {
@@ -1391,9 +1514,12 @@ class MainActivity : AppCompatActivity() {
                 tag,
                 "backend=QNN model=QUICKSR_W8A8 tensorLive crop=256->128->512 " +
                     "frame=${imageProxy.width}x${imageProxy.height} nativeRgb=$nativeRgbMs rotate=$degrees " +
+                    "yuvFillUs=${rgbTiming.yuvFillUs} bitmapRotateUs=${rgbTiming.bitmapRotateUs} " +
                     "pre=${timing.preprocessMs} inf=${timing.inferenceMs} post=${timing.postprocessMs} " +
                     "enhanceWall=$enhanceWallMs analyzer=$analyzerWallMs e2e=${e2eMs}ms " +
                     "tensorPath=${if (liveSrTensorDirectYuv) "directYuv" else if (liveSrTensorRotatedNative) "rotatedNative" else "kotlinRotate"} optimizedTensor=$liveSrOptimizedTensor " +
+                    "session=$liveSrSessionId everyN=$everyN frameIndex=$liveSrSeenFrames " +
+                    "enhancedIndex=$liveSrEnhancedFrames effectiveEnhancedFps=${"%.2f".format(Locale.US, effectiveEnhancedFps)} " +
                     strategyShadow.toLogFields() +
                     if (profileSummary.isNotEmpty()) " $profileSummary" else ""
             )
@@ -2543,6 +2669,10 @@ class MainActivity : AppCompatActivity() {
                                 pendingProbeMode = ""
                                 Log.d("RB5_SR", "pending probe consumed: direct_buffer")
                                 runDirectBufferProbe(imageProxy)
+                            } else if (pendingProbeMode == "qnn_shared_camera_tensor") {
+                                pendingProbeMode = ""
+                                Log.d("RB5_SR", "pending probe consumed: qnn_shared_camera_tensor")
+                                runQnnSharedCameraTensorCompareProbe(imageProxy)
                             } else if (pendingRealCameraCapture) {
                                 pendingRealCameraCapture = false
                                 runRealCameraCapture(imageProxy)
@@ -2598,7 +2728,7 @@ class MainActivity : AppCompatActivity() {
                 )
                 Log.d(CAMERA_TAG, "CameraX preview and ImageAnalysis started")
                 when (pendingProbeMode) {
-                    "yuv_roi", "tensor_ready", "direct_buffer", "direct_yuv_roi" -> Log.d("RB5_SR", "pending probe armed: $pendingProbeMode")
+                    "yuv_roi", "tensor_ready", "direct_buffer", "direct_yuv_roi", "qnn_shared_camera_tensor" -> Log.d("RB5_SR", "pending probe armed: $pendingProbeMode")
                     "tensor_live" -> {
                         pendingProbeMode = ""
                         liveSrTensorDirectYuv = false
