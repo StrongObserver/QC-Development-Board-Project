@@ -86,7 +86,7 @@ def parse_fixed_rows(log_text: str) -> list[dict[str, object]]:
     return rows
 
 
-def collect_fixed_sample(asset: str, model: str, timeout_s: int) -> tuple[str, list[dict[str, object]]]:
+def collect_fixed_sample(asset: str, model: str, profile_mode: str, timeout_s: int) -> tuple[str, list[dict[str, object]]]:
     prepare_device_interactive()
     adb("shell", "am", "force-stop", PACKAGE_NAME, check=False)
     adb("logcat", "-c", check=False)
@@ -106,6 +106,9 @@ def collect_fixed_sample(asset: str, model: str, timeout_s: int) -> tuple[str, l
         "--es",
         "sr_asset",
         asset,
+        "--es",
+        "qnn_profile_mode",
+        profile_mode,
         check=False,
     )
     if started.returncode != 0:
@@ -272,6 +275,7 @@ def parse_args() -> argparse.Namespace:
         default=["offline_text_edge_128.png", "case_text_signage_urban076.png", "case_people_scene_div2k0832.png"],
     )
     parser.add_argument("--model", default="QUICKSR_W8A8", choices=["QUICKSR_W8A8", "W8A8"])
+    parser.add_argument("--profile-mode", default="basic", choices=["off", "basic", "detailed", "linting"])
     parser.add_argument("--run-id", default="")
     parser.add_argument("--timeout-s", type=int, default=30)
     return parser.parse_args()
@@ -289,7 +293,7 @@ def main() -> None:
     all_rows: list[dict[str, object]] = []
     raw_logs = []
     for asset in args.assets:
-        log_text, rows = collect_fixed_sample(asset, args.model, args.timeout_s)
+        log_text, rows = collect_fixed_sample(asset, args.model, args.profile_mode, args.timeout_s)
         raw_logs.append(f"===== {asset} =====\n{log_text}")
         all_rows.extend(rows)
     (out_dir / "raw_logcat.txt").write_text("\n".join(raw_logs), encoding="utf-8")
@@ -338,6 +342,7 @@ def main() -> None:
                 "timestamp": timestamp,
                 "assets": "|".join(args.assets),
                 "model": args.model,
+                "profile_mode": args.profile_mode,
                 "cases": len(all_rows),
                 "pulled_images": len(pulled_rows),
                 "contact_sheet": contact_sheet,

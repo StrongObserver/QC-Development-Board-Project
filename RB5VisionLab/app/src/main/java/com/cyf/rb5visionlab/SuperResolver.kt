@@ -58,6 +58,7 @@ class SuperResolver(
     private val inputSize: Int = 128,
     private val outputSize: Int = inputSize * 4,
     private val inputLayout: SrInputLayout = SrInputLayout.NHWC,
+    private val qnnProfilingMode: QnnDelegate.Options.ProfilingOptions = QnnDelegate.Options.ProfilingOptions.BASIC_PROFILING,
 ) {
     private val interpreter: Interpreter
     private var gpuDelegate: GpuDelegate? = null
@@ -100,7 +101,7 @@ class SuperResolver(
                         setSkelLibraryDir(context.applicationInfo.nativeLibraryDir)
                         setHtpPerformanceMode(QnnDelegate.Options.HtpPerformanceMode.HTP_PERFORMANCE_HIGH_PERFORMANCE)
                         setHtpPdSession(QnnDelegate.Options.HtpPdSession.HTP_PD_SESSION_UNSIGNED)
-                        setProfiling(QnnDelegate.Options.ProfilingOptions.BASIC_PROFILING)
+                        setProfiling(qnnProfilingMode)
                         setLogLevel(QnnDelegate.Options.LogLevel.LOG_LEVEL_INFO)
                     }
                     qnnDelegate = QnnDelegate(qnnOptions)

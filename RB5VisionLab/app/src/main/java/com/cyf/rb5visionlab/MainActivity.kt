@@ -12,6 +12,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.hardware.HardwareBuffer
 import android.os.Bundle
 import android.os.Debug
 import android.os.Environment
@@ -249,6 +250,7 @@ class MainActivity : AppCompatActivity() {
     ): String
     external fun processYPlane(yData: ByteArray, width: Int, height: Int, rowStride: Int): String
     external fun directBufferProbe(yBuffer: ByteBuffer, uBuffer: ByteBuffer, vBuffer: ByteBuffer): String
+    external fun hardwareBufferProbe(hardwareBuffer: HardwareBuffer?, imageWidth: Int, imageHeight: Int, imageFormat: Int): String
     external fun nativeYuvToRgbRoiBytesRotatedDirect(
         yBuffer: ByteBuffer,
         uBuffer: ByteBuffer,
@@ -280,6 +282,22 @@ class MainActivity : AppCompatActivity() {
         rotationDegrees: Int,
         output: ByteArray,
     ): Boolean
+    external fun nativeYuvToRgbRoiBytesRotatedDirectBreakdown(
+        yBuffer: ByteBuffer,
+        uBuffer: ByteBuffer,
+        vBuffer: ByteBuffer,
+        width: Int,
+        height: Int,
+        yRowStride: Int,
+        yPixelStride: Int,
+        uRowStride: Int,
+        uPixelStride: Int,
+        vRowStride: Int,
+        vPixelStride: Int,
+        outputSide: Int,
+        rotationDegrees: Int,
+        output: ByteArray,
+    ): String
     external fun nativeYuvToRgbRoi(
         yData: ByteArray,
         uData: ByteArray,
@@ -360,6 +378,8 @@ class MainActivity : AppCompatActivity() {
         val autoRunYuvRoiProbe = boolIntentExtra("run_yuv_roi_probe")
         val autoRunTensorReadyProbe = boolIntentExtra("run_tensor_ready_probe")
         val autoRunDirectBufferProbe = boolIntentExtra("run_direct_buffer_probe")
+        val autoRunHardwareBufferProbe = boolIntentExtra("run_hardware_buffer_probe")
+        val autoRunNativeYuvBreakdownProbe = boolIntentExtra("run_native_yuv_breakdown_probe")
         val autoRunTileStill = boolIntentExtra("run_tile_still")
         val autoRunTileCompare = boolIntentExtra("run_tile_compare")
         pendingDemoRelationCapture = boolIntentExtra("save_demo_relation")
@@ -373,7 +393,7 @@ class MainActivity : AppCompatActivity() {
                 "run_qnn_shared_tensor_probe=$autoRunQnnSharedTensorProbe " +
                 "run_qnn_shared_tensor_compare_probe=$autoRunQnnSharedTensorCompareProbe " +
                 "run_qnn_shared_camera_tensor_compare_probe=$autoRunQnnSharedCameraTensorCompareProbe " +
-                "run_yuv_roi_probe=$autoRunYuvRoiProbe run_tensor_ready_probe=$autoRunTensorReadyProbe run_direct_buffer_probe=$autoRunDirectBufferProbe " +
+                "run_yuv_roi_probe=$autoRunYuvRoiProbe run_tensor_ready_probe=$autoRunTensorReadyProbe run_direct_buffer_probe=$autoRunDirectBufferProbe run_hardware_buffer_probe=$autoRunHardwareBufferProbe run_native_yuv_breakdown_probe=$autoRunNativeYuvBreakdownProbe " +
                 "probe_mode=$requestedProbeMode extras=${intent.extras?.keySet()?.joinToString()}"
         )
         Log.d(
@@ -385,7 +405,7 @@ class MainActivity : AppCompatActivity() {
                 "run_tile_still=$autoRunTileStill tile_model=${tileModelVariant.label} " +
                 "run_tile_compare=$autoRunTileCompare " +
                 "save_demo_relation=$pendingDemoRelationCapture " +
-                "run_yuv_roi_probe=$autoRunYuvRoiProbe run_tensor_ready_probe=$autoRunTensorReadyProbe run_direct_buffer_probe=$autoRunDirectBufferProbe demo_mode=$demoMode " +
+                "run_yuv_roi_probe=$autoRunYuvRoiProbe run_tensor_ready_probe=$autoRunTensorReadyProbe run_direct_buffer_probe=$autoRunDirectBufferProbe run_hardware_buffer_probe=$autoRunHardwareBufferProbe run_native_yuv_breakdown_probe=$autoRunNativeYuvBreakdownProbe demo_mode=$demoMode " +
                 "probe_mode=$requestedProbeMode sr_every_n=$liveSrEveryN sr_session_id=$liveSrSessionId"
         )
         if (autoRunResourceProbe) {
@@ -435,6 +455,10 @@ class MainActivity : AppCompatActivity() {
             pendingProbeMode = "direct_yuv_roi"
         } else if (requestedProbeMode == "direct_buffer" || autoRunDirectBufferProbe) {
             pendingProbeMode = "direct_buffer"
+        } else if (requestedProbeMode == "hardware_buffer" || autoRunHardwareBufferProbe) {
+            pendingProbeMode = "hardware_buffer"
+        } else if (requestedProbeMode == "native_yuv_breakdown" || autoRunNativeYuvBreakdownProbe) {
+            pendingProbeMode = "native_yuv_breakdown"
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             startCamera()
@@ -688,6 +712,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun parseQnnProfilingMode(value: String?): QnnDelegate.Options.ProfilingOptions {
+        return when (value?.trim()?.uppercase(Locale.US)) {
+            "OFF", "NONE", "PROFILING_OFF" -> QnnDelegate.Options.ProfilingOptions.PROFILING_OFF
+            "DETAILED", "DETAILED_PROFILING" -> QnnDelegate.Options.ProfilingOptions.DETAILED_PROFILING
+            "LINTING", "LINT", "LINTING_PROFILING" -> QnnDelegate.Options.ProfilingOptions.LINTING_PROFILING
+            else -> QnnDelegate.Options.ProfilingOptions.BASIC_PROFILING
+        }
+    }
+
     private fun startLiveSrFromIntent() {
         val useOptimizedTensor = shouldUseOptimizedTensorLivePath()
         liveSr = !useOptimizedTensor
@@ -768,6 +801,7 @@ class MainActivity : AppCompatActivity() {
                     this,
                     modelAsset = fixedVariant.assetName,
                     backend = SrBackend.QNN,
+                    qnnProfilingMode = parseQnnProfilingMode(intent.getStringExtra("qnn_profile_mode")),
                 )
                 var profileSummary = "profile=not_collected"
                 val (qnnBitmap, timing) = try {
@@ -2037,6 +2071,81 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun runHardwareBufferProbe(imageProxy: ImageProxy) {
+        try {
+            val hardwareBuffer = imageProxy.image?.hardwareBuffer
+            val result = hardwareBufferProbe(
+                hardwareBuffer,
+                imageProxy.width,
+                imageProxy.height,
+                imageProxy.format,
+            )
+            Log.d(
+                "RB5_HARDWARE_BUFFER",
+                "probe frame=${imageProxy.width}x${imageProxy.height} format=${imageProxy.format} native=$result"
+            )
+            runOnUiThread {
+                offlineEvalActive = false
+                statusTextView.text =
+                    "HardwareBuffer probe\n" +
+                        "frame ${imageProxy.width}x${imageProxy.height}\n" +
+                        result
+                Toast.makeText(this, "HardwareBuffer probe complete", Toast.LENGTH_LONG).show()
+            }
+        } catch (e: Throwable) {
+            Log.e("RB5_HARDWARE_BUFFER", "probe failed", e)
+            runOnUiThread {
+                offlineEvalActive = false
+                statusTextView.text = "HardwareBuffer probe failed: ${e.message}"
+                Toast.makeText(this, "HardwareBuffer probe failed", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun runNativeYuvBreakdownProbe(imageProxy: ImageProxy) {
+        try {
+            val side = LIVE_MODEL_INPUT_SIDE
+            val y = imageProxy.planes[0]
+            val u = imageProxy.planes[1]
+            val v = imageProxy.planes[2]
+            val result = nativeYuvToRgbRoiBytesRotatedDirectBreakdown(
+                y.buffer.duplicate(),
+                u.buffer.duplicate(),
+                v.buffer.duplicate(),
+                imageProxy.width,
+                imageProxy.height,
+                y.rowStride,
+                y.pixelStride,
+                u.rowStride,
+                u.pixelStride,
+                v.rowStride,
+                v.pixelStride,
+                side,
+                imageProxy.imageInfo.rotationDegrees,
+                tensorLiveRgbBuffer,
+            )
+            Log.d(
+                "RB5_NATIVE_BREAKDOWN",
+                "probe frame=${imageProxy.width}x${imageProxy.height} rotation=${imageProxy.imageInfo.rotationDegrees} $result"
+            )
+            runOnUiThread {
+                offlineEvalActive = false
+                statusTextView.text =
+                    "Native YUV breakdown probe\n" +
+                        "frame ${imageProxy.width}x${imageProxy.height}\n" +
+                        result
+                Toast.makeText(this, "Native YUV breakdown complete", Toast.LENGTH_LONG).show()
+            }
+        } catch (e: Throwable) {
+            Log.e("RB5_NATIVE_BREAKDOWN", "probe failed", e)
+            runOnUiThread {
+                offlineEvalActive = false
+                statusTextView.text = "Native YUV breakdown failed: ${e.message}"
+                Toast.makeText(this, "Native YUV breakdown failed", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     private fun runDirectYuvRoiProbe(imageProxy: ImageProxy) {
         try {
             val side = 128
@@ -2669,6 +2778,14 @@ class MainActivity : AppCompatActivity() {
                                 pendingProbeMode = ""
                                 Log.d("RB5_SR", "pending probe consumed: direct_buffer")
                                 runDirectBufferProbe(imageProxy)
+                            } else if (pendingProbeMode == "hardware_buffer") {
+                                pendingProbeMode = ""
+                                Log.d("RB5_SR", "pending probe consumed: hardware_buffer")
+                                runHardwareBufferProbe(imageProxy)
+                            } else if (pendingProbeMode == "native_yuv_breakdown") {
+                                pendingProbeMode = ""
+                                Log.d("RB5_SR", "pending probe consumed: native_yuv_breakdown")
+                                runNativeYuvBreakdownProbe(imageProxy)
                             } else if (pendingProbeMode == "qnn_shared_camera_tensor") {
                                 pendingProbeMode = ""
                                 Log.d("RB5_SR", "pending probe consumed: qnn_shared_camera_tensor")
@@ -2728,7 +2845,7 @@ class MainActivity : AppCompatActivity() {
                 )
                 Log.d(CAMERA_TAG, "CameraX preview and ImageAnalysis started")
                 when (pendingProbeMode) {
-                    "yuv_roi", "tensor_ready", "direct_buffer", "direct_yuv_roi", "qnn_shared_camera_tensor" -> Log.d("RB5_SR", "pending probe armed: $pendingProbeMode")
+                    "yuv_roi", "tensor_ready", "direct_buffer", "hardware_buffer", "native_yuv_breakdown", "direct_yuv_roi", "qnn_shared_camera_tensor" -> Log.d("RB5_SR", "pending probe armed: $pendingProbeMode")
                     "tensor_live" -> {
                         pendingProbeMode = ""
                         liveSrTensorDirectYuv = false

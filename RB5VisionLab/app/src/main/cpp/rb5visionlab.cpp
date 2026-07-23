@@ -9,6 +9,8 @@
 #include <android/log.h>
 #include <android/asset_manager.h>
 #include <android/asset_manager_jni.h>
+#include <android/hardware_buffer.h>
+#include <android/hardware_buffer_jni.h>
 #include <opencv2/core.hpp>
 
 #define LOG_TAG "RB5_NATIVE"
@@ -1027,23 +1029,23 @@ int clampToByte(float value) {
 }
 
 int yuvToArgb(int y, int u, int v) {
-    const float yf = static_cast<float>(y);
-    const float uf = static_cast<float>(u) - 128.0f;
-    const float vf = static_cast<float>(v) - 128.0f;
-    const int r = clampToByte(yf + 1.402f * vf);
-    const int g = clampToByte(yf - 0.344136f * uf - 0.714136f * vf);
-    const int b = clampToByte(yf + 1.772f * uf);
+    const int c = y;
+    const int d = u - 128;
+    const int e = v - 128;
+    const int r = clampToByte((256 * c + 359 * e + 128) >> 8);
+    const int g = clampToByte((256 * c - 88 * d - 183 * e + 128) >> 8);
+    const int b = clampToByte((256 * c + 454 * d + 128) >> 8);
     return static_cast<int>(0xFF000000u | (static_cast<unsigned int>(r) << 16)
             | (static_cast<unsigned int>(g) << 8) | static_cast<unsigned int>(b));
 }
 
 void yuvToRgb(int y, int u, int v, jbyte* out) {
-    const float yf = static_cast<float>(y);
-    const float uf = static_cast<float>(u) - 128.0f;
-    const float vf = static_cast<float>(v) - 128.0f;
-    out[0] = static_cast<jbyte>(clampToByte(yf + 1.402f * vf));
-    out[1] = static_cast<jbyte>(clampToByte(yf - 0.344136f * uf - 0.714136f * vf));
-    out[2] = static_cast<jbyte>(clampToByte(yf + 1.772f * uf));
+    const int c = y;
+    const int d = u - 128;
+    const int e = v - 128;
+    out[0] = static_cast<jbyte>(clampToByte((256 * c + 359 * e + 128) >> 8));
+    out[1] = static_cast<jbyte>(clampToByte((256 * c - 88 * d - 183 * e + 128) >> 8));
+    out[2] = static_cast<jbyte>(clampToByte((256 * c + 454 * d + 128) >> 8));
 }
 
 int normalizeRotation(int rotation_degrees) {
@@ -1294,6 +1296,71 @@ Java_com_cyf_rb5visionlab_MainActivity_directBufferProbe(
 }
 
 extern "C"
+JNIEXPORT jstring JNICALL
+Java_com_cyf_rb5visionlab_MainActivity_hardwareBufferProbe(
+        JNIEnv* env,
+        jobject /* thiz */,
+        jobject hardware_buffer,
+        jint image_width,
+        jint image_height,
+        jint image_format) {
+    if (hardware_buffer == nullptr) {
+        return env->NewStringUTF("status=blocked stage=java_image hardwareBuffer=null");
+    }
+
+    AHardwareBuffer* buffer = AHardwareBuffer_fromHardwareBuffer(env, hardware_buffer);
+    if (buffer == nullptr) {
+        return env->NewStringUTF("status=blocked stage=fromHardwareBuffer hardwareBuffer=null");
+    }
+
+    AHardwareBuffer_Desc desc{};
+    AHardwareBuffer_describe(buffer, &desc);
+
+    AHardwareBuffer_Planes planes{};
+    const int lock_status = AHardwareBuffer_lockPlanes(
+            buffer,
+            AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN,
+            -1,
+            nullptr,
+            &planes);
+    uint32_t plane_count = 0;
+    uint32_t plane0_row_stride = 0;
+    uint32_t plane0_pixel_stride = 0;
+    bool plane0_data = false;
+    if (lock_status == 0) {
+        plane_count = planes.planeCount;
+        if (planes.planeCount > 0) {
+            plane0_row_stride = planes.planes[0].rowStride;
+            plane0_pixel_stride = planes.planes[0].pixelStride;
+            plane0_data = planes.planes[0].data != nullptr;
+        }
+        AHardwareBuffer_unlock(buffer, nullptr);
+    }
+
+    char result[768];
+    snprintf(result, sizeof(result),
+             "status=pass stage=hardware_buffer image=%dx%d imageFormat=%d "
+             "descWidth=%u descHeight=%u descLayers=%u descFormat=%u descUsage=%llu descStride=%u "
+             "lockPlanes=%d planeCount=%u plane0RowStride=%u plane0PixelStride=%u plane0Data=%s",
+             image_width,
+             image_height,
+             image_format,
+             desc.width,
+             desc.height,
+             desc.layers,
+             desc.format,
+             static_cast<unsigned long long>(desc.usage),
+             desc.stride,
+             lock_status,
+             plane_count,
+             plane0_row_stride,
+             plane0_pixel_stride,
+             plane0_data ? "true" : "false");
+    LOGD("hardwareBufferProbe %s", result);
+    return env->NewStringUTF(result);
+}
+
+extern "C"
 JNIEXPORT jbyteArray JNICALL
 Java_com_cyf_rb5visionlab_MainActivity_nativeYuvToRgbRoiBytesRotatedDirect(
         JNIEnv* env,
@@ -1429,6 +1496,108 @@ Java_com_cyf_rb5visionlab_MainActivity_nativeYuvToRgbRoiBytesRotatedDirectInto(
     LOGD("nativeYuvToRgbRoiBytesRotatedDirectInto width=%d height=%d crop=%d output=%d rotation=%d",
          width, height, crop_side, output_side, normalizeRotation(rotation_degrees));
     return JNI_TRUE;
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_com_cyf_rb5visionlab_MainActivity_nativeYuvToRgbRoiBytesRotatedDirectBreakdown(
+        JNIEnv* env,
+        jobject /* thiz */,
+        jobject y_buffer,
+        jobject u_buffer,
+        jobject v_buffer,
+        jint width,
+        jint height,
+        jint y_row_stride,
+        jint y_pixel_stride,
+        jint u_row_stride,
+        jint u_pixel_stride,
+        jint v_row_stride,
+        jint v_pixel_stride,
+        jint output_side,
+        jint rotation_degrees,
+        jbyteArray output) {
+    const auto t_total0 = std::chrono::steady_clock::now();
+    if (y_buffer == nullptr || u_buffer == nullptr || v_buffer == nullptr || output == nullptr ||
+        width <= 0 || height <= 0 || output_side <= 0 ||
+        y_row_stride <= 0 || u_row_stride <= 0 || v_row_stride <= 0 ||
+        y_pixel_stride <= 0 || u_pixel_stride <= 0 || v_pixel_stride <= 0) {
+        return env->NewStringUTF("status=blocked stage=argument");
+    }
+
+    const int byte_count = output_side * output_side * 3;
+    if (env->GetArrayLength(output) < byte_count) {
+        return env->NewStringUTF("status=blocked stage=output_size");
+    }
+
+    const auto t_addr0 = std::chrono::steady_clock::now();
+    const auto* y_bytes = static_cast<const uint8_t*>(env->GetDirectBufferAddress(y_buffer));
+    const auto* u_bytes = static_cast<const uint8_t*>(env->GetDirectBufferAddress(u_buffer));
+    const auto* v_bytes = static_cast<const uint8_t*>(env->GetDirectBufferAddress(v_buffer));
+    const auto t_addr1 = std::chrono::steady_clock::now();
+    if (y_bytes == nullptr || u_bytes == nullptr || v_bytes == nullptr) {
+        return env->NewStringUTF("status=blocked stage=direct_buffer");
+    }
+
+    const auto t_pin0 = std::chrono::steady_clock::now();
+    jbyte* out_bytes = env->GetByteArrayElements(output, nullptr);
+    const auto t_pin1 = std::chrono::steady_clock::now();
+    if (out_bytes == nullptr) {
+        return env->NewStringUTF("status=blocked stage=output_pin");
+    }
+
+    const int crop_side = std::max(
+            output_side,
+            std::min({width * output_side / 640, width, height}));
+    const int left = (width - crop_side) / 2;
+    const int top = (height - crop_side) / 2;
+
+    const auto t_loop0 = std::chrono::steady_clock::now();
+    for (int oy = 0; oy < output_side; ++oy) {
+        const int src_y = top + (oy * crop_side + crop_side / (output_side * 2)) / output_side;
+        const int y_base = src_y * y_row_stride;
+        const int uv_y = src_y / 2;
+        const int u_base = uv_y * u_row_stride;
+        const int v_base = uv_y * v_row_stride;
+        for (int ox = 0; ox < output_side; ++ox) {
+            const int src_x = left + (ox * crop_side + crop_side / (output_side * 2)) / output_side;
+            const int uv_x = src_x / 2;
+            const int y_value = y_bytes[y_base + src_x * y_pixel_stride];
+            const int u_value = u_bytes[u_base + uv_x * u_pixel_stride];
+            const int v_value = v_bytes[v_base + uv_x * v_pixel_stride];
+            const int out = rotatedOutputIndex(ox, oy, output_side, rotation_degrees) * 3;
+            yuvToRgb(y_value, u_value, v_value, out_bytes + out);
+        }
+    }
+    const auto t_loop1 = std::chrono::steady_clock::now();
+
+    const auto t_release0 = std::chrono::steady_clock::now();
+    env->ReleaseByteArrayElements(output, out_bytes, 0);
+    const auto t_release1 = std::chrono::steady_clock::now();
+    const auto t_total1 = std::chrono::steady_clock::now();
+
+    const int64_t address_us = std::chrono::duration_cast<std::chrono::microseconds>(t_addr1 - t_addr0).count();
+    const int64_t output_pin_us = std::chrono::duration_cast<std::chrono::microseconds>(t_pin1 - t_pin0).count();
+    const int64_t loop_us = std::chrono::duration_cast<std::chrono::microseconds>(t_loop1 - t_loop0).count();
+    const int64_t release_us = std::chrono::duration_cast<std::chrono::microseconds>(t_release1 - t_release0).count();
+    const int64_t total_us = std::chrono::duration_cast<std::chrono::microseconds>(t_total1 - t_total0).count();
+
+    char result[768];
+    snprintf(result, sizeof(result),
+             "status=pass stage=direct_yuv_breakdown frame=%dx%d crop=%d output=%d rotation=%d "
+             "addressUs=%lld outputPinUs=%lld loopUs=%lld releaseUs=%lld totalUs=%lld",
+             width,
+             height,
+             crop_side,
+             output_side,
+             normalizeRotation(rotation_degrees),
+             static_cast<long long>(address_us),
+             static_cast<long long>(output_pin_us),
+             static_cast<long long>(loop_us),
+             static_cast<long long>(release_us),
+             static_cast<long long>(total_us));
+    LOGD("nativeYuvToRgbRoiBytesRotatedDirectBreakdown %s", result);
+    return env->NewStringUTF(result);
 }
 
 extern "C"
