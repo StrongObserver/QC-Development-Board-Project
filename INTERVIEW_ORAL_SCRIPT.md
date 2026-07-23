@@ -1,27 +1,27 @@
 # RB5 Interview Oral Script
 
-Updated: 2026-07-20
+Updated: 2026-07-23
 
 ## 30 Seconds
 
 ```text
-我做的是一个 RB5 Gen2 / QCS8550 Android 端侧画质增强项目。
-链路是 CameraX 取实时帧，裁中心 ROI，用 TFLite 模型走 QNN Delegate
-落到 HTP，再把增强结果显示出来。
+我做的是一个 RB5 Gen2 / QCS8550 Android 端侧 AI 推理 Runtime 和异构性能优化项目。
+我用 Real-ESRGAN 和 QuickSRNet 作为工作负载，打通 TFLite、AI Hub、
+qnn-net-run 和 Android QNN Delegate 到 HTP 的验证路径。
 
-这个项目的重点不是“模型能跑”，而是我把它做成了一个可 profiling、
-可评测、可解释取舍的端侧 pipeline。QNN inference 已经只有 1-3ms，
-真正瓶颈在 CameraX 转 Bitmap 和输出后处理。我把 live ROI e2e 从
-约 63/65ms 优化到最新 direct-YUV 默认路径 10/12ms p50/p95，并用固定 benchmark 和真实
-相机场景决定 QuickSRNetSmall 做 live workhorse，Real-ESRGAN 保留
-为感知增强和 post-capture 对照路线。
+这个项目的重点不是“模型能跑”，而是把 Runtime 路径做成可 profiling、
+可评测、可解释取舍的工程闭环。QNN inference 已经只有 1-3ms，
+真正瓶颈在 CameraX 转 Bitmap、tensor 写入和输出后处理。我把 app live
+ROI e2e 从约 63/65ms 优化到最新 direct-YUV 默认路径 10/12ms p50/p95，
+并用固定 benchmark 和真实相机场景决定 QuickSRNetSmall 做 live workhorse，
+Real-ESRGAN 保留为 QNN/HTP 里程碑和 post-capture 对照路线。
 ```
 
 ## 2 Minutes
 
 ```text
-这个项目起点是把超分模型真正落到 RB5 Gen2 Android 设备上，而不是只
-在 PC 上跑 demo。我先打通 CameraX ImageAnalysis、中心 ROI 裁剪、
+这个项目起点是把真实 AI workload 真正落到 RB5 Gen2 Android 设备上，
+而不是只在 PC 上跑 demo。我先打通 CameraX ImageAnalysis、中心 ROI、
 TFLite 推理和屏幕显示，然后做 CPU、NNAPI、GPU、QNN 的路径对比。
 
 QNN 侧我先用 Real-ESRGAN W8A8 建立部署里程碑。最关键的坑不是模型
@@ -33,7 +33,7 @@ libQnnHtpV73Skel.so 打进 app，并调用 setSkelLibraryDir。
 QNN inference 已经只有几毫秒，老路径真正慢的是 4000x3000 全帧
 ImageProxy.toBitmap，大约 41/43ms。把 live analysis 收敛到 1280x960
 后，e2e 从约 63/65ms 降到 22/25ms。后面再做 buffer reuse、output
-Bitmap reuse 和 UINT8 output bulk-copy，最新 app smoke 达到 direct-YUV 默认路径 10/12ms。
+Bitmap reuse、direct PlaneProxy ByteBuffer 和 UINT8 tensor bulk-copy，最新 app smoke 达到 direct-YUV 默认路径 10/12ms。
 
 模型路线上，我把 Real-ESRGAN 和 QuickSRNetSmall 分开看。QuickSRNet
 更小、更保守，更适合 live ROI；Real-ESRGAN 更锐、更感知，适合做
@@ -41,8 +41,9 @@ QNN/HTP 里程碑、对照和 post-capture tile。我也测了双模型切换，
 369ms，所以没有把自动 routing 做成默认路径。
 
 最后我补了固定 24-case benchmark、真实相机 8-scene 小集、EvalHub
-生命周期评测和 loop_state handoff。PSNR/SSIM 只是 fidelity evidence，
-最终画质仍保留 visual review veto。
+生命周期评测和 loop_state handoff。AI Hub profile、本地 qnn-net-run profile
+和 Android app e2e 是不同证据线，PSNR/SSIM 只是 fidelity evidence，
+最终质量仍保留 visual review veto。
 ```
 
 ## Deep-Dive Answers
@@ -92,6 +93,8 @@ lane，不是当前 Kotlin 主线已经实现的能力。
 | CPU Real-ESRGAN baseline | about `579-610ms` inference |
 | GPU Real-ESRGAN | about `126-148ms` inference |
 | AI Hub QCS8550 float profile | `5.9ms`, 74 ops on HTP |
+| AI Hub QCS8550 W8A8 QNN profile | about `1.778ms` p50, NPU 72 |
+| Local qnn-net-run QNN accelerator | about `9.75/10.39ms` p50/p95 |
 | Old app live ROI e2e | about `63/65ms` |
 | Latest default app live ROI e2e | `10/12ms` |
 | Current default direct-YUV live e2e | `10/12ms` |
@@ -108,4 +111,5 @@ Automatic routing is product-ready.
 True zero-copy has been implemented.
 Current battery-node power is external-meter perf/watt.
 The app e2e logs are fixed-manifest visual quality evidence.
+AI Hub profile, qnn-net-run profile, and app e2e are one latency number.
 ```

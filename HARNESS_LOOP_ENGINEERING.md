@@ -1,6 +1,6 @@
-# Harness And Loop Engineering Policy
+# Runtime Harness And Loop Engineering Policy
 
-Updated: 2026-07-19
+Updated: 2026-07-23
 
 ## Purpose
 
@@ -15,6 +15,25 @@ designed objective is either completed or has a verified hard blocker.
 The project needs stable baselines and Git commits, but a committed stable
 version is a checkpoint, not a ceiling. A result that says "not justified for
 the current mainline" must not be rewritten as "never explore this direction".
+
+## Current Project Frame
+
+The accepted RB5 project frame is now:
+
+```text
+QCS8550 端侧 AI 推理 Runtime 与异构性能优化
+```
+
+The harness should treat Real-ESRGAN, QuickSRNet, CameraX, tile, and Demo Mode
+as workloads or evidence surfaces. They are not the project center by
+themselves. The controlling questions are:
+
+```text
+Can the model/runtime path execute correctly on CPU/GPU/NNAPI/QNN/HTP?
+Where do latency, memory, synchronization, data movement, and power costs land?
+Which claim is supported by AI Hub profile, qnn-net-run profile, app e2e logs,
+or visual review, and which claim is not supported yet?
+```
 
 ## Core Rule
 
@@ -43,6 +62,8 @@ project constraint.
 | high switching cost | do not default to live routing yet | never compare or combine models |
 | dependency/tooling cost too high | defer package integration | never add the metric |
 | physical evidence missing | ask for capture or create capture protocol | replace it with benchmark evidence |
+| raw QNN profile bytes cannot be decoded | keep app profile as diagnostic/raw evidence | claim official per-op app profiling |
+| board-level battery-node power only | label as board-level estimate | claim external-meter perf/watt |
 
 ## Stable Baseline Rule
 
@@ -67,6 +88,7 @@ lanes:
 | `exploration_lane` | Try a bounded higher-upside idea without weakening the baseline |
 | `quality_lane` | Investigate visible artifacts or model tradeoffs |
 | `performance_lane` | Attack a measured latency/memory/power bottleneck |
+| `runtime_lane` | Clarify backend, delegate, profile, initialization, memory, and transport behavior |
 | `product_lane` | Validate real-camera, sustained, or user-facing behavior |
 
 ## Full-Scope Completion Rule
@@ -97,8 +119,8 @@ Rules:
    evidence, not because it looks hard.
 5. A route can move to `not_viable_with_evidence` only with direct evidence that
    it cannot work or would violate a hard constraint.
-6. Every loop handoff must name the next unfinished design objective, not only
-   the next documentation or stabilization task.
+6. Every loop handoff must name the next unfinished Runtime/design objective,
+   not only the next documentation or stabilization task.
 
 ## Full-Scope Ledger Requirement
 
@@ -170,6 +192,10 @@ The harness must:
 5. Prevent one negative result from freezing the project.
 6. Require before/after evidence for performance claims.
 7. Keep human visual review as quality veto, not as a reason to stop all work.
+8. Keep AI Hub profile, local qnn-net-run profile, and Android app e2e timing as
+   separate evidence lanes; do not collapse them into one latency claim.
+9. Keep board-level battery-node estimates separate from product-grade
+   perf/watt.
 
 ## Loop State Language
 
@@ -198,12 +224,16 @@ unless the scope is explicit.
 Current route decisions mean:
 
 ```text
-QuickSRNetSmall is the current live ROI workhorse candidate.
-Real-ESRGAN remains the QNN/HTP milestone and perceptual comparison path.
+QuickSRNetSmall is the current live ROI workload candidate.
+Real-ESRGAN remains the QNN/HTP deployment milestone and perceptual comparison workload.
 Automatic dual-model live routing is not justified as the default path yet.
 every-N ImageAnalysis is a valid cadence/product probe, not a per-frame latency win.
 QNN shared memory is a C++ delegate/native probe lane, not a direct Kotlin wrapper patch.
-YUV ROI, perceptual metrics, AIMET, shared-memory probes, and real-camera or video expansion remain valid future exploration lanes when their triggers are met.
+Direct-YUV native tensor input is the default app data path, around 10/12ms e2e
+p50/p95 in the current smoke. It is still not true QNN input zero-copy.
+AIMET, cold/warm init, sticky memory, sustained P99, QNN profile boundaries,
+shared-memory probes, and real-camera or video expansion remain valid future
+Runtime evidence lanes when their triggers are met.
 ```
 
 They do not mean:
@@ -215,4 +245,5 @@ Stop evaluating AIMET forever.
 Stay only with the current stable demo.
 Treat every-N as proof of lower single-frame latency.
 Treat shared-memory support as already integrated into the current Kotlin path.
+Treat the project as only an image-enhancement app after the Runtime reframe.
 ```

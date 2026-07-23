@@ -2,11 +2,45 @@
 
 ## Current Conclusion
 
-Current checkpoint has advanced beyond the previous closeout and the phase-2
-engineering loop. The app e2e schema export, output-path optimization, every-N
-smoke, shared-memory feasibility classification, Demo Mode evidence, app
-fixed-sample replay, AIMET feasibility evidence, relation-sheet orientation fix,
-and direct-YUV data-path promotion have been reviewed locally with evidence.
+Current checkpoint has advanced beyond the previous image-enhancement framing.
+The accepted project frame is now:
+
+```text
+QCS8550 端侧 AI 推理 Runtime 与异构性能优化
+```
+
+Real-ESRGAN and QuickSRNet remain representative workloads, but the controlling
+story is Runtime deployment, QNN/HTP execution, profiling, data-path cost,
+quantization, memory/power boundaries, benchmark discipline, and defensible
+tradeoff decisions.
+
+The app e2e schema export, output-path optimization, every-N smoke,
+shared-memory feasibility classification, Demo Mode evidence, app fixed-sample
+replay, AIMET feasibility evidence, relation-sheet orientation fix, and
+direct-YUV data-path promotion have been reviewed locally with evidence.
+
+RKNN-inspired Runtime exploration produced useful evidence, but the follow-up
+code changes were reverted at the user's request:
+
+```text
+stream-log live runner collection was tested, then reverted
+live profile log slimming was tested, then reverted
+P99 metrics in live runner output were tested, then reverted
+5-minute default direct-YUV stream-log evidence remains as ignored/local evidence
+5-minute board-level direct-YUV power estimate
+current-APK init/memory/switch probe
+100-run fixed-sample steady probe
+```
+
+Decision:
+
+```text
+Do not change the default live path to multi-instance execution, producer /
+consumer queueing, or true-zero-copy work in this loop.
+The useful transfer from the RKNN video is wall-time evidence discipline and
+runtime/logging overhead awareness. No RKNN-inspired source change is currently
+kept after rollback.
+```
 
 The stable deliverable is archived as:
 
@@ -48,13 +82,42 @@ Real-ESRGAN w8a16 generated-exporter support check
 Next priority:
 
 ```text
-1. Treat direct-YUV as the current compiled default live ROI data path.
-2. Before committing, do a diff audit and decide whether to split source/script
-   changes from result documentation.
-3. AIMET/CLE remote W8A8 export requires explicit user approval because it
+1. Keep direct-YUV as the current compiled default live ROI data path.
+2. Keep AI Hub profile, local qnn-net-run profile, and Android app e2e timing
+   as separate evidence lanes; do not merge them into one latency claim.
+3. Build the compact final benchmark table from the new evidence.
+4. If mentioning stream-log/P99 evidence, label it as an explored-and-reverted
+   local experiment, not as current source behavior.
+5. AIMET/CLE remote W8A8 export requires explicit user approval because it
    submits Qualcomm AI Hub quantize/compile/profile jobs.
-4. Full CameraX VideoCapture/Recorder remains a product/demo decision, not a
+6. Full CameraX VideoCapture/Recorder remains a product/demo decision, not a
    required continuation of the current live ROI path.
+```
+
+## New RKNN-Idea Evidence
+
+```text
+RKNN idea transfer assessment:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\runtime_exploration\20260723_rknn_idea_transfer_assessment
+
+Runtime loop P0-P16 summary:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\runtime_exploration\20260723_runtime_loop_p0_p16_summary
+
+5-minute default stream-log live:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_loop_p2_default_streamlog_5min
+8941 frames, e2e p50/p95/p99 = 11/12/12ms
+
+5-minute board-level power:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\power_probe\20260723_loop_p3_power_live_direct_yuv_5min
+mean board power about 6.30W, battery temp 24.0C -> 24.0C
+
+current APK resource probe:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_loop_p5_resource_probe_current_apk
+Real init 2.4-2.9s, Quick init 155/624ms, Real->Quick switch 800ms
+
+100-run fixed steady probe:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_loop_p6_resource_probe_steady100
+Quick steady total p50/p95/p99 = 18/19/19ms
 ```
 
 Do not reopen as unfinished:

@@ -1,10 +1,10 @@
-# RB5 Gen2 路线评审 Prompt - 公司内部 AI
+# RB5 Gen2 Runtime 路线评审 Prompt - 公司内部 AI
 
-我在做一个 RB5 Gen2 / QCS8550 / Android 端侧 AI 画质增强项目，目标是形成一个接近真实工业研发逻辑、能打动懂技术面试官的项目。
+我在做一个 RB5 Gen2 / QCS8550 / Android 端侧 AI Runtime、模型部署、量化和异构性能优化项目，目标是形成一个接近真实工业研发逻辑、能打动懂技术面试官的项目。Real-ESRGAN 和 QuickSRNet 是代表性工作负载，不是项目本身的全部。
 
 ## 项目当前状态
 
-1. 已经打通 Android CameraX ROI -> TFLite -> QNN TFLite Delegate -> HTP -> 屏幕显示的端侧超分链路。
+1. 已经打通 Android CameraX ROI -> TFLite -> QNN TFLite Delegate -> HTP -> 屏幕显示的端侧 AI workload 链路。
 2. 主线模型是 Real-ESRGAN general x4v3 W8A8 TFLite，已经在 Android app 里通过 QNN Delegate 跑通。
 3. Real-ESRGAN app fixed sample 成功，最终 smoke 约 `pre=8ms / inf=4ms / post=47ms / total=59ms`。
 4. Real-ESRGAN live ROI repeated app e2e 约 `p50/p95=63/66ms`，其中 QNN inference 约 `3/3ms`。细分 profiling 显示主瓶颈是 `ImageProxy.toBitmap()` 全帧 4000x3000 转 Bitmap，约 `p50/p95=41/43ms`。
@@ -25,7 +25,7 @@
 
 ## 当前路线选择难点
 
-我不确定是否应该把项目设计成“Real-ESRGAN 主模型 + QuickSRNetSmall 候选模型，按场景选择”。
+我不确定是否应该把 Runtime 路线设计成“Real-ESRGAN 主模型 + QuickSRNetSmall 候选模型，按场景选择”。
 
 这个方案效果上有收益，但真实工业场景还要考虑：
 
@@ -39,7 +39,7 @@
 
 ## 希望你帮我判断的问题
 
-请你站在真实手机/相机影像算法产品研发角度，帮我判断：
+请你站在真实端侧 AI Runtime / 手机影像算法产品研发角度，帮我判断：
 
 1. 这种主模型 + 轻量候选模型的策略，在工业上是否合理？什么情况下合理，什么情况下不合理？
 2. 除了效果指标 PSNR/SSIM 和人眼 review，还应该补哪些关键数据，才能证明这个策略值得？

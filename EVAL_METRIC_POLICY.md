@@ -1,6 +1,20 @@
-# RB5 SR Evaluation Metric Policy
+# RB5 Runtime Workload Evaluation Metric Policy
 
-Updated: 2026-07-18
+Updated: 2026-07-23
+
+## Project Frame
+
+This policy now supports the Runtime project frame:
+
+```text
+QCS8550 端侧 AI 推理 Runtime 与异构性能优化
+```
+
+SR metrics remain useful because Real-ESRGAN and QuickSRNet are the current
+workloads, but quality metrics are only one lane. Keep Runtime evidence
+separate: AI Hub profile, local qnn-net-run profile, Android app e2e,
+memory/init/switch cost, and board-level power estimates answer different
+questions.
 
 ## Decision
 
@@ -27,6 +41,7 @@ quality decision for a perceptual SR model.
 | Sharpness / edge strength | diagnostic | Helps detect over-sharpening or under-enhancement |
 | Contact sheet / human review | visual veto | Final decision for text, faces, tree branches, artifacts |
 | Latency / model size / memory / power | engineering constraint | Determines deployability, not just quality |
+| AI Hub / qnn-net-run / app e2e | runtime evidence lanes | Must not be collapsed into one latency number |
 
 ## Category Rules
 

@@ -18,6 +18,45 @@ P8: source code, raw files, detailed logs
 
 The user's current prompt always wins over older `NEXT_ACTION.md`.
 
+## Current Project Positioning
+
+Updated: 2026-07-23
+
+The accepted project framing has been refined. Future agents should not treat
+this as primarily a CameraX image-enhancement app. The project is now:
+
+```text
+QCS8550 on-device AI inference Runtime and heterogeneous performance
+optimization.
+```
+
+Real-ESRGAN and QuickSRNet remain important, but they are representative
+workloads used to prove:
+
+```text
+PyTorch/TFLite/ONNX -> QNN/HTP deployment
+CPU/GPU/NNAPI/QNN backend comparison
+quantization and AIMET evidence
+runtime initialization and transport boundaries
+CameraX/native/tensor data-path profiling
+benchmark, app-e2e logging, and repeatable evidence
+latency/quality/memory/power tradeoff decisions
+```
+
+Use `C:\Users\Admin\Nutstore\1\Typora_save\自己的项目\最终项目设计-微调.md`
+as the current high-level design source when maintaining Harness/Loop text.
+In that file, the governing section is:
+
+```text
+项目一：QCS8550 端侧 AI 推理 Runtime 与异构性能优化
+```
+
+Older phrases such as "端侧 AI 画质增强 pipeline" are historical shorthand. Do
+not let them re-center the Harness/Loop around product image quality. Preserve
+SR, CameraX, tile, and real-camera evidence as workload/evaluation evidence,
+but keep the controlling goal as Runtime / deployment / profiling /
+heterogeneous optimization.
+
 ## Token Disclosure Rule
 
 Do not full-read every long RB5 document during routine onboarding. First read:
@@ -63,8 +102,9 @@ After reading, the agent must judge the task boundary from the current file.
 
 ## Default Loop Engineering Rule
 
-For benchmark or QNN work, future AI agents should treat the existing benchmark
-runner outputs as the default loop controller, not as optional reports.
+For benchmark, QNN, app runtime, or data-path work, future AI agents should
+treat the existing benchmark and app-e2e outputs as the default loop controller,
+not as optional reports.
 
 Use this order:
 
@@ -96,7 +136,7 @@ Important meanings:
 - If hard gates fail, stop and fix runner/output validity before discussing
   visual quality or performance claims.
 - If a low-light/natural-texture case is marked `conditional`, do not derail the
-  main QNN path unless human review marks it as `fail`.
+  Runtime/QNN path unless human review marks it as `fail`.
 - Negative evidence is not a command to stop exploring. Before writing `no-go`,
   `blocked`, or `do not`, classify the scope using
   `HARNESS_LOOP_ENGINEERING.md`: claim gate, mainline gate, implementation gate,
@@ -104,15 +144,17 @@ Important meanings:
 - A stable commit is a recoverable checkpoint, not a ceiling. After preserving a
   known-good path, keep bounded exploration lanes open when they serve the
   project goal.
-- The original project design is not optional. Every designed item must remain
-  in `PROJECT_FULL_SCOPE_LEDGER.md` as done, in_progress, queued,
-  blocked_needs_user, blocked_technical, or not_viable_with_evidence.
+- The accepted project design is not optional. Every Runtime/deployment/
+  profiling/evaluation item must remain in `PROJECT_FULL_SCOPE_LEDGER.md` as
+  done, in_progress, queued, blocked_needs_user, blocked_technical, or
+  not_viable_with_evidence.
 - Do not treat "not current mainline", "not default", "hard", or "time-consuming"
   as permission to stop attempting a designed item.
 - The current mainline has already moved through:
   single smoke -> repeated smoke p50/p95 -> full 24-case benchmark -> Path B
-  Android app QNN Delegate evidence. Do not restart old bring-up tasks unless the
-  current prompt asks for a rerun or a regression appears.
+  Android app QNN Delegate evidence -> app-e2e schema/output optimization ->
+  direct-YUV native tensor default path. Do not restart old bring-up tasks
+  unless the current prompt asks for a rerun or a regression appears.
 
 ## Redundant Knowledge Base Rule
 
@@ -130,7 +172,7 @@ full document.
 
 Use this layer when the loop is stuck or when the failure type is unclear:
 
-- SR quality, text/face distortion, low-light texture boundary: read `超分.md`,
+- Workload quality, text/face distortion, low-light texture boundary: read `超分.md`,
   `客观化评测方法.md`, and `自然细腻的细节质感效果表现及客观分析（含 RAW 噪声回叠）.md`.
 - QNN/HTP/LiteRT/runtime/app integration: read `高通NPU集成分析.md`,
   `端侧大模型 LiteRT 与高通 HTP 算子执行机制与量化管线分析.md`,
@@ -287,10 +329,13 @@ experimental paths.
 
 Current next engineering direction is usually:
 
-1. clean and stabilize the QNN Delegate app path,
-2. turn the existing app fixed-sample/live-ROI evidence into a more formal app
-   e2e record, or
-3. choose the next project-value task such as QuickSRNet comparison, AIMET
-   precision recovery, or native preprocessing/copy reduction.
+1. consolidate final Runtime evidence into benchmark tables, route decisions,
+   and interview/showcase material,
+2. run longer sustained app-e2e or cold/warm init/memory probes only when a
+   performance claim needs them,
+3. pursue AIMET deployable export only with explicit approval for remote AI Hub
+   jobs, or
+4. scope a larger CameraX-to-QNN memory/data-path experiment only if it has a
+   clear target beyond the current 10/12ms direct-YUV baseline.
 
 Always let the user's current oral-template prompt choose between these.

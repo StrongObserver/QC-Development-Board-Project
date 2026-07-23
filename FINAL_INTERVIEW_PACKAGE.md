@@ -1,36 +1,36 @@
 # RB5 Final Interview Package
 
-Updated: 2026-07-20
+Updated: 2026-07-23
 
 ## One Sentence
 
 ```text
-I built and profiled an Android/QCS8550 on-device image-enhancement pipeline
-that runs W8A8 super-resolution models through QNN TFLite Delegate on HTP, then
-made model and data-path decisions from latency, quality, memory, and risk.
+I built and profiled an Android/QCS8550 on-device AI inference Runtime path that
+runs W8A8 workloads through QNN TFLite Delegate on HTP, then made backend,
+model, and data-path decisions from latency, quality, memory, and risk evidence.
 ```
 
 ## 30-Second Pitch
 
 ```text
-我做的是 RB5 Gen2 / QCS8550 Android 端侧画质增强项目。链路是
-CameraX 取实时帧，裁中心 ROI，用 TFLite SR 模型走 QNN Delegate 落到
-HTP，再显示增强结果。
+我做的是 RB5 Gen2 / QCS8550 Android 端侧 AI 推理 Runtime 和异构性能优化项目。
+我用 Real-ESRGAN 和 QuickSRNet 作为工作负载，把模型从 TFLite / AI Hub /
+qnn-net-run 接到 Android QNN Delegate，并落到 HTP。
 
-项目重点不是单纯把模型跑起来，而是把 pipeline 做成可 profiling、可评测、
-可解释取舍的工程闭环。QNN inference 已经只有 1-3ms，真正瓶颈在
-CameraX 转 Bitmap 和输出后处理。我把 live ROI e2e 从约 63/65ms 推到
-最新 direct-YUV 默认路径 10/12ms p50/p95，并用固定 benchmark 和真实相机小集决定
-QuickSRNetSmall 做 live workhorse，Real-ESRGAN 保留为感知增强和
-post-capture 对照路线。
+项目重点不是单纯做一个画质 App，而是把 Runtime 路径做成可 profiling、
+可评测、可解释取舍的工程闭环。QNN inference 已经只有 1-3ms，真正瓶颈在
+CameraX 转 Bitmap、tensor 写入和输出后处理。我把 app live ROI e2e 从约
+63/65ms 推到最新 direct-YUV 默认路径 10/12ms p50/p95，并用固定 benchmark、
+app e2e 和真实相机小集决定 QuickSRNetSmall 做 live workhorse，Real-ESRGAN
+保留为 QNN/HTP 部署里程碑和 post-capture 对照路线。
 ```
 
 ## 2-Minute Pitch
 
 ```text
-这个项目起点是把超分模型真正落到 RB5 Gen2 Android 设备上。我先打通
-CameraX ImageAnalysis、中心 ROI 裁剪、TFLite 推理和屏幕显示，再做
-CPU、NNAPI、GPU、QNN 路径对比。
+这个项目起点是把真实 AI workload 落到 RB5 Gen2 Android 设备上的异构 Runtime。
+我先打通 CameraX ImageAnalysis、中心 ROI、TFLite 推理和屏幕显示，再做
+CPU、NNAPI、GPU、QNN 路径对比，明确不同后端的收益和边界。
 
 QNN 侧先用 Real-ESRGAN W8A8 建立部署里程碑。关键问题不是模型结构，
 而是 Android app 进程里如何稳定加载 QNN HTP runtime 和 skel。最终有效
@@ -40,8 +40,8 @@ setSkelLibraryDir(nativeLibraryDir)。
 跑通后我做 app 分段 profiling，发现 QNN inference 已经只有几毫秒，
 老路径慢在 4000x3000 全帧 ImageProxy.toBitmap，约 41/43ms。把 live
 analysis 收敛到 1280x960 后，e2e 从约 63/65ms 降到 22/25ms。后面继续
-做 buffer reuse、output Bitmap reuse 和 UINT8 output bulk-copy，最新
-app smoke 达到 direct-YUV 默认路径 10/12ms。
+做 native ROI、direct PlaneProxy ByteBuffer、buffer reuse、output Bitmap reuse
+和 UINT8 tensor bulk-copy，最新 app smoke 达到 direct-YUV 默认路径 10/12ms。
 
 模型路线上我把 Real-ESRGAN 和 QuickSRNetSmall 分开看。QuickSRNet 更小、
 更保守，更适合 live ROI；Real-ESRGAN 更锐、更感知，适合做 QNN/HTP
@@ -49,8 +49,9 @@ app smoke 达到 direct-YUV 默认路径 10/12ms。
 把自动 routing 做成默认路径。
 
 最后我补了固定 24-case benchmark、真实相机 8-scene 小集、EvalHub
-生命周期评测和 loop_state handoff。PSNR/SSIM 只是 fidelity evidence，
-最终画质仍保留 visual review veto。
+生命周期评测和 loop_state handoff。AI Hub profile、本地 qnn-net-run profile
+和 Android app e2e 是三条不同证据线，PSNR/SSIM 只是 fidelity evidence，
+最终质量仍保留 visual review veto。
 ```
 
 ## Numbers To Remember
@@ -60,6 +61,8 @@ app smoke 达到 direct-YUV 默认路径 10/12ms。
 | CPU Real-ESRGAN baseline | about `579-610ms` inference |
 | GPU Real-ESRGAN | about `126-148ms` inference |
 | AI Hub QCS8550 float profile | `5.9ms`, 74 ops on HTP |
+| AI Hub QCS8550 W8A8 QNN profile | about `1.778ms` p50, NPU 72 |
+| Local qnn-net-run QNN accelerator | about `9.75/10.39ms` p50/p95 |
 | Old app live ROI e2e | about `63/65ms` |
 | Latest default app live ROI e2e | `10/12ms` |
 | Current default direct-YUV live e2e | `10/12ms` |
@@ -113,9 +116,9 @@ App e2e timing rows prove visual quality.
 Supported claim:
 
 ```text
-The project proves a working Android QNN/HTP SR pipeline, shows profiling-driven
-data-path optimization, and makes defensible model-route decisions from measured
-latency, visual review, memory, and implementation risk.
+The project proves a working Android QNN/HTP Runtime path, shows profiling-driven
+Runtime/data-path optimization, and makes defensible backend/model-route
+decisions from measured latency, visual review, memory, and implementation risk.
 ```
 
 ## Evidence Pointers

@@ -1,13 +1,28 @@
 # App Default Model Decision
 
-Updated: 2026-07-19
+Updated: 2026-07-23
+
+## Project Frame
+
+This app default decision sits under the Runtime project frame:
+
+```text
+QCS8550 端侧 AI 推理 Runtime 与异构性能优化
+```
+
+QuickSRNetSmall is the default live workload because it is the best current
+latency/structure/resource tradeoff for the app path. Real-ESRGAN remains a
+QNN/HTP deployment milestone and post-capture/perceptual workload. This is a
+Runtime route decision, not a claim that the whole project is only a
+super-resolution app.
 
 ## Decision Scope
 
 Current scope: `mainline_gate`.
 
 The Android app default live SR model is now `QuickSRNetSmall W8A8` on the
-`QNN` backend.
+`QNN` backend, using the direct-YUV native tensor input path when the default
+live intent is used.
 
 Keep the current boundary:
 

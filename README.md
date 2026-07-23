@@ -1,35 +1,55 @@
 # QC Development Board Project
 
-Android / Qualcomm RB5 Gen2 edge-AI image enhancement project.
+Android / Qualcomm RB5 Gen2 edge-AI Runtime and heterogeneous performance
+optimization project.
 
 ## Current Project
 
-**RB5 Gen2 / QCS8550 on-device super-resolution pipeline with QNN deployment.**
+**RB5 Gen2 / QCS8550 on-device AI inference Runtime with QNN/HTP deployment and
+data-path profiling.**
 
-The current milestone is an Android CameraX live ROI enhancement path:
+The current milestone is an Android app Runtime path using super-resolution
+models as representative workloads:
 
 ```text
 CameraX ImageAnalysis
--> center ROI crop
+-> PlaneProxy direct ByteBuffer
+-> native C++ center ROI / rotation / YUV->RGB
+-> UINT8 NHWC tensor input
 -> QuickSRNetSmall W8A8 TFLite
 -> QNN TFLite Delegate / HTP
 -> display
 ```
 
 Real-ESRGAN W8A8 remains in the app as the QNN/HTP deployment milestone,
-perceptual comparison path, and optional post-capture/offline enhancement route.
-Automatic dual-model live routing is intentionally not the default.
+perceptual comparison workload, and optional post-capture/offline enhancement
+route. Automatic dual-model live routing is intentionally not the default.
+
+The project center is not CameraX UI or image quality alone. It is the measured
+path from model artifact to heterogeneous execution:
+
+```text
+PyTorch / TFLite / ONNX
+-> quantized model assets
+-> AI Hub / qnn-net-run / QNN Delegate
+-> HTP execution
+-> Android app e2e timing and benchmark evidence
+```
 
 ## Key Results
 
 | Result | Evidence |
 | --- | --- |
 | QNN/HTP app path works | `20260718_app_qnn_delegate_fixed_live_rb5` |
+| QCS8550 Proxy W8A8 QNN profile | p50 about `1.778ms`, NPU 72 |
+| Local qnn-net-run full 24-case profile | QNN accelerator p50/p95 about `9.75/10.39ms` |
 | Full-frame Bitmap conversion was the live bottleneck | `ImageProxy.toBitmap()` p50/p95 was about `41/43ms` before the 1280x960 live analysis fix |
 | Default live ROI route | `QNN + QuickSRNetSmall W8A8 + direct-YUV native tensor input` |
 | Default live ROI after output reuse | `19.0 / 24.7ms` e2e p50/p95 |
 | Latest live ROI after UINT8 output bulk-copy | `15 / 19ms` e2e p50/p95 in 120-frame app e2e smoke |
 | Current default direct-YUV live ROI | `10 / 12ms` e2e p50/p95 in compiled default app smoke |
+| RKNN-inspired stream-log/profile experiment | useful local evidence collected, then source changes reverted at user request |
+| Board-level live direct-YUV power | 5-minute battery-node estimate, mean about `6.30W`, temp `24.0C -> 24.0C` |
 | Latest app e2e schema output | `20260720_app_e2e_schema_output_reuse_120f/app_e2e_log.csv` |
 | 120s default live run | 3551 frames, e2e first/last 20% p50/p95 `20.0/25.0ms -> 21.0/26.0ms` |
 | 60s latest live run | 1763 frames, e2e first/last 20% p50/p95 `15.0/20.0ms -> 16.0/21.0ms` |
@@ -38,6 +58,7 @@ Automatic dual-model live routing is intentionally not the default.
 | Demo Mode relation evidence | `20260720_demo_relation_aligned_v3/demo_relation`, shows display-aligned wide preview, model input 128, and QNN SR output 512 |
 | App fixed-sample replay | `20260720_app_fixed_replay_quicksr_3assets`, 3 fixed assets through Android QNN path, p50 total about `17-18ms` |
 | Shared-memory feasibility | Phase 2 normal-vs-shared tensor compare passed; checksum matched and shared invoke avg was `1.056ms` vs normal `1.104ms`, but this is still not CameraX true zero-copy |
+| Shared-memory 500-repeat check | shared invoke avg `1.004ms` vs normal `1.028ms`; only about `24us` invoke-level delta |
 | Real-camera showcase | 8 scenes / 32 standard images, `accepted_with_caveats` |
 | Tensor-ready live experiment | valid, but not promoted: current recheck e2e p50/p95 `15 / 21ms` vs default `14 / 19.8ms` |
 
@@ -54,7 +75,7 @@ tracked by default.
 
 - `RB5VisionLab/`: Android app for CameraX, TFLite, QNN Delegate, live ROI SR,
   fixed samples, real-camera capture, and probe modes.
-- `RB5_SR_lab/`: host-side evaluation, benchmark, log parsing, and evidence
+- `RB5_SR_lab/`: host-side model/runtime evaluation, benchmark, log parsing, and evidence
   collection scripts.
 - `eval_hub/`: evaluation registry, lifecycle layers, and metric-role policy.
 - `knowledge_base/`: external research cards and reference index.
@@ -102,15 +123,17 @@ full power/perf-watt characterization
 automatic dual-model routing product readiness
 QuickSRNet globally better than Real-ESRGAN
 the screenrecord demo as a true VideoCapture/Recorder SR pipeline
+AI Hub profile, qnn-net-run profile, and app e2e timing as the same latency claim
 ```
 
 The supported claim is narrower and stronger:
 
 ```text
-The project deploys SR models through QNN/HTP, profiles the real Android app
-path, identifies data movement and output processing as dominant costs, moves
-the default live route to direct-YUV native ROI/RGB, and makes a route decision
-from latency, quality, memory, and visual-review evidence.
+The project deploys quantized AI workloads through QNN/HTP, profiles the real
+Android app path, separates AI Hub/qnn-net-run/app-e2e evidence, identifies data
+movement and output processing as dominant costs, moves the default live route
+to direct-YUV native ROI/RGB, and makes route decisions from latency, quality,
+memory, and risk evidence.
 ```
 
 See `push_readme.txt` for commit and push conventions.

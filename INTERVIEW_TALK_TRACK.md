@@ -1,29 +1,30 @@
 # RB5 Gen2 Interview Talk Track
 
-Updated: 2026-07-19
+Updated: 2026-07-23
 
 ## 30-Second Version
 
 ```text
-I built an Android on-device image enhancement pipeline on Qualcomm RB5 Gen2 /
-QCS8550. The app captures CameraX frames, crops a center ROI, runs W8A8 SR
-models through QNN TFLite Delegate on HTP, and displays the enhanced result.
+I built an Android on-device AI inference Runtime path on Qualcomm RB5 Gen2 /
+QCS8550. The project uses Real-ESRGAN and QuickSRNet as workloads and validates
+them through TFLite CPU/NNAPI/GPU, AI Hub, local qnn-net-run, and Android QNN
+TFLite Delegate on HTP.
 
 The main engineering point was not just running a model. After QNN inference was
 down to 1-3ms, I profiled the app path and found the real bottleneck was camera
-frame conversion and output processing. I reduced live e2e latency from about
-63/65ms to about 10/12ms p50/p95 in the latest app smoke, and used benchmark plus real-camera review
-to decide that QuickSRNetSmall should be the live workhorse while Real-ESRGAN
-stays as the perceptual comparison and optional post-capture path.
+frame conversion, tensor input, and output processing. I reduced app live e2e
+latency from about 63/65ms to about 10/12ms p50/p95 in the latest direct-YUV
+app smoke, while keeping AI Hub profile, qnn-net-run profile, and app e2e as
+separate evidence lanes.
 ```
 
 ## 2-Minute Version
 
 ```text
-This project is an RB5 Gen2 / QCS8550 Android edge-AI image enhancement
-pipeline. I started from the basic app path: CameraX ImageAnalysis, ROI crop,
-TFLite super-resolution, and display. Then I moved the deployment path from
-CPU/GPU experiments to QNN TFLite Delegate on HTP.
+This project is an RB5 Gen2 / QCS8550 Android edge-AI Runtime and heterogeneous
+performance project. I started from the basic app path: CameraX ImageAnalysis,
+ROI crop, TFLite inference, and display. Then I compared CPU, NNAPI, GPU, and
+QNN TFLite Delegate on HTP.
 
 The first stable milestone was Real-ESRGAN W8A8 through QNN Delegate. The key
 integration issue was not the model itself, but making the Android app process
@@ -37,7 +38,8 @@ milliseconds, but full-frame CameraX to Bitmap conversion at 4000x3000 was about
 from about 63/65ms to about 22/25ms. Later buffer reuse, output Bitmap reuse,
 and UINT8 output bulk-copy reduced the output path further; the later direct-YUV default QuickSR live smoke is about 10/12ms p50/p95.
 
-I also compared model roles instead of treating PSNR as the only answer.
+I also compared workload/model roles instead of treating PSNR as the only
+answer.
 QuickSRNetSmall is tiny and conservative, so it became the default live ROI
 workhorse. Real-ESRGAN is sharper and more perceptual, especially on text and
 edges, so I kept it as the QNN/HTP milestone, comparison baseline, and optional
@@ -57,6 +59,8 @@ median, so I kept the default path and documented the boundary.
 | Android TFLite CPU Real-ESRGAN baseline | about 579-610ms inference |
 | Android TFLite GPU Real-ESRGAN | about 126-148ms inference |
 | AI Hub QCS8550 float profile | 5.9ms, 74 ops on HTP, 0 fallback |
+| AI Hub QCS8550 W8A8 QNN profile | about 1.778ms p50, NPU 72 |
+| Local qnn-net-run QNN accelerator | about 9.75/10.39ms p50/p95 |
 | Old 4000x3000 live ROI app e2e | about 63/65ms p50/p95 |
 | Current default QuickSR live e2e after output reuse | 19.0/24.7ms p50/p95 |
 | Current default direct-YUV QuickSR live e2e | 10/12ms p50/p95 |
@@ -118,8 +122,8 @@ full power/perf-watt is characterized
 Claim:
 
 ```text
-I built and profiled an Android QNN/HTP SR pipeline, identified the true live
-bottlenecks, validated model roles with benchmark and real-camera evidence, and
-made a defensible route decision from latency, quality, memory, and product
-risk.
+I built and profiled an Android QNN/HTP Runtime path, identified the true live
+bottlenecks, separated AI Hub/qnn-net-run/app-e2e evidence, validated workload
+roles with benchmark and real-camera evidence, and made defensible route
+decisions from latency, quality, memory, and product risk.
 ```

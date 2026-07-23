@@ -1,22 +1,42 @@
 # Showcase Materials
 
-Updated: 2026-07-19
+Updated: 2026-07-23
 
 ## Minimum Evidence Package
 
-Use only this small set for the current showcase. Do not collect lots of
-near-duplicate screenshots.
+Use only this small set for the current Runtime showcase. Do not collect lots
+of near-duplicate screenshots.
 
 Boundary:
 
 ```text
 This showcase package is the current stable evidence set, not the ceiling for
 future exploration. It should preserve what works while leaving room for
-bounded experiments such as real-camera validation, YUV ROI, perceptual metrics,
-or AIMET if their triggers appear.
+bounded experiments such as longer sustained Runtime runs, cold/warm init and
+memory tables, Perfetto/QNN timing, AIMET deployable export, or larger
+CameraX-to-QNN memory integration if their triggers appear.
 ```
 
-## 1. QNN Delegate App Milestone
+## 1. Runtime Evidence Layers
+
+Use this separation whenever discussing latency:
+
+| Evidence layer | Meaning | Current number |
+| --- | --- | ---: |
+| AI Hub QCS8550 Proxy | hosted QNN context profile, not app e2e | W8A8 p50 about `1.778ms`, NPU 72 |
+| local qnn-net-run | local runner context execution, not Android UI | QNN accelerator p50/p95 about `9.75/10.39ms` |
+| Android app e2e | CameraX/native/tensor/QNN/display path | current direct-YUV default `10/12ms` |
+| Android app sustained | stream-log app wall-time evidence | local RKNN-inspired experiment only; source change reverted |
+| board-level power | rooted battery-node estimate, not external meter | 5-minute live direct-YUV mean about `6.30W`, temp `24.0C -> 24.0C` |
+
+Boundary:
+
+```text
+Do not collapse these into one latency number. They answer different Runtime
+questions.
+```
+
+## 2. QNN Delegate App Milestone
 
 Evidence:
 
@@ -39,7 +59,7 @@ The Android app path runs W8A8 TFLite through QNN TFLite Delegate on HTP.
 It works for fixed sample and live ROI, and app output aligns with qnn-net-run.
 ```
 
-## 2. Data-Path Bottleneck And Fix
+## 3. Data-Path Bottleneck And Fix
 
 Before:
 
@@ -61,7 +81,7 @@ ImageProxy.toBitmap() at about 41/43ms. Reducing live analysis to 1280x960 cut
 app e2e from about 63/65ms to about 22/25ms.
 ```
 
-## 3. Postprocess And Sample-Copy Optimization
+## 4. Postprocess And Sample-Copy Optimization
 
 Evidence:
 
@@ -101,7 +121,7 @@ The latest output bulk-copy result is app timing evidence only. It does not
 prove visual quality by itself and it is not true zero-copy.
 ```
 
-## 4. Model Tradeoff
+## 5. Workload / Model Tradeoff
 
 Evidence:
 
@@ -133,7 +153,7 @@ Do not claim QuickSRNet is globally better only from PSNR.
 Do not claim Real-ESRGAN is obsolete.
 ```
 
-## 5. Resource And Route Decision
+## 6. Resource And Route Decision
 
 Evidence:
 
@@ -160,7 +180,7 @@ QuickSRNetSmall for live ROI, Real-ESRGAN for QNN/HTP milestone and optional
 post-capture/offline perceptual enhancement.
 ```
 
-## 6. Short Sustained Stability
+## 7. Short Sustained Stability
 
 Evidence:
 
@@ -185,7 +205,27 @@ Boundary:
 This is short-run stability, not full power/perf-watt proof.
 ```
 
-## 6.5 Every-N Temporal Smoke
+2026-07-23 Runtime follow-up, now reverted:
+
+```text
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_loop_p2_default_streamlog_5min
+frames=8941
+app e2e p50/p95/p99=11/12/12ms
+QNN inference p50/p95/p99=2/2/2ms
+boundary: source changes for stream-log/P99 collection were reverted at user request; treat as local exploratory evidence, not current runner behavior.
+```
+
+Board-level power companion:
+
+```text
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\power_probe\20260723_loop_p3_power_live_direct_yuv_5min
+mean_power_mw_abs=6295.293
+min/max=5802.111/7769.492
+battery temp=24.0C -> 24.0C
+boundary: battery-node board-level estimate only
+```
+
+## 7.5 Every-N Temporal Smoke
 
 Evidence:
 
@@ -211,7 +251,7 @@ probe. It reduces enhancement frequency, not the latency of each enhanced frame.
 Full CameraX VideoCapture remains a separate product/demo decision.
 ```
 
-## 7. Real-Camera Showcase Set
+## 8. Real-Camera Showcase Set
 
 Evidence:
 
@@ -282,11 +322,12 @@ Use the real-camera set as final showcase credibility evidence with caveats.
 
 ## Suggested Slide / Resume Order
 
-1. Problem and platform: RB5 Gen2 / QCS8550 / Android edge AI image enhancement.
-2. QNN/HTP deployment path: W8A8 TFLite -> QNN Delegate -> HTP.
-3. Profiling finding: inference was not the live bottleneck.
-4. Data-path optimization: 63/65ms -> 22/25ms.
-5. Model tradeoff: Real-ESRGAN vs QuickSRNetSmall.
-6. Resource-aware route decision: no default automatic dual-model routing.
-7. Real-camera showcase evidence and remaining boundaries.
-8. Short sustained validation and remaining boundaries.
+1. Problem and platform: RB5 Gen2 / QCS8550 / Android on-device AI Runtime.
+2. Runtime evidence separation: AI Hub profile vs qnn-net-run vs app e2e.
+3. QNN/HTP deployment path: W8A8 TFLite -> QNN Delegate -> HTP.
+4. Profiling finding: inference was not the live bottleneck.
+5. Data-path optimization: 63/65ms -> 22/25ms -> 10/12ms.
+6. Workload tradeoff: Real-ESRGAN vs QuickSRNetSmall.
+7. Resource-aware route decision: no default automatic dual-model routing.
+8. Real-camera showcase evidence and remaining boundaries.
+9. Short sustained validation and remaining Runtime evidence gaps.

@@ -1,16 +1,18 @@
 # RB5 Gen2 Checkpoint Report
 
-Updated: 2026-07-20
+Updated: 2026-07-23
 
 ## Current State
 
-The project is at a clean, trigger-gated checkpoint.
+The project is at a clean, trigger-gated Runtime checkpoint.
 
 ```text
-CameraX live ROI
+QCS8550 Android app Runtime
+-> CameraX PlaneProxy direct ByteBuffer
+-> native ROI / rotation / YUV->RGB
 -> QuickSRNetSmall W8A8 TFLite
 -> QNN TFLite Delegate / HTP
--> display
+-> display at about 10/12ms app e2e p50/p95
 ```
 
 Local and remote state:
@@ -25,10 +27,14 @@ stable rollback tag: rb5-stable-20260720
 
 | Claim | Evidence |
 | --- | --- |
+| AI Hub QNN context route works | W8A8 QNN profile p50 about `1.778ms`, NPU 72 |
+| Local qnn-net-run route works | full 24-case QNN accelerator p50/p95 about `9.75/10.39ms` |
 | Android app QNN/HTP path works | `20260718_app_qnn_delegate_fixed_live_rb5` |
 | App bottleneck was not QNN inference | `ImageProxy.toBitmap()` was about `41/43ms` before the 1280x960 fix |
 | Current default live route is usable | latest app smoke reaches `10/12ms` e2e p50/p95 |
+| RKNN-inspired runner/logging experiment | Explored stream-log collection and live profile slimming, then reverted code; keep as ignored evidence only |
 | Output conversion was reduced | latest postprocess p50/p95 is `1/1ms` |
+| Board-level power boundary exists | 5-minute direct-YUV mean about `6.30W`, battery-node estimate only |
 | Sustained short run is stable enough for showcase | 60s e2e first/last p50/p95 `15/20ms -> 16/21ms` |
 | every-N route is classified | `everyN=3` gives about `9.9` effective enhanced FPS, not lower per-frame latency |
 | post-capture tile route is available | Real-ESRGAN tile is the quality-priority still route; QuickSR remains speed/conservative baseline |
@@ -45,6 +51,7 @@ automatic live dual-model routing readiness
 QuickSRNet is globally better than Real-ESRGAN
 fixed-manifest app replay coverage
 video product readiness
+AI Hub profile, local qnn-net-run profile, and app e2e timing as one number
 ```
 
 ## Current Technical Boundaries
@@ -55,9 +62,11 @@ video product readiness
 | every-N ImageAnalysis | done | Cadence evidence only, not latency win |
 | Java/Kotlin shared memory | blocked_technical | `qtld-release.aar` Java wrapper exposes no custom allocation API |
 | C++ shared-memory probe | gated | Only start with target beyond `10/12ms` app e2e and rollback plan |
-| AIMET / mixed precision | blocked_needs_user | Requires concrete W8A8-vs-float failure crop |
+| AIMET deployable export | blocked_needs_user | Local CLE deployability exists, but remote AI Hub quantize/compile/profile needs explicit approval |
+| mixed precision | blocked_technical | Current generated Real-ESRGAN exporter rejects w8a16 |
 | LPIPS / NIQE / OCR | blocked_needs_user | Requires visual/metric conflict or text-readability claim |
 | CameraX VideoCapture | blocked_needs_user | Requires explicit demo/product need |
+| Multi-instance live routing | mainline_not_justified_yet | Probe evidence showed high switch/memory cost; no default-path change kept |
 
 ## Commit Checkpoint
 
@@ -111,4 +120,6 @@ Continue only when one of these becomes true:
 2. Visual review conflicts with PSNR/SSIM, or a text/OCR claim is required.
 3. A deeper zero-copy probe has a clear target beyond the 10/12ms direct-YUV baseline.
 4. A video demo/product path is explicitly needed.
+5. A longer Runtime stability claim needs 20-30 minute p50/p95/p99, frame, and temperature evidence.
+6. A cold/warm init or sticky-memory claim needs a consolidated table or rerun.
 ```

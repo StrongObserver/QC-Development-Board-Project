@@ -34,8 +34,11 @@ log; detailed milestones belong in the project context document.
 
 - Device: Qualcomm RB5 Gen2 / QCM8550 / Android 13 / arm64-v8a.
 - App: `RB5VisionLab`, package `com.cyf.rb5visionlab`.
-- Main goal: build a resume-ready RB5 Gen2端侧 AI 画质增强 pipeline while also
-  learning real engineering workflow.
+- Main goal: build a resume-ready QCS8550端侧 AI Runtime / 模型部署 /
+  量化 / 异构性能优化 project. Real-ESRGAN and QuickSRNet are representative
+  workloads; the core evidence is QNN/HTP execution, profiling, data-path
+  optimization, benchmark discipline, and defensible latency/quality/resource
+  tradeoffs.
 - Work style: single `main` branch, small verified steps, no branch workflow
   unless explicitly requested.
 - Priority order:
@@ -79,7 +82,18 @@ Android Kotlin app
 -> cv::mean brightness result shown/logged
 ```
 
-Current SR demo chain:
+Current default runtime/app chain:
+```
+CameraX ImageAnalysis
+-> PlaneProxy direct ByteBuffer
+-> native C++ center ROI / rotation / YUV->RGB
+-> UINT8 NHWC tensor input
+-> QuickSRNetSmall W8A8 TFLite
+-> QNN TFLite Delegate / HTP
+-> display
+```
+
+Current SR workload chain:
 ```
 CameraX frame
 -> Bitmap conversion
@@ -105,6 +119,9 @@ Key measured baselines so far:
 - 128->512 W8A8 TFLite baseline: static Qualcomm AI Hub Models asset is integrated; model size ~1.31MB vs float ~4.88MB.
   Host CPU/XNNPACK shows ~1.6-1.9x speedup on fixed cases; RB5 app CPU W8A8 low-light offline sample reported inference ~361ms.
 - AI Hub QCS8550 profile for the 128 float model: 5.9ms, 74 ops on NPU, 0 CPU fallback.
+- W8A8 QNN context profile on QCS8550 Proxy: p50 ~1.778ms, NPU 72.
+- Local RB5 qnn-net-run full 24-case benchmark: QNN accelerator p50/p95 ~9.75/10.39ms.
+- Current compiled app default direct-YUV live ROI: e2e p50/p95 ~10/12ms.
 - 256->1024 high-res still samples are useful for visual evidence, but not yet a real-time target.
 
 ## Important Commands
@@ -134,10 +151,13 @@ Windows notes:
   `OpenCV::opencv_java4`.
 - Native load order in Kotlin: `opencv_java4` before `rb5visionlab`.
 
-## Project 1 Roadmap (model-first)
+## Project 1 Roadmap (runtime-first)
 
-旧的 "5-frame capture/brightness" 计划已废弃：策略要等“增强能力”先有，故改为模型优先。
-完整阶段 A–F 见 `RB5 Gen2_AI上下文.md` 的“下一步计划”，此处只记主线状态。
+旧的 "5-frame capture/brightness" 和单纯“画质增强 App”叙事已废弃。当前项目定位是
+`QCS8550 端侧 AI 推理 Runtime 与异构性能优化`：用 Real-ESRGAN /
+QuickSRNet 作为 workload，证明模型部署、量化、QNN/HTP 执行、profiling、
+数据搬运、功耗与评测闭环。完整阶段和历史证据见 `RB5 Gen2_AI上下文.md`
+与最新 showcase / loop 文件；此处只记主线状态。
 
 - [done] A1/A2 — PC PyTorch inference and AI Hub float TFLite export verified. TFLite I/O is
   `image[1,128,128,3]` f32 NHWC RGB /255 -> `upscaled_image[1,512,512,3]` f32 [0,1].
@@ -145,17 +165,20 @@ Windows notes:
   capture / preprocess / inference / postprocess / e2e timing. **First acceptance gate is done.**
 - [done] D7 — Android TFLite backend comparison is done: CPU baseline, NNAPI no gain, GPU delegate ~4x faster.
 - [done] D75 — High-resolution CameraX input and legacy-FOV ROI fix are done for 256->1024 still samples.
-- [done] D8 first-pass W8A8 baseline — static Qualcomm AI Hub Models W8A8 TFLite asset integrated, host/RB5 CPU
-  evidence generated. Next gap: configure AI Hub token or internal environment to get QCS8550 QNN/NPU W8A8 profile.
+- [done] D8/QNN/HTP — W8A8 TFLite/QNN context/app QNN Delegate routes are verified through AI Hub,
+  local qnn-net-run, and Android app fixed/live evidence.
+- [done] Runtime/data path — default app live ROI now uses direct-YUV native tensor input with
+  QNN/QuickSRNetSmall, around 10/12ms e2e p50/p95.
 
 ## Evaluation Baseline Policy
 
-The project currently has working demos but lacks a stable definition of "good enough". Before the next optimization,
-create a small evaluation baseline instead of adding features blindly:
+The project currently has working runtime/app paths; evaluation exists to keep
+performance, correctness, and quality claims separate. Before the next
+optimization, use the fixed harness rather than adding features blindly:
 
 - Fixed inputs: keep a tiny, representative image/ROI set covering text/edges/texture/face-or-object/low-light if available.
 - Comparisons: always save or compute input, bicubic baseline, float SR, and candidate SR output on the same input.
-- Performance metrics: record model size, preprocess/inference/postprocess/e2e latency, backend, resolution, device, and cold/warm status.
+- Runtime/performance metrics: record model size, preprocess/inference/postprocess/e2e latency, backend, HTP/QNN evidence, resolution, device, memory/power boundary, and cold/warm status.
 - Quality metrics: use PSNR/SSIM only as distortion references; for GAN SR they may disagree with visual quality. Add crop-level visual judgment
   for artifacts such as oversharpening, ringing, texture hallucination, color shift, and text deformation.
 - Pass/fail gates: define scenario-specific boundaries. For example, a faster backend is not acceptable if it introduces obvious color/geometry
@@ -181,7 +204,7 @@ This project is effect-first, not originality-first. When blocked or when a feat
 
 Internal-AI prompt template:
 ```text
-我在做 RB5 Gen2 / QCS8550 / Android 端侧 AI 画质增强项目，当前卡点是：【一句话描述卡点】。
+我在做 RB5 Gen2 / QCS8550 / Android 端侧 AI Runtime、模型部署、量化和异构性能优化项目，当前卡点是：【一句话描述卡点】。
 请优先搜索公司内部开放且合规可参考的技术文档、代码仓库、sample、历史项目或最佳实践，重点找：
 1. 与 Android CameraX / TFLite / QNN / QAIRT / AIMET / NNAPI / GPU delegate / 超分 / 画质评测 / 端侧 AI pipeline 相关的资料；
 2. 能直接说明工程架构、关键 API、命令、性能数据、踩坑和适用边界的内容；

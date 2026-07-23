@@ -1,6 +1,6 @@
-# RB5 Gen2 Full Scope Ledger
+# RB5 Gen2 Runtime Scope Ledger
 
-Updated: 2026-07-22
+Updated: 2026-07-23
 
 ## Purpose
 
@@ -14,6 +14,17 @@ Every original project-design item must stay visible until it is completed or
 blocked with concrete evidence. Hard or time-consuming work can be ordered
 later, but it must not disappear.
 
+The accepted project framing has been refined to:
+
+```text
+QCS8550 端侧 AI 推理 Runtime 与异构性能优化
+```
+
+The ledger therefore tracks Runtime/deployment/profiling/evaluation capability
+coverage. SR, CameraX, tile, and real-camera evidence remain as representative
+workloads and validation assets, but the project should not be described as
+only an image-enhancement app.
+
 ## State Values
 
 | state | meaning |
@@ -25,50 +36,48 @@ later, but it must not disappear.
 | `blocked_technical` | attempted and blocked by a concrete technical issue |
 | `not_viable_with_evidence` | proven not viable under current constraints |
 
-## Original Design Coverage
+## Runtime Design Coverage
 
-| id | original design item | state | current evidence / blocker | next action |
+| id | design item | state | current evidence / blocker | next action |
 | --- | --- | --- | --- | --- |
-| A1 | Offline image enhancement | done | Android fixed samples and host inference paths work | Maintain only |
-| A2 | CameraX center ROI live enhancement | done | Default live path is QNN + QuickSRNetSmall; `20251110_output_reuse_default_live_roi` | Maintain only |
-| D7 | App CPU / GPU / NNAPI backend comparison | done | CPU ~600ms, GPU ~126-148ms, NNAPI no gain | Keep as baseline evidence |
-| E10-A | QNN/HTP Path A local runner | done | `qnn-net-run --retrieve_context` smoke/full benchmark exists | Maintain only |
-| E10-B | QNN/HTP Android app path | done | QNN TFLite Delegate + HTP app path works with skel lib | Maintain only |
-| D8 | W8A8 quantized baseline | done | Real-ESRGAN W8A8 TFLite and QNN paths; QuickSRNetSmall W8A8 default live path | Maintain only |
-| D8-config | per-channel/per-tensor/calibration comparison | done | First-pass AI Hub comparison completed for current app W8A8, calib10 default, and calib10 minmax; minmax is worse and calib10 default is close to current app W8A8 | Do not replace app model without stronger evidence |
-| AIMET-CLE | AIMET CLE or Bias Correction | done | PyTorch FP source route is confirmed: local SRVGG weights export to ONNX with PSNR 95.046dB vs PyTorch. AIMET-Torch installs in short-path `.venv-a` with `PYTHONUTF8=1`; CLE runs and QuantSim small slice shows avg +0.115dB simulated INT8 improvement, but not every case improves | Keep as evidence. Only pursue deployable TFLite/QNN CLE export if a later quality claim needs it |
-| AIMET-advanced | AdaRound / QAT | blocked_needs_user | High cost and no current quantization failure trigger | Reopen only after CLE/Bias is insufficient on a real failure crop |
-| model-curve | Real-ESRGAN vs QuickSRNet quality/latency/size/power curve | done | Quality/latency/size evidence exists; board-level battery-node power smoke exists. QuickSRNet medium/large host curve was reviewed and user judged small to be at least as good visually, so small remains live workhorse | Do not add medium/large to Android unless a new scene shows a clear visual gain |
-| eval-fixed | fixed scenario benchmark | done | `RB5_SR_Benchmark_v1`, full 24-case, real-camera 8-scene set | Maintain only |
-| eval-realsr | RealSR real-degradation lifecycle sanity | done | `evalhub_realsr_mini_10cases_20260720_v2` covers Canon/Nikon 5+5 host LiteRT cases; bicubic PSNR is higher, while SR SSIM/sharpness can improve, so visual review remains required | Use only before real-camera robustness claims; do not replace the 24-case main gate |
-| eval-perceptual | LPIPS / NIQE / OCR diagnostic metrics | done | TextZoom OCR mini diagnostic exists at `RB5_SR_lab\results\textzoom_ocr\20260720_textzoom_ocr_mini_v2`; OCR similarity is low even on HR references, so it remains diagnostic-only and visual review still owns final quality decisions | Reopen only to calibrate OCR/LPIPS/NIQE against human review on a representative slice |
-| app-fixed-replay | Android app fixed-sample replay | done | `20260720_app_fixed_replay_quicksr_3assets` runs 3 fixed assets through Android QNN/HTP, pulls 9 output images, and writes app e2e evidence | Maintain as a small regression layer; expand only if a concrete app regression appears |
-| native-preprocess | native YUV ROI / RGB preprocessing | done | Direct PlaneProxy ByteBuffer -> native ROI/RGB is now the default QNN/QuickSR live path. Same-frame direct-vs-array probe has MAD `0.0`; default app direct-YUV live ROI e2e p50/p95 is `10/12ms` | Maintain as default for QNN/QuickSR. Further zero-copy work is a separate larger data-path project |
-| buffer-reuse | buffer / object reuse | done | TFLite buffers, pixel arrays, sample-copy reduction, output Bitmap reuse, and reusable UINT8 output byte buffer | Maintain only |
-| zero-copy | true zero-copy CameraX -> NPU | done | Phase 2 normal tensor vs shared custom allocation compare passed with matching checksum; direct buffer probe confirms CameraX Y/U/V PlaneProxy buffers are direct and JNI `GetDirectBufferAddress` returns non-null native addresses. Direct-YUV default reads PlaneProxy buffers in native code, but this is still not QNN Delegate input binding | Treat invoke-level and direct-plane probes as complete; any further work is a larger CameraX/native data-path integration project |
-| mixed-precision | w8a16 mixed precision | blocked_technical | Current generated Qualcomm AI Hub Models exporter for `real_esrgan_general_x4v3` supports float and w8a8 only; `--precision w8a16` is rejected for this model/runtime route | Reopen only if QAI Hub Models adds Real-ESRGAN w8a16 support, or if a custom lower-level AIMET/ONNX/QNN mixed-precision route is explicitly chosen |
-| temporal | frame skip / temporal reuse / double buffering | done | `sr_every_n=3` ImageAnalysis smoke is implemented and validated; effective enhanced FPS is about 9.4-9.9, while each enhanced frame remains about 21/25ms e2e | Treat as a cadence/product boundary; do not claim lower per-frame latency |
-| tile | post-capture whole-image tile enhancement | done | Host MVP, host multi-scene comparison, and Android app tile entry are implemented; same-frame QuickSR vs Real-ESRGAN app evidence exists | Real-ESRGAN tile is the quality-priority post-capture route; QuickSR tile stays speed/conservative baseline |
-| video | video every-N-frame enhancement | done | `20260720_demo_mode_wide_clear_20s` records the Demo Mode live ROI UI with `adb screenrecord`; `20260720_demo_relation_aligned_v3` explains display-aligned wide preview / model input / SR output; button access is preserved through default UI / overlay toggle / intent control | Treat as demo evidence only; full CameraX VideoCapture/Recorder waits for explicit product need |
-| power | sustained power/perf-watt | done | Rooted battery-node current/voltage reads work; core smoke estimates exist | Use as board-level estimate only; do not claim external-meter precision |
-| showcase | resume / README / demo / interview package | done | README, SHOWCASE_INDEX, DEMO_RUNBOOK, INTERVIEW_TALK_TRACK, resume draft | Maintain only |
+| runtime-backends | CPU / NNAPI / GPU / QNN backend comparison | done | CPU ~579-610ms, GPU ~126-148ms, NNAPI no gain, QNN/HTP app path works | Keep as core Runtime evidence |
+| qnn-path-a | QNN/HTP local runner | done | `qnn-net-run --retrieve_context` smoke/full benchmark exists; accelerator p50/p95 ~9.75/10.39ms | Maintain only |
+| qnn-path-b | Android QNN TFLite Delegate app path | done | QNN TFLite Delegate + HTP app path works with skel lib and `setSkelLibraryDir` | Maintain only |
+| quant-baseline | W8A8 quantized baseline | done | Real-ESRGAN W8A8 TFLite/QNN and QuickSRNetSmall W8A8 default live path | Maintain only |
+| quant-config | calibration / quantization configuration comparison | done | First-pass AI Hub comparison completed for current app W8A8, calib10 default, and calib10 minmax; minmax is worse | Do not replace app model without stronger evidence |
+| aimet-cle-local | AIMET CLE local feasibility | done | PyTorch FP source route is confirmed; AIMET-Torch CLE runs; QuantSim small slice shows avg +0.115dB simulated INT8 improvement | Keep as quantization evidence |
+| aimet-cle-deploy | deployable CLE W8A8 TFLite/QNN export | blocked_needs_user | Local deployability checkpoint passes, but remote AI Hub quantize/compile/profile job has not been approved | Reopen only with explicit user approval |
+| aimet-advanced | AdaRound / QAT | blocked_needs_user | High cost and no current quantization failure trigger | Reopen only after CLE/Bias is insufficient on a real failure crop |
+| model-route | Real-ESRGAN vs QuickSRNet quality/latency/size/power route | done | Quality/latency/size evidence exists; QuickSRNetSmall remains live workhorse; Real-ESRGAN remains milestone/comparison/post-capture route | Maintain route decision |
+| app-e2e | app e2e schema and fixed replay | done | `app_e2e_log.csv`, fixed-sample replay, direct-YUV live timing, and result mirrors exist. A stream-log/P99 runner experiment exists only as ignored evidence because its code was reverted | Maintain as regression/evidence layer |
+| data-path-direct-yuv | direct-YUV native tensor input | done | Direct PlaneProxy ByteBuffer -> native ROI/RGB is default; same-frame MAD `0.0`; app e2e p50/p95 `10/12ms` | Maintain as default data path |
+| buffer-reuse | buffer / object reuse | done | TFLite buffers, pixel arrays, sample-copy reduction, output Bitmap reuse, reusable UINT8 output byte buffer | Maintain only |
+| qnn-profile | QNN Delegate profile collection and decode boundary | done | App can collect raw profile buffer; official `qnn-profile-viewer` rejects Java raw bytes, best-effort diagnostic parser exists. Live profile-slim experiment was reverted, so current code still emits the previous profile summary format | Do not claim official per-op app profile |
+| zero-copy | true CameraX buffer -> QNN input binding | blocked_needs_user | Invoke-level shared custom allocation and direct-plane probes are complete, but not CameraX buffer binding | Only pursue as larger data-path project with explicit target |
+| mixed-precision | w8a16 mixed precision | blocked_technical | Current generated Real-ESRGAN exporter supports float/w8a8 only and rejects w8a16 | Reopen only with new exporter or custom route |
+| sustained-p99 | sustained P50/P95/P99 and thermal curve | conditional | 5-minute stream-log default direct-YUV run recorded 8941 frames and e2e p50/p95/p99 `11/12/12ms`, but the stream-log code was reverted. Board-level power run reports mean about `6.30W`, temp `24.0C -> 24.0C` | Treat as useful local evidence; rerun only if stream-log runner is re-approved |
+| init-memory | cold/warm init, switch cost, sticky memory table | done | Current APK resource probe records Real init `2.4-2.9s`, Quick init `155/624ms`, Real->Quick switch `800ms`, close-both PSS still about `+83MB` vs start | Maintain table; do not enable automatic live switching |
+| power | board-level power/perf-watt boundary | done | Rooted battery-node current/voltage reads work; core smoke estimates exist | Use as board-level estimate only |
+| eval-fixed | fixed scenario benchmark | done | `RB5_SR_Benchmark_v1`, full 24-case, real-camera 8-scene set | Maintain as workload correctness/quality gate |
+| eval-lifecycle | RealSR/TextZoom lifecycle diagnostics | done | RealSR mini and TextZoom OCR mini exist; both are diagnostic/lifecycle evidence | Do not replace 24-case main gate |
+| temporal | every-N cadence and demo video boundary | done | `sr_every_n=3` smoke and Demo Mode screenrecord exist | Do not claim full VideoCapture/Recorder |
+| tile | post-capture tile workload evidence | done | Host MVP, host comparison, Android app tile entry, same-frame QuickSR vs Real-ESRGAN evidence exist | Treat as supporting workload evidence |
+| showcase | Runtime resume / README / demo / interview package | in_progress | Materials exist but are being reframed from image-enhancement to Runtime | Finish text sweep |
 
 ## Current Required Next Unfinished Items
 
-The current checkpoint is strong enough for showcase, but the full original
-design still has unfinished required lanes:
+The current checkpoint is strong enough for showcase. The remaining items are
+Runtime-evidence or explicit-decision lanes, not old SR feature gaps:
 
-1. `AIMET-advanced`: still `blocked_needs_user`; only reopen after CLE/Bias is
-   insufficient on a real failure crop and the user approves the added cost.
-2. `zero-copy`: invoke-level and direct-plane native-preprocess probes are
-   complete, and the default live ROI now uses direct-YUV. True CameraX buffer
-   registration remains a separate larger data-path project.
-3. `video`: Demo Mode screenrecord demo is complete; full CameraX
-   VideoCapture/Recorder still needs explicit product need because it would be a
-   different pipeline from the current live ROI app demo.
-4. `AIMET-CLE deployable export`: local CLE checkpoint deployability is proven,
-   but a CLE W8A8 TFLite/QNN artifact requires explicit user approval because it
-   submits Qualcomm AI Hub remote quantize/compile/profile jobs.
+1. `showcase`: finish the Runtime/Heterogeneous wording sweep and final
+   benchmark table.
+2. `aimet-cle-deploy`: only run with explicit user approval because it submits
+   Qualcomm AI Hub remote quantize/compile/profile jobs.
+3. `zero-copy`: only reopen as a larger CameraX-to-QNN buffer-registration
+   experiment with target, budget, and rollback beyond the 10/12ms direct-YUV
+   baseline.
+4. `video`: full CameraX VideoCapture/Recorder still needs explicit product
+   need because it is a different pipeline from the current live ROI demo.
 
 ## Loop Rule
 

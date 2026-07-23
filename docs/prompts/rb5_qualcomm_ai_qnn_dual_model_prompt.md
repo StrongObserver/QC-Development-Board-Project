@@ -1,10 +1,13 @@
-# RB5 Gen2 Dual-Model QNN Delegate Review Prompt - Qualcomm AI
+# RB5 Gen2 Runtime / Dual-Model QNN Delegate Review Prompt - Qualcomm AI
 
-I am working on an RB5 Gen2 / QCS8550 / Android 13 edge AI image enhancement project.
+I am working on an RB5 Gen2 / QCS8550 / Android 13 on-device AI Runtime,
+quantization, and heterogeneous performance optimization project. Real-ESRGAN
+and QuickSRNet are representative W8A8 workloads used to evaluate QNN/HTP
+deployment, data-path cost, memory, initialization, and model-route tradeoffs.
 
 ## Current Project Status
 
-1. The Android app uses CameraX ROI input and runs W8A8 TFLite super-resolution models through Qualcomm QNN TFLite Delegate on HTP.
+1. The Android app uses CameraX ROI input and runs W8A8 TFLite workloads through Qualcomm QNN TFLite Delegate on HTP.
 2. The main model is Real-ESRGAN general x4v3 W8A8 TFLite. It is already working in the Android app through QNN Delegate.
 3. The key fix for QNN Delegate was packaging `libQnnHtpV73Skel.so` into app `jniLibs` and calling `QnnDelegate.Options.setSkelLibraryDir(nativeLibraryDir)`.
 4. Real-ESRGAN W8A8 fixed sample runs successfully:

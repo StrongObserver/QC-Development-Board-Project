@@ -1,6 +1,19 @@
 # Model Route Decision
 
-Updated: 2026-07-22
+Updated: 2026-07-23
+
+## Project Frame
+
+This model route decision lives under the broader project frame:
+
+```text
+QCS8550 端侧 AI 推理 Runtime 与异构性能优化
+```
+
+QuickSRNetSmall and Real-ESRGAN are Runtime workloads used to evaluate model
+deployment, quantization, QNN/HTP execution, app data-path cost, memory/init
+behavior, and quality/resource tradeoffs. The decision below is not a standalone
+claim that the project is only a super-resolution app.
 
 ## Decision
 
@@ -34,14 +47,14 @@ if it has a clear hypothesis, success metric, budget, rollback, and baseline.
 
 ## Why QuickSRNet For Live ROI
 
-QuickSRNetSmall now has enough engineering evidence to be the live ROI
-workhorse candidate:
+QuickSRNetSmall now has enough engineering evidence to be the live ROI Runtime
+workload candidate:
 
 | Evidence | Result |
 | --- | --- |
 | Android fixed sample through QNN Delegate | pass |
 | App-vs-host output alignment | PSNR 46.92dB, MAD 0.939 on same input |
-| Optimized default live ROI | e2e p50/p95 about 11/17ms, preprocess 0/0ms |
+| Optimized native tensor live ROI | e2e p50/p95 about 11/17ms, preprocess 0/0ms |
 | QNN inference | about 1-2ms in recent live runs |
 | 5-minute sustained run | no meaningful e2e drift, coarse battery temp 24.0C -> 24.0C |
 | Model size | about 43.7KB |

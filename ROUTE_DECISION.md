@@ -1,6 +1,19 @@
 # RB5 Gen2 Route Decision
 
-Updated: 2026-07-18
+Updated: 2026-07-23
+
+## Current Positioning
+
+This file is now a route-decision record inside the broader project:
+
+```text
+QCS8550 端侧 AI 推理 Runtime 与异构性能优化
+```
+
+Real-ESRGAN and QuickSRNet are representative workloads for Runtime,
+quantization, QNN/HTP deployment, data-path profiling, and route-decision
+evidence. The route decision below should not re-center the project as only an
+image-enhancement product.
 
 ## Decision
 
@@ -63,7 +76,8 @@ Real-ESRGAN host p50 avg: 344.932ms
 QuickSRNetSmall average PSNR delta vs Real-ESRGAN: +2.31dB
 ```
 
-This supports QuickSRNetSmall as a serious lightweight candidate. It does not
+This supports QuickSRNetSmall as a serious lightweight Runtime/workload
+candidate. It does not
 prove that QuickSRNet is globally better, because Real-ESRGAN optimizes a
 different perceptual tradeoff.
 
@@ -195,8 +209,9 @@ If more live ROI speed is needed, investigate in this order:
 3. Keep high-resolution still-sample capture as a separate path if it is still needed.
 
 Do not start AHardwareBuffer, DMA-BUF, or true zero-copy work in the mainline
-until the simpler ROI/data-path options are exhausted. This is an
-implementation gate, not a ban on future data-path exploration.
+until the simpler ROI/data-path options are exhausted and there is a target
+beyond the current direct-YUV default baseline. This is an implementation gate,
+not a ban on future data-path exploration.
 
 ## Postprocess Optimization Result
 

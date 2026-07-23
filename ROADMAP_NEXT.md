@@ -1,6 +1,20 @@
 # RB5 Gen2 Next Roadmap
 
-Updated: 2026-07-18
+Updated: 2026-07-23
+
+## Current Positioning
+
+The roadmap now follows the refined project design:
+
+```text
+QCS8550 端侧 AI 推理 Runtime 与异构性能优化
+```
+
+Do not interpret this roadmap as a request to add more image-enhancement UI
+features by default. The next high-value work is Runtime evidence: final
+benchmark tables, longer sustained P50/P95/P99, cold/warm init and sticky-memory
+summaries, Perfetto/QNN timing if useful, and explicit AIMET/zero-copy/video
+decisions.
 
 This roadmap starts from the current route decision:
 

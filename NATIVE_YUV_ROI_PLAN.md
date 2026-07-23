@@ -1,13 +1,33 @@
 # Native / YUV ROI Plan
 
-Updated: 2026-07-19
+Updated: 2026-07-23
+
+## Current Status
+
+This plan is historical. The project has advanced beyond the original
+Kotlin/native YUV ROI probes:
+
+```text
+PlaneProxy direct ByteBuffer -> native ROI / rotation / YUV->RGB
+-> UINT8 tensor input -> QNN / QuickSRNetSmall
+```
+
+is now the compiled default app live ROI path. The current direct-YUV default
+e2e is about `10/12ms` p50/p95, and the same-frame direct-vs-array probe had
+MAD `0.0`.
+
+Use this file only as background for how the data-path exploration evolved. Do
+not treat its original step list as the next task. Any further work must be a
+larger Runtime data-path experiment, such as CameraX buffer registration or QNN
+custom allocation, with a target beyond the current direct-YUV baseline.
 
 ## Decision Scope
 
 Current scope: `implementation_gate`.
 
 Do not start AHardwareBuffer, DMA-BUF, or true zero-copy work in the current
-mainline loop. This is not a ban on deeper data-path exploration.
+mainline loop unless the user explicitly opens that larger Runtime experiment.
+This is not a ban on deeper data-path exploration.
 
 The next realistic data-path optimization is:
 

@@ -5,17 +5,17 @@ Updated: 2026-07-23
 ## What This Project Proves
 
 ```text
-Android CameraX live ROI
--> QuickSRNetSmall W8A8
--> direct-YUV native ROI/RGB
--> QNN TFLite Delegate
--> Qualcomm HTP
--> display at about 10 / 12ms e2e p50/p95 in the current default app smoke
+PyTorch / TFLite / AI Hub / qnn-net-run / Android app
+-> W8A8 workloads
+-> QNN TFLite Delegate / Qualcomm HTP
+-> direct-YUV native tensor input
+-> measured app e2e at about 10 / 12ms p50/p95 in the current default smoke
 ```
 
-The project is not just a model demo. It shows deployment, profiling,
-evaluation, route decisions, and bounded performance exploration on an actual
-RB5 Gen2 / QCS8550 Android device.
+The project is not just a model demo or an image-enhancement app. It shows
+Runtime deployment, QNN/HTP profiling, app data-path optimization, evaluation,
+route decisions, and bounded performance exploration on an actual RB5 Gen2 /
+QCS8550 Android device.
 
 ## Read These First
 
@@ -36,6 +36,8 @@ RB5 Gen2 / QCS8550 Android device.
 
 | Claim | Evidence path |
 | --- | --- |
+| AI Hub QNN context profile | `RB5_SR_lab\export_assets\real_esrgan_general_x4v3-qnn-w8a8-qcs8550-20260715` |
+| Local qnn-net-run 24-case profile | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\dryrun_full_preflight_check` |
 | QNN Delegate app path works | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260718_app_qnn_delegate_fixed_live_rb5` |
 | Data path was the bottleneck | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260718_app_qnn_delegate_live_roi_breakdown` |
 | Default direct-YUV QuickSR live path | `C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260722_app_default_direct_yuv_live_roi_120f` |
@@ -54,11 +56,16 @@ RB5 Gen2 / QCS8550 Android device.
 
 | Topic | Number |
 | --- | ---: |
+| AI Hub QCS8550 W8A8 QNN profile | about `1.778ms` p50, NPU 72 |
+| Local qnn-net-run QNN accelerator | about `9.75 / 10.39ms` p50/p95 |
 | Old live ROI e2e before data-path fix | about `63 / 65ms` p50/p95 |
 | Default QuickSR live e2e after output reuse | `19.0 / 24.7ms` p50/p95 |
 | Latest QuickSR live e2e after UINT8 output bulk-copy | `15 / 19ms` p50/p95 |
 | Current direct-YUV default QuickSR live e2e | `10 / 12ms` p50/p95 |
+| RKNN-inspired stream-log experiment | local evidence only; source change reverted |
 | Default QuickSR live inference | `1.0 / 1.0ms` p50/p95 |
+| App QNN inference in reverted 5-minute stream-log run | `2 / 2 / 2ms` p50/p95/p99, local evidence only |
+| Current board-level live direct-YUV power | about `6.30W` mean, battery-node estimate |
 | Latest QuickSR live postprocess | `1 / 1ms` p50/p95 in 120-frame smoke |
 | 120s sustained e2e drift | `20.0/25.0ms -> 21.0/26.0ms` |
 | Latest 60s sustained e2e drift | `15.0/20.0ms -> 16.0/21.0ms` |
@@ -67,7 +74,9 @@ RB5 Gen2 / QCS8550 Android device.
 | Demo Mode relation evidence | display-aligned wide preview / model input 128 / QNN SR output 512 in one sheet |
 | App fixed-sample replay | 3 fixed assets, 9 pulled images, QNN app total `17-18ms` |
 | Shared-memory Phase 2 | checksum match, shared invoke avg `1.056ms` vs normal `1.104ms` |
+| Shared-memory Phase 2 500 repeats | checksum match, shared invoke avg `1.004ms` vs normal `1.028ms`; only `24us` avg delta |
 | Real-ESRGAN -> QuickSRNet switch | about `369ms` |
+| Current Real-ESRGAN -> QuickSRNet switch | about `800ms` on current APK resource probe |
 | QuickSRNetSmall W8A8 model size | about `43.7KB` |
 | Real-camera set | `8 scenes / 32 images`, `accepted_with_caveats` |
 
@@ -91,12 +100,14 @@ automatic routing is product-ready
 true zero-copy is implemented
 full power/perf-watt is characterized
 the screenrecord demo is a true VideoCapture/Recorder SR pipeline
+AI Hub profile, qnn-net-run profile, and app e2e are one latency number
 ```
 
 Use the supported claim:
 
 ```text
-I built and profiled an Android QNN/HTP SR pipeline, identified the true app
-bottlenecks, validated model roles with benchmark and real-camera evidence, and
-made route decisions from latency, quality, memory, and implementation risk.
+I built and profiled an Android QNN/HTP Runtime path, separated AI Hub,
+qnn-net-run, and app-e2e evidence, identified the true app bottlenecks,
+validated workload roles with benchmark and real-camera evidence, and made route
+decisions from latency, quality, memory, and implementation risk.
 ```

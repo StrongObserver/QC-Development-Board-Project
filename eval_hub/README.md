@@ -1,17 +1,17 @@
 # RB5 EvalHub
 
-EvalHub is the long-lived evaluation layer for the RB5 Gen2 super-resolution
-project. It is deliberately separate from the current small benchmark:
+EvalHub is the long-lived evaluation layer for the RB5 Gen2 / QCS8550 Runtime
+project. It is deliberately separate from the current small workload benchmark:
 
 ```text
 C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1
 ```
 
 `RB5_SR_Benchmark_v1` remains the fixed, compact, immediately-runnable 24-case
-benchmark for the current `128x128 -> 512x512` Real-ESRGAN path. EvalHub is the
+benchmark for the current `128x128 -> 512x512` SR workloads. EvalHub is the
 larger lifecycle evaluation plan around it: data source registry, scenario
-coverage, metric policy, and scripts that can prepare or summarize data without
-changing the fixed benchmark.
+coverage, metric policy, app e2e schema, and scripts that can prepare or
+summarize data without changing the fixed benchmark.
 
 For the current frozen state, read first:
 
@@ -57,7 +57,7 @@ every question:
 | `text_fidelity` | Text/signage readability and character deformation | TextZoom test splits present; OCR mini diagnostic exists |
 | `iqa_artificial` | Artificial distortion IQA calibration and metric sanity | CSIQ is easy to fetch; TID/LIVE/KADID are optional/larger |
 | `iqa_authentic_mobile` | Real-world photo quality/no-reference IQA | Missing; KonIQ/SPAQ/LIVE Challenge are optional lifecycle additions |
-| `device_app_e2e` | Android app end-to-end latency, memory, power, temperature | Schema active; live ROI app e2e rows exist; fixed manifest replay is still future |
+| `device_app_e2e` | Android app Runtime latency, memory, power, temperature | Schema active; live ROI app e2e rows exist; fixed manifest replay and longer P99 remain future |
 | `video_temporal` | Video/sequence SR stability, flicker, motion and thermal behavior | Future only; not part of current fixed-image gate |
 
 ## Metric Policy

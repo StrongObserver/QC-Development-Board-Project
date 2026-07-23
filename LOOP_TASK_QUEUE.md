@@ -1,16 +1,41 @@
-# RB5 Loop Task Queue
+# RB5 Runtime Loop Task Queue
 
-Updated: 2026-07-22
+Updated: 2026-07-23
 
 ## Purpose
 
-This queue turns the accepted project plan into a long-running loop.
+This queue turns the accepted QCS8550 Runtime project plan into a long-running
+loop. The current project is not primarily a CameraX image-enhancement app; it
+is an on-device AI Runtime / model deployment / quantization / heterogeneous
+performance optimization project. SR models are representative workloads.
 
 The loop should continue until every task below is `done`,
 `blocked_needs_user`, `blocked_technical`, or `not_viable_with_evidence`.
 Do not exit only because one milestone is stable or showcase-ready.
 
 The user's current oral template can override this queue for the current turn.
+
+## Current Framing
+
+The current accepted design is:
+
+```text
+QCS8550 端侧 AI 推理 Runtime 与异构性能优化
+```
+
+Harness/Loop work should therefore prioritize:
+
+```text
+QNN/HTP deployment evidence
+CPU/GPU/NNAPI/QNN backend comparison
+runtime init, skel loading, transport, and profile boundaries
+data-path profiling and direct-YUV/native tensor evidence
+cold/warm init, memory, sustained latency, and board-level power boundaries
+benchmark/result tables and interview-ready explanation
+```
+
+Tile, real-camera showcase, and visual review remain useful evidence, but they
+are supporting workload/evaluation material rather than the project center.
 
 ## Exit Conditions
 
@@ -48,7 +73,7 @@ When a task hits a blocker:
 Technical route choices must follow evidence. Prefer the route closest to the
 original project design unless there is concrete evidence that it cannot work.
 
-## Queue
+## Closed Historical Queue
 
 | order | id | state | task | success metric | stop trigger |
 | --- | --- | --- | --- | --- | --- |
@@ -66,30 +91,68 @@ original project design unless there is concrete evidence that it cannot work.
 | 12 | commit-boundary-plan | done | Split current work into logical commits | staging paths are explicit and generated artifacts excluded | plan complete |
 | 13 | milestone-commit | done | Commit current milestone | oral template authorizes commit/push after closeout assessment | commit complete |
 
+## Current Runtime Reframe Queue
+
+| order | id | state | task | success metric | stop trigger |
+| --- | --- | --- | --- | --- | --- |
+| 1 | runtime-harness-reframe | in_progress | Reframe Harness/Loop text around QCS8550 Runtime and heterogeneous optimization | entrypoint, queue, ledger, route/showcase/interview docs no longer center the project as only image enhancement | text sweep complete |
+| 2 | final-benchmark-table | in_progress | Consolidate final benchmark/result table | one compact table separates AI Hub profile, qnn-net-run accelerator, app e2e, cold/warm init, memory, and power boundaries | table generated or source evidence missing |
+| 3 | sustained-p99-thermal | conditional | Optional sustained app runtime run | RKNN-inspired stream-log runner produced useful evidence, but code was reverted at user request | rerun only if stream-log approach is re-approved |
+| 4 | init-memory-table | done | Cold/warm init, model switching, and sticky memory summary | Resource probes record Real/Quick init, switch cost, PSS deltas, and sticky memory boundary | evidence complete |
+| 5 | perfetto-qnn-timeline | queued | Optional Perfetto/QNN timing timeline | app data path timeline can explain CameraX/native/tensor/QNN/display costs | tool/device unavailable or timeline captured |
+| 6 | aimet-remote-decision | blocked_needs_user | Decide whether to submit remote AI Hub CLE W8A8 export/profile jobs | explicit approval or deferral is recorded; no remote job is submitted silently | user approves or defers |
+| 7 | true-zerocopy-scope | blocked_needs_user | Scope larger CameraX-to-QNN buffer registration experiment | hypothesis/success metric/budget/rollback are defined beyond the 10/12ms direct-YUV baseline | user requests larger experiment or defers |
+| 8 | videocapture-scope | blocked_needs_user | Decide whether full CameraX VideoCapture/Recorder is needed | product/demo need is explicit; screenrecord evidence is not mislabeled | user requests product route or defers |
+
 ## Current Closeout Task
 
-Current active task: `blocked-needs-user-or-new-scope`.
+Current active task: `final-benchmark-table`.
 
 Current open work is no longer tile, D8-config, output postprocess, app e2e
 schema bring-up, every-N smoke, invoke-level shared-memory probing, or
 direct-YUV default promotion. Those lanes have evidence and should be treated as
-closed unless a regression appears. QNN shared-memory Phase 2 has validated
-normal-vs-shared tensor comparison with matching output checksum. Direct
-PlaneProxy ByteBuffer -> native ROI/RGB is now the compiled default QNN/QuickSR
-live path. AIMET trigger search found concrete W8A8-vs-float local regression
-candidates, and AIMET-Torch CLE is locally feasible, but a deployable CLE W8A8
-TFLite/QNN artifact still requires an explicit remote AI Hub export decision.
-TextZoom/OCR mini evaluation is now a diagnostic-only text-fidelity tool, not a
-hard quality gate. RealSR 10-case mini review is now a real-degradation
-lifecycle sanity check, not a replacement for `RB5_SR_Benchmark_v1`. Demo Mode
-wide-FoV video capture is validated through `adb screenrecord` on the live ROI
-UI; it is not a true VideoCapture SR pipeline.
+closed unless a regression appears. The new open work is to make the Harness and
+Loop system match the refined project design: Runtime / deployment / profiling /
+heterogeneous optimization.
 
-The current loop can stop under exit condition 2/3: remaining progress needs
-either explicit user approval to submit Qualcomm AI Hub remote AIMET/CLE W8A8
-export jobs, a new larger scoped true CameraX-to-QNN buffer-registration
-experiment, or an explicit product decision to build a full CameraX
-VideoCapture/Recorder route.
+Direct PlaneProxy ByteBuffer -> native ROI/RGB is now the compiled default
+QNN/QuickSR live path. QNN shared-memory Phase 2 has validated normal-vs-shared
+tensor comparison with matching output checksum. AIMET-Torch CLE is locally
+feasible, but a deployable CLE W8A8 TFLite/QNN artifact still requires an
+explicit remote AI Hub export decision. TextZoom/OCR and RealSR are diagnostic
+or lifecycle evidence, not the project center. Demo Mode wide-FoV video capture
+is validated through `adb screenrecord` on the live ROI UI; it is not a true
+VideoCapture SR pipeline.
+
+After the RKNN-inspired Runtime loop and the follow-up rollback, the default live
+path and source code are back to the pre-RKNN-experiment state. The experiment
+produced useful ignored evidence, but stream-log runner and live profile-slim
+code changes were reverted at the user's request. The current remaining Runtime
+lanes are a final benchmark table, optional Perfetto/QNN timing, remote
+AIMET/CLE export jobs, a larger CameraX-to-QNN buffer-registration experiment,
+or full CameraX VideoCapture/Recorder product work.
+
+RKNN-inspired evidence preserved as ignored/local artifacts:
+
+```text
+RKNN idea transfer assessment:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\runtime_exploration\20260723_rknn_idea_transfer_assessment
+
+5-minute default direct-YUV stream-log run:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_loop_p2_default_streamlog_5min
+
+5-minute board-level direct-YUV power run:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\power_probe\20260723_loop_p3_power_live_direct_yuv_5min
+
+Current APK resource probe:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_loop_p5_resource_probe_current_apk
+
+100-run fixed-sample steady resource probe:
+C:\Users\Admin\Videos\RB5 gen2\RB5_SR_Benchmark_v1\results\20260723_loop_p6_resource_probe_steady100
+
+Runtime loop summary:
+C:\Users\Admin\Desktop\QC-Development-Board-Project\RB5_SR_lab\results\runtime_exploration\20260723_runtime_loop_p0_p16_summary
+```
 
 Current evidence to preserve:
 
